@@ -2,7 +2,7 @@
 
 TypeScript SDK for programmatic access to Google NotebookLM.
 
-**Developed by [photon-ai](https://github.com/photon-ai)**
+**Developed by [photon-hq](https://github.com/photon-hq)**
 
 ## Features
 
