@@ -1,0 +1,59 @@
+{
+  "name": "notebooklm-kit",
+  "version": "1.0.0",
+  "description": "TypeScript SDK for NotebookLM API - Full-featured SDK with quota management, multi-language support, and auto-refresh",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "notebooklm",
+    "google",
+    "notebook",
+    "ai",
+    "research",
+    "sdk",
+    "typescript",
+    "audio-overview",
+    "podcast",
+    "study-guide",
+    "flashcards",
+    "quiz",
+    "mind-map"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/photon-ai/notebooklm-kit"
+  },
+  "author": "photon-ai",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
+
