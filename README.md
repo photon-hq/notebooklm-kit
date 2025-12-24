@@ -27,6 +27,14 @@ npm install notebooklm-kit
 
 ## Quick Start
 
+1. **Extract credentials** using `extract-credentials.js` (see [Authentication](#authentication) below)
+2. **Add to `.env` file:**
+   ```bash
+   NOTEBOOKLM_AUTH_TOKEN="your-token"
+   NOTEBOOKLM_COOKIES="SID=value; HSID=value; ..."
+   ```
+3. **Use the client:**
+
 ```typescript
 import { NotebookLMClient } from 'notebooklm-kit';
 
@@ -49,26 +57,48 @@ await client.sources.addFromURL(notebook.projectId, {
   url: 'https://example.com/article',
 });
 
-// Chat
+// Chat with your notebook
 const response = await client.generation.chat(
   notebook.projectId,
   'What are the key findings?'
 );
+
+console.log(response.text);
 ```
 
 ## Authentication
 
-Get your credentials from https://notebooklm.google.com:
+### Quick Setup (Recommended)
 
-1. Open Developer Tools (F12)
-2. Go to Application → Cookies
-3. Copy `__Secure-1PSID` value as `NOTEBOOKLM_AUTH_TOKEN`
-4. Copy all cookies as string for `NOTEBOOKLM_COOKIES`
+1. Open https://notebooklm.google.com in your browser and log in
+2. Open Developer Tools (F12 or Cmd+Option+I)
+3. Go to Console tab
+4. Copy and paste the script from `extract-credentials.js`
+5. Follow the instructions to add HttpOnly cookies if needed
+6. Copy the output to your `.env` file
+
+### Manual Setup
+
+If you prefer to extract credentials manually:
+
+1. **Get Auth Token:**
+   - Open DevTools Console on https://notebooklm.google.com
+   - Run: `window.WIZ_global_data.SNlM0e`
+   - Copy the value as `NOTEBOOKLM_AUTH_TOKEN`
+
+2. **Get Cookies:**
+   - Open DevTools → Application → Cookies → https://notebooklm.google.com
+   - Find these cookies: `SID`, `HSID`, `SSID`, `APISID`, `SAPISID`
+   - Copy each as `Name=Value` and join with `; `
+   - Set as `NOTEBOOKLM_COOKIES`
 
 ```bash
-export NOTEBOOKLM_AUTH_TOKEN="your-token"
-export NOTEBOOKLM_COOKIES="cookie1=value1; cookie2=value2; ..."
+# .env file
+NOTEBOOKLM_AUTH_TOKEN="your-token-here"
+NOTEBOOKLM_COOKIES="SID=value; HSID=value; SSID=value; APISID=value; SAPISID=value; ..."
 ```
+
+**Note:** HttpOnly cookies (HSID, SSID, SID, APISID) can only be copied from the Application tab, not from `document.cookie`.
 
 ## API Reference
 
@@ -293,24 +323,22 @@ const response = await client.rpc(
 
 ```typescript
 const client = new NotebookLMClient({
-  authToken: 'your-token',
-  cookies: 'your-cookies',
-  debug: false,           // Enable debug logging
-  maxRetries: 3,          // Retry attempts
-  retryDelay: 1000,       // Initial retry delay (ms)
-  retryMaxDelay: 10000,   // Max retry delay (ms)
+  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
+  cookies: process.env.NOTEBOOKLM_COOKIES!,
   
-  // Auto-refresh credentials (keeps session alive)
-  autoRefresh: true,      // Simple enable
-  // OR
-  autoRefresh: {
+  // Optional configuration
+  debug: false,                    // Enable debug logging
+  autoRefresh: true,               // Keep session alive (recommended)
+  autoRefresh: {                   // Or configure refresh interval
     enabled: true,
-    interval: 10 * 60 * 1000,  // Refresh every 10 minutes
+    interval: 10 * 60 * 1000,      // Refresh every 10 minutes
   },
+  maxRetries: 3,                   // Retry attempts for failed requests
+  enforceQuotas: true,             // Enforce NotebookLM usage limits (default: true)
 });
 
-// Don't forget to dispose when done (stops auto-refresh)
-// client.dispose();
+// Clean up when done (stops auto-refresh)
+client.dispose();
 ```
 
 ## Quota Management
