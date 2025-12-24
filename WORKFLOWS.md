@@ -425,7 +425,7 @@ interface ProgressStatus {
 
 ### Async Search Flow (Multi-Step with Session)
 
-**Pattern**: `searchWeb()` → `getSearchResults()` → `addDiscovered()`
+**Pattern**: `searchWeb()` → `getSearchResults()` → `addDiscovered()` (or use `searchWebAndWait()` for simpler workflow)
 
 **How it works**:
 1. `searchWeb()` - Returns `sessionId` (search happens in background)

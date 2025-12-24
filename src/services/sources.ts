@@ -5,7 +5,7 @@
  * WORKFLOW USAGE NOTES:
  * - Individual add methods (addFromURL, addFromText, etc.) return immediately after source is queued
  * - Use pollProcessing() to check if sources are ready, or use workflow functions that handle waiting
- * - For web search: Use searchWebAndWait() to get results, then addSelectedFromSearch() to add them
+ * - For web search: Use searchWebAndWait() to get results, then addDiscovered() to add them
  * - For batch operations: Use addBatch() to add multiple sources efficiently
  * - All add methods check quota before adding and record usage after success
  */
@@ -14,15 +14,12 @@ import { RPCClient } from '../rpc/rpc-client.js';
 import * as RPC from '../rpc/rpc-methods.js';
 import type {
   Source,
-  SourceInput,
   AddSourceFromURLOptions,
   AddSourceFromTextOptions,
   AddSourceFromFileOptions,
-  SourceType,
   SourceProcessingStatus,
   SourceContent,
   SourceFreshness,
-  DiscoveredSource,
   DiscoveredWebSource,
   DiscoveredDriveSource,
   SearchWebSourcesOptions,
@@ -449,7 +446,7 @@ export class SourcesService {
    * WORKFLOW USAGE:
    * - This is a complete workflow that combines searchWeb() + getSearchResults() with polling
    * - Returns results once they're available (or timeout)
-   * - Use the returned sessionId with addSelectedFromSearch() to add sources
+   * - Use the returned sessionId with addDiscovered() to add sources
    * - This is the recommended method for web search workflows
    * 
    * @param notebookId - The notebook ID
@@ -468,7 +465,7 @@ export class SourcesService {
    * });
    * 
    * // Then add selected sources
-   * const addedIds = await client.sources.addSelectedFromSearch('notebook-id', {
+   * const addedIds = await client.sources.addDiscovered('notebook-id', {
    *   sessionId: result.sessionId,
    *   webSources: result.web.slice(0, 5), // Add first 5
    * });
@@ -594,14 +591,14 @@ export class SourcesService {
   }
   
   /**
-   * Add selected sources from search results
+   * Add discovered sources from search results
    * 
    * WORKFLOW USAGE - Part 3 of 3:
    * 1. searchWeb() → get sessionId
    * 2. getSearchResults() → get discovered sources
-   * 3. addSelectedFromSearch() → add selected sources (this method)
+   * 3. addDiscovered() → add selected sources (this method)
    * 
-   * OR use searchWebAndWait() + addSelectedFromSearch() for a simpler workflow
+   * OR use searchWebAndWait() + addDiscovered() for a simpler workflow
    * 
    * @param notebookId - The notebook ID
    * @param options - Session ID and sources to add
@@ -614,25 +611,11 @@ export class SourcesService {
    * });
    * 
    * // Add selected web sources
-   * const added = await client.sources.addSelectedFromSearch('notebook-id', {
+   * const added = await client.sources.addDiscovered('notebook-id', {
    *   sessionId: result.sessionId,
    *   webSources: result.web.slice(0, 3), // Add first 3 web sources
    * });
    * ```
-   */
-  async addSelectedFromSearch(notebookId: string, options: AddDiscoveredSourcesOptions): Promise<string[]> {
-    return this.addDiscovered(notebookId, options);
-  }
-  
-  /**
-   * Add discovered sources (internal method, also exposed for direct use)
-   * 
-   * WORKFLOW USAGE:
-   * - Use addSelectedFromSearch() for better naming clarity
-   * - This method is the underlying implementation
-   * 
-   * @param notebookId - The notebook ID
-   * @param options - Options with session ID and sources to add
    */
   async addDiscovered(notebookId: string, options: AddDiscoveredSourcesOptions): Promise<string[]> {
     const { sessionId, webSources = [], driveSources = [] } = options;
@@ -673,51 +656,6 @@ export class SourcesService {
     }
     
     return addedIds;
-  }
-  
-  /**
-   * Discover sources (simple synchronous method)
-   * 
-   * WORKFLOW USAGE:
-   * - This is a simpler alternative to searchWeb() + getSearchResults()
-   * - Returns sources directly (no session management needed)
-   * - Use addFromURL() to add discovered sources manually
-   * - For more control, use searchWebAndWait() instead
-   * 
-   * @param notebookId - The notebook ID
-   * @param query - Search query
-   * 
-   * @example
-   * ```typescript
-   * const sources = await client.sources.discover('notebook-id', 'AI research');
-   * // Manually add selected sources
-   * for (const source of sources.slice(0, 5)) {
-   *   if (source.url) {
-   *     await client.sources.addFromURL('notebook-id', { url: source.url });
-   *   }
-   * }
-   * ```
-   */
-  async discover(notebookId: string, query: string): Promise<DiscoveredSource[]> {
-    const response = await this.rpc.call(
-      RPC.RPC_DISCOVER_SOURCES,
-      [notebookId, query],
-      notebookId
-    );
-    
-    const data = Array.isArray(response) ? response[0] : response;
-    const sources = data?.[0] || data?.sources || [];
-    
-    if (!Array.isArray(sources)) return [];
-    
-    return sources.map((source: any) => ({
-      id: source[0] || source.id || source.sourceId || '',
-      title: source[1] || source.title || '',
-      type: source[2] || source.type,
-      url: source[3] || source.url,
-      relevance: source[4] || source.relevance,
-      metadata: source[5] || source.metadata,
-    }));
   }
   
   // ========================================================================
@@ -856,14 +794,12 @@ export class SourcesService {
    * @param sourceId - The source ID
    * @param updates - Updates to apply
    */
-  async update(notebookId: string, sourceId: string, updates: Partial<Source>): Promise<Source> {
-    const response = await this.rpc.call(
+  async update(notebookId: string, sourceId: string, updates: Partial<Source>): Promise<void> {
+    await this.rpc.call(
       RPC.RPC_MUTATE_SOURCE,
       [sourceId, updates],
       notebookId
     );
-    
-    return this.parseSourceResponse(response, sourceId);
   }
   
   /**
@@ -876,14 +812,12 @@ export class SourcesService {
    * @param notebookId - The notebook ID
    * @param sourceId - The source ID
    */
-  async refresh(notebookId: string, sourceId: string): Promise<Source> {
-    const response = await this.rpc.call(
+  async refresh(notebookId: string, sourceId: string): Promise<void> {
+    await this.rpc.call(
       RPC.RPC_REFRESH_SOURCE,
       [sourceId],
       notebookId
     );
-    
-    return this.parseSourceResponse(response, sourceId);
   }
   
   /**
@@ -944,11 +878,19 @@ export class SourcesService {
    * Select/prepare source for viewing
    * 
    * WORKFLOW USAGE:
-   * - Call this before loadContent() for best results
-   * - Not always required, but recommended for reliable content loading
+   * - REQUIRED: Must call this before loadContent() for reliable content loading
+   * - NotebookLM requires sources to be selected before they can be loaded
    * - Use in sequence: selectSource() → loadContent()
    * 
    * @param sourceId - The source ID
+   * 
+   * @example
+   * ```typescript
+   * // REQUIRED: select first, then load
+   * await client.sources.selectSource('source-id');
+   * const content = await client.sources.loadContent('source-id');
+   * console.log(content.text);
+   * ```
    */
   async selectSource(sourceId: string): Promise<void> {
     await this.rpc.call(
@@ -961,7 +903,7 @@ export class SourcesService {
    * Load source content
    * 
    * WORKFLOW USAGE:
-   * - Recommended: Call selectSource() first, then loadContent()
+   * - REQUIRED: Must call selectSource() first before calling this method
    * - Returns full text content of the source
    * - Use this to read source content after it's ready
    * 
@@ -969,7 +911,7 @@ export class SourcesService {
    * 
    * @example
    * ```typescript
-   * // Recommended: select first, then load
+   * // REQUIRED: select first, then load
    * await client.sources.selectSource('source-id');
    * const content = await client.sources.loadContent('source-id');
    * console.log(content.text);
@@ -1049,11 +991,39 @@ export class SourcesService {
    * WORKFLOW USAGE:
    * - Use this for bulk operations on multiple sources
    * - Different from update() which works on a single source
-   * - Common actions: "delete", "refresh", "archive"
+   * - Supports various AI-powered content transformation actions
    * 
    * @param notebookId - The notebook ID
-   * @param action - Action to perform
+   * @param action - Action to perform (see supported actions below)
    * @param sourceIds - Array of source IDs to act on
+   * 
+   * @example
+   * ```typescript
+   * // Rephrase content from multiple sources
+   * await client.sources.actOn('notebook-id', 'rephrase', ['source-1', 'source-2']);
+   * 
+   * // Generate study guide from sources
+   * await client.sources.actOn('notebook-id', 'study_guide', ['source-1']);
+   * 
+   * // Create interactive mindmap
+   * await client.sources.actOn('notebook-id', 'interactive_mindmap', ['source-1', 'source-2']);
+   * ```
+   * 
+   * **Supported Actions:**
+   * - `rephrase` - Rephrase content from sources
+   * - `expand` - Expand content from sources
+   * - `summarize` - Summarize content from sources
+   * - `critique` - Critique content from sources
+   * - `brainstorm` - Brainstorm ideas from sources
+   * - `verify` - Verify information from sources
+   * - `explain` - Explain concepts from sources
+   * - `outline` - Create outline from sources
+   * - `study_guide` - Generate study guide from sources
+   * - `faq` - Generate FAQ from sources
+   * - `briefing_doc` - Create briefing document from sources
+   * - `interactive_mindmap` - Generate interactive mindmap from sources
+   * - `timeline` - Create timeline from sources
+   * - `table_of_contents` - Generate table of contents from sources
    */
   async actOn(notebookId: string, action: string, sourceIds: string[]): Promise<void> {
     if (sourceIds.length === 0) {
@@ -1126,13 +1096,5 @@ export class SourcesService {
     } catch (error) {
       throw new NotebookLMError(`Failed to extract source ID: ${(error as Error).message}`);
     }
-  }
-  
-  private parseSourceResponse(response: any, sourceId: string): Source {
-    return {
-      sourceId,
-      title: '',
-      // Parse other fields as needed
-    };
   }
 }
