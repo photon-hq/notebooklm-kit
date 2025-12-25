@@ -318,12 +318,21 @@ export class SourcesService {
    * 
    * @example
    * ```typescript
-   * // Add Drive file directly
+   * // Add Drive file directly with file ID
    * const sourceId = await client.sources.addGoogleDrive('notebook-id', {
    *   fileId: '1a2b3c4d5e6f7g8h9i0j',
+   *   mimeType: 'application/vnd.google-apps.document',
    *   title: 'My Document',
    * });
+   * 
+   * // Add Drive file with just file ID (mimeType will be inferred if not provided)
+   * const sourceId = await client.sources.addGoogleDrive('notebook-id', {
+   *   fileId: '1a2b3c4d5e6f7g8h9i0j',
+   * });
    * ```
+   * 
+   * **Note:** For finding Drive files, use `searchWeb()` with `sourceType: SearchSourceType.GOOGLE_DRIVE`
+   * to search your Drive, then use `addDiscovered()` to add the found files.
    */
   async addGoogleDrive(notebookId: string, options: AddGoogleDriveSourceOptions): Promise<string> {
     const { fileId, mimeType } = options;
@@ -333,6 +342,8 @@ export class SourcesService {
     
     // Build request for Google Drive source
     // Format: [fileId, mimeType?, title?]
+    // Note: The backend may accept [fileId, mimeType, 1, title] format as well,
+    // but the current flexible format works correctly
     const driveArgs: any[] = [fileId];
     if (mimeType) {
       driveArgs.push(mimeType);
@@ -375,35 +386,54 @@ export class SourcesService {
   /**
    * Search web sources (initiate search, returns sessionId)
    * 
-   * WORKFLOW USAGE - Part 1 of 2:
-   * 1. Call searchWeb() to initiate search → get sessionId
-   * 2. Call getSearchResults() to get discovered sources
-   * 3. Call addDiscovered() with sessionId to add selected sources
+   * **IMPORTANT: This is STEP 1 of a 3-step sequential workflow.**
    * 
-   * OR use searchWebAndWait() for a complete workflow that waits for results
+   * You must complete the steps in order - you cannot skip to step 2 or 3 without completing step 1 first.
+   * 
+   * **Complete Workflow (3 steps):**
+   * 1. `searchWeb()` → Returns `sessionId` (start here - this method)
+   * 2. `getSearchResults()` → Returns discovered sources (requires step 1)
+   * 3. `addDiscovered()` → Adds selected sources (requires sessionId from step 1)
+   * 
+   * **Simplified Alternative:**
+   * - Use `searchWebAndWait()` instead - it combines steps 1-2 with automatic polling
+   * - Then use `addDiscovered()` to add sources (step 3)
    * 
    * @param notebookId - The notebook ID
    * @param options - Search options
+   * @returns sessionId - Required for steps 2 and 3
    * 
    * @example
    * ```typescript
-   * // Fast web search
+   * // STEP 1: Initiate search (you must start here)
    * const sessionId = await client.sources.searchWeb('notebook-id', {
    *   query: 'AI research',
    *   sourceType: SearchSourceType.WEB,
    *   mode: ResearchMode.FAST,
    * });
    * 
-   * // Deep research (web only)
+   * // STEP 2: Get results (requires sessionId from step 1)
+   * const results = await client.sources.getSearchResults('notebook-id');
+   * 
+   * // STEP 3: Add selected sources (requires sessionId from step 1)
+   * const addedIds = await client.sources.addDiscovered('notebook-id', {
+   *   sessionId: sessionId,
+   *   webSources: results.web.slice(0, 5),
+   * });
+   * ```
+   * 
+   * @example
+   * ```typescript
+   * // Deep research (web sources only - DEEP mode not available for Drive)
    * const sessionId = await client.sources.searchWeb('notebook-id', {
    *   query: 'Machine learning',
-   *   mode: ResearchMode.DEEP,
+   *   mode: ResearchMode.DEEP, // Only for WEB sources
    * });
    * 
-   * // Google Drive search
+   * // Google Drive search (FAST mode only)
    * const sessionId = await client.sources.searchWeb('notebook-id', {
    *   query: 'presentation',
-   *   sourceType: SearchSourceType.GOOGLE_DRIVE,
+   *   sourceType: SearchSourceType.GOOGLE_DRIVE, // FAST mode only
    * });
    * ```
    */
@@ -513,22 +543,38 @@ export class SourcesService {
   }
   
   /**
-   * Get search results (use after searchWeb)
+   * Get search results (STEP 2 of 3-step workflow)
    * 
-   * WORKFLOW USAGE - Part 2 of 3:
-   * 1. searchWeb() → get sessionId
-   * 2. getSearchResults() → get discovered sources (this method)
-   * 3. addDiscovered() → add selected sources
+   * **REQUIRES:** You must call `searchWeb()` first (step 1) before calling this method.
    * 
-   * OR use searchWebAndWait() which combines steps 1-2
+   * This method retrieves the search results from a previously initiated search.
+   * The search was started by `searchWeb()` in step 1.
    * 
-   * @param notebookId - The notebook ID
+   * **Complete Workflow (3 steps):**
+   * 1. `searchWeb()` → Returns `sessionId` (required first step)
+   * 2. `getSearchResults()` → Returns discovered sources (this method - step 2)
+   * 3. `addDiscovered()` → Adds selected sources (requires sessionId from step 1)
+   * 
+   * **Note:** If you haven't called `searchWeb()` yet, you'll get empty results.
+   * Use `searchWebAndWait()` if you want to combine steps 1-2 automatically.
+   * 
+   * @param notebookId - The notebook ID (must match the notebookId used in step 1)
+   * @returns Discovered sources (web and/or drive)
    * 
    * @example
    * ```typescript
+   * // STEP 1: Initiate search first
    * const sessionId = await client.sources.searchWeb('notebook-id', { query: 'AI' });
+   * 
+   * // STEP 2: Get results (only works after step 1)
    * const results = await client.sources.getSearchResults('notebook-id');
    * console.log(`Found ${results.web.length} web sources and ${results.drive.length} drive sources`);
+   * 
+   * // STEP 3: Add selected sources
+   * const addedIds = await client.sources.addDiscovered('notebook-id', {
+   *   sessionId: sessionId,
+   *   webSources: results.web,
+   * });
    * ```
    */
   async getSearchResults(notebookId: string): Promise<{
@@ -591,29 +637,46 @@ export class SourcesService {
   }
   
   /**
-   * Add discovered sources from search results
+   * Add discovered sources from search results (STEP 3 of 3-step workflow)
    * 
-   * WORKFLOW USAGE - Part 3 of 3:
-   * 1. searchWeb() → get sessionId
-   * 2. getSearchResults() → get discovered sources
-   * 3. addDiscovered() → add selected sources (this method)
+   * **REQUIRES:** You must have a `sessionId` from `searchWeb()` (step 1) to use this method.
    * 
-   * OR use searchWebAndWait() + addDiscovered() for a simpler workflow
+   * This is the final step - it adds the selected discovered sources to your notebook.
+   * 
+   * **Complete Workflow (3 steps):**
+   * 1. `searchWeb()` → Returns `sessionId` (required first step)
+   * 2. `getSearchResults()` → Returns discovered sources (optional - if you need to filter/select)
+   * 3. `addDiscovered()` → Adds selected sources (this method - final step)
+   * 
+   * **Simplified Alternative:**
+   * - Use `searchWebAndWait()` to combine steps 1-2, then use this method for step 3
    * 
    * @param notebookId - The notebook ID
-   * @param options - Session ID and sources to add
+   * @param options - Session ID (from step 1) and sources to add
+   * @returns Array of added source IDs
    * 
    * @example
    * ```typescript
+   * // Option 1: Complete 3-step workflow
+   * const sessionId = await client.sources.searchWeb('notebook-id', {
+   *   query: 'AI research',
+   *   mode: ResearchMode.DEEP,
+   * });
+   * const results = await client.sources.getSearchResults('notebook-id');
+   * const addedIds = await client.sources.addDiscovered('notebook-id', {
+   *   sessionId: sessionId, // Required: from step 1
+   *   webSources: results.web.slice(0, 5), // Add first 5 web sources
+   * });
+   * 
+   * // Option 2: Simplified workflow (recommended)
    * const result = await client.sources.searchWebAndWait('notebook-id', {
    *   query: 'AI research',
    *   mode: ResearchMode.DEEP,
    * });
-   * 
-   * // Add selected web sources
-   * const added = await client.sources.addDiscovered('notebook-id', {
-   *   sessionId: result.sessionId,
-   *   webSources: result.web.slice(0, 3), // Add first 3 web sources
+   * const addedIds = await client.sources.addDiscovered('notebook-id', {
+   *   sessionId: result.sessionId, // From searchWebAndWait
+   *   webSources: result.web.slice(0, 5),
+   *   driveSources: result.drive.slice(0, 2), // Can also add Drive sources
    * });
    * ```
    */
@@ -667,12 +730,24 @@ export class SourcesService {
    * 
    * WORKFLOW USAGE:
    * - Efficiently adds multiple sources of different types in one call
+   * - All source types are supported EXCEPT web sources (which come from search)
    * - Optionally waits for all sources to be processed
    * - Use this for adding multiple sources at once instead of individual calls
    * - All sources are added in parallel (server-side)
    * 
+   * **Supported Source Types:**
+   * - `url` - Regular URLs (via `addFromURL()`)
+   * - `text` - Text content (via `addFromText()`)
+   * - `file` - File uploads (via `addFromFile()`)
+   * - `youtube` - YouTube videos (via `addYouTube()`)
+   * - `gdrive` - Google Drive files (via `addGoogleDrive()`)
+   * 
+   * **NOT Supported:**
+   * - Web sources from search - Use `searchWebAndWait()` + `addDiscovered()` instead
+   * 
    * @param notebookId - The notebook ID
    * @param options - Batch addition options
+   * @returns Array of source IDs for all added sources
    * 
    * @example
    * ```typescript
@@ -683,12 +758,16 @@ export class SourcesService {
    *     { type: 'url', url: 'https://example.com/article2' },
    *     { type: 'text', title: 'Notes', content: 'My research notes...' },
    *     { type: 'youtube', urlOrId: 'https://youtube.com/watch?v=...' },
+   *     { type: 'gdrive', fileId: '1a2b3c4d5e6f7g8h9i0j', mimeType: 'application/pdf' },
    *   ],
    * });
    * 
    * // Add and wait for processing
    * const sourceIds = await client.sources.addBatch('notebook-id', {
-   *   sources: [...],
+   *   sources: [
+   *     { type: 'url', url: 'https://example.com/article' },
+   *     { type: 'text', title: 'Notes', content: 'Content...' },
+   *   ],
    *   waitForProcessing: true,
    *   timeout: 300000, // 5 minutes
    *   onProgress: (ready, total) => {
@@ -772,10 +851,28 @@ export class SourcesService {
   // ========================================================================
   
   /**
-   * Delete sources
+   * Delete sources from a notebook
+   * 
+   * WORKFLOW USAGE:
+   * - Permanently removes sources from the notebook
+   * - Supports deleting a single source or multiple sources at once
+   * - This action cannot be undone
    * 
    * @param notebookId - The notebook ID
-   * @param sourceIds - Source IDs to delete
+   * @param sourceIds - Single source ID (string) or array of source IDs to delete
+   * 
+   * @example
+   * ```typescript
+   * // Delete a single source
+   * await client.sources.delete('notebook-id', 'source-id-123');
+   * 
+   * // Delete multiple sources at once
+   * await client.sources.delete('notebook-id', [
+   *   'source-id-1',
+   *   'source-id-2',
+   *   'source-id-3',
+   * ]);
+   * ```
    */
   async delete(notebookId: string, sourceIds: string | string[]): Promise<void> {
     const ids = Array.isArray(sourceIds) ? sourceIds : [sourceIds];
@@ -790,9 +887,36 @@ export class SourcesService {
   /**
    * Update source metadata
    * 
+   * WORKFLOW USAGE:
+   * - Updates source properties like title, metadata, etc.
+   * - This updates the source information, not the content itself
+   * - To refresh content, use `refresh()` instead
+   * - Returns immediately (no waiting required)
+   * 
+   * **Common Updates:**
+   * - `title` - Change the source title/name
+   * - `metadata` - Update custom metadata
+   * - Other source properties as defined in the Source interface
+   * 
    * @param notebookId - The notebook ID
-   * @param sourceId - The source ID
-   * @param updates - Updates to apply
+   * @param sourceId - The source ID to update
+   * @param updates - Partial Source object with fields to update
+   * 
+   * @example
+   * ```typescript
+   * // Update source title
+   * await client.sources.update('notebook-id', 'source-id', {
+   *   title: 'Updated Source Title',
+   * });
+   * 
+   * // Update metadata
+   * await client.sources.update('notebook-id', 'source-id', {
+   *   metadata: {
+   *     category: 'research',
+   *     priority: 'high',
+   *   },
+   * });
+   * ```
    */
   async update(notebookId: string, sourceId: string, updates: Partial<Source>): Promise<void> {
     await this.rpc.call(
@@ -803,14 +927,40 @@ export class SourcesService {
   }
   
   /**
-   * Refresh a source (re-fetch content)
+   * Refresh a source (re-fetch and reprocess content)
    * 
    * WORKFLOW USAGE:
-   * - Use this to update source content if the original URL has changed
-   * - Returns immediately, use pollProcessing() to check if refresh is complete
+   * - Re-fetches source content from the original URL/file
+   * - Useful when the source content has been updated externally
+   * - Returns immediately after refresh is queued
+   * - Use `pollProcessing()` to check when refresh is complete
+   * - Processing status will show as "processing" until refresh completes
+   * 
+   * **When to use:**
+   * - Source URL content has been updated
+   * - Google Drive file has been modified
+   * - You want to ensure source content is up-to-date
+   * - Use `checkFreshness()` first to see if refresh is needed
    * 
    * @param notebookId - The notebook ID
-   * @param sourceId - The source ID
+   * @param sourceId - The source ID to refresh
+   * 
+   * @example
+   * ```typescript
+   * // Check if refresh is needed first (optional)
+   * const freshness = await client.sources.checkFreshness('source-id');
+   * if (!freshness.isFresh) {
+   *   // Refresh the source
+   *   await client.sources.refresh('notebook-id', 'source-id');
+   *   
+   *   // Wait for refresh to complete
+   *   let status;
+   *   do {
+   *     status = await client.sources.pollProcessing('notebook-id');
+   *     await new Promise(r => setTimeout(r, 2000));
+   *   } while (!status.allReady);
+   * }
+   * ```
    */
   async refresh(notebookId: string, sourceId: string): Promise<void> {
     await this.rpc.call(
@@ -954,15 +1104,51 @@ export class SourcesService {
   }
   
   /**
-   * Add deep research report
+   * Add deep research report as a source
    * 
    * WORKFLOW USAGE:
-   * - Creates a deep research report as a source (monthly limit: 10)
-   * - Returns immediately, use pollProcessing() to check if ready
-   * - This is different from searchWeb() with DEEP mode
+   * - Creates an AI-generated deep research report on a topic and adds it as a source
+   * - Monthly quota limit: 10 reports per month
+   * - Returns immediately after research is queued
+   * - Use `pollProcessing()` to check when the research report is ready
+   * - Once ready, the report appears as a source in your notebook
+   * 
+   * **Important Notes:**
+   * - This is DIFFERENT from `searchWeb()` with `ResearchMode.DEEP`
+   *   - `searchWeb(..., mode: ResearchMode.DEEP)` - Searches web and finds relevant sources
+   *   - `addDeepResearch()` - Creates a complete research report as a source itself
+   * - Monthly limit: 10 reports per month (enforced by quota system)
+   * - The generated report becomes a source that can be used for chat, artifacts, etc.
+   * - Processing can take several minutes for comprehensive research
+   * 
+   * **Use Cases:**
+   * - Need a comprehensive research report on a complex topic
+   * - Want AI-generated analysis compiled into a single source
+   * - Starting research on a new domain and need foundational content
    * 
    * @param notebookId - The notebook ID
-   * @param query - Research query
+   * @param query - Research query/question (what you want researched)
+   * @returns Source ID of the generated research report
+   * 
+   * @example
+   * ```typescript
+   * // Create a deep research report
+   * const sourceId = await client.sources.addDeepResearch('notebook-id', 
+   *   'Latest developments in quantum computing and their applications'
+   * );
+   * 
+   * // Wait for research report to be ready
+   * let status;
+   * do {
+   *   status = await client.sources.pollProcessing('notebook-id');
+   *   if (!status.allReady) {
+   *     console.log('Research report still being generated...');
+   *     await new Promise(r => setTimeout(r, 5000)); // Wait 5s between checks
+   *   }
+   * } while (!status.allReady);
+   * 
+   * console.log(`Research report ready! Source ID: ${sourceId}`);
+   * ```
    */
   async addDeepResearch(notebookId: string, query: string): Promise<string> {
     // Check monthly quota

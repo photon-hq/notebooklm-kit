@@ -212,7 +212,10 @@ export interface DiscoveredDriveSource {
 }
 
 /**
- * Discovered source (from DiscoverSources - simple method)
+ * Discovered source (DEPRECATED - use DiscoveredWebSource or DiscoveredDriveSource instead)
+ * 
+ * @deprecated This type was used with the removed `discover()` method.
+ * Use `DiscoveredWebSource[]` or `DiscoveredDriveSource[]` from `getSearchResults()` or `searchWebAndWait()` instead.
  */
 export interface DiscoveredSource {
   /** Source ID */
