@@ -429,4 +429,4 @@ MIT
 
 ## Disclaimer
 
-Note: This SDK is for educational and development purposes. Always respect user privacy and follow Google's terms of service.
+Unofficial SDK, not affiliated with Google. Use at your own risk.
