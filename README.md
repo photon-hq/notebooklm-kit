@@ -1,23 +1,32 @@
-# NotebookLM Kit
+<div align="center">
+   
+# @photon-ai/NotebookLM-kit
 
-TypeScript SDK for programmatic access to Google NotebookLM.
+> A TypeScript SDK for programmatic access to Google NotebookLM.
 
-**Developed by [photon-hq](https://github.com/photon-hq)**
+</div>
+
+[![npm version](https://img.shields.io/npm/v/@photon-ai/imessage-kit.svg)](https://www.npmjs.com/package/@photon-ai/imessage-kit)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/bZd4CMd2H5)
 
 ## Features
 
-- 📚 **Notebooks** - Create, read, update, delete notebooks
-- 📄 **Sources** - Add from URLs, text, files, YouTube
-- 📝 **Notes** - Create and manage notes
-- 🎙️ **Audio** - Generate AI audio overviews in 10+ languages
-- 🎥 **Video** - Create video overviews
-- 📑 **Artifacts** - Study guides, quizzes, flashcards, mind maps, infographics, slide decks
-- 💬 **Generation** - Chat, guides, outlines, reports
-- 🌍 **Multi-Language** - Support for हिन्दी, বাংলা, ગુજરાતી, ಕನ್ನಡ, മലയാളം, मराठी, ਪੰਜਾਬੀ, தமிழ், తెలుగు
-- 🚦 **Quota Management** - Enforces NotebookLM limits (100 notebooks, 50 chats/day, 3 audio/day)
-- 🔄 **Auto-Refresh** - Keep sessions alive automatically
-- 🔒 **Type-Safe** - Full TypeScript support
-- ⚡ **Modern** - ES modules, async/await
+| Category         | Description                                                                 | Availability |
+|------------------|------------------------------------------------------------------------------|--------------|
+| Notebooks        | Create, read, update, and delete notebooks                                   | ✅           |
+| Sources          | Add sources from URLs, text, files, and YouTube                               | ✅           |
+| Notes            | Create and manage notes                                                       | ✅           |
+| Audio            | Generate AI audio overviews in 10+ languages                                   | ✅           |
+| Video            | Create video overviews                                                        | ✅           |
+| Artifacts        | Generate study guides, quizzes, flashcards, mind maps, infographics, slides   | ✅           |
+| Generation       | Chat, guides, outlines, and reports                                           | ✅           |
+| Multi-Language   | Support for Hindi, Bengali, Gujarati, Kannada, Malayalam, Marathi, Punjabi, Tamil, Telugu | ✅ |
+| Quota Management | Enforces NotebookLM limits (100 notebooks, 50 chats/day, 3 audio/day)         | ✅           |
+| Auto-Refresh     | Automatically keep sessions alive                                             | ✅           |
+| Type-Safe        | Full TypeScript support                                                       | ✅           |
+| Modern           | ES modules with async/await                                                   | ✅           |
 
 ## Installation
 
@@ -420,4 +429,4 @@ MIT
 
 ## Disclaimer
 
-Unofficial SDK, not affiliated with Google. Use at your own risk.
+Note: This SDK is for educational and development purposes. Always respect user privacy and follow Google's terms of service.

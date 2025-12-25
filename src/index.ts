@@ -11,8 +11,6 @@ export { NotebookLMClient, createNotebookLMClient } from './client/notebooklm-cl
 export { NotebooksService } from './services/notebooks.js';
 export { SourcesService } from './services/sources.js';
 export { NotesService } from './services/notes.js';
-export { AudioService } from './services/audio.js';
-export { VideoService } from './services/video.js';
 export { ArtifactsService } from './services/artifacts.js';
 export { GenerationService } from './services/generation.js';
 
@@ -99,6 +97,10 @@ export {
 export type {
   Artifact,
   CreateArtifactOptions,
+  QuizData,
+  FlashcardData,
+  AudioArtifact,
+  VideoArtifact,
 } from './types/artifact.js';
 
 export {

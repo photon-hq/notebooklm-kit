@@ -7,8 +7,6 @@ import { RPCClient } from '../rpc/rpc-client.js';
 import { NotebooksService } from '../services/notebooks.js';
 import { SourcesService } from '../services/sources.js';
 import { NotesService } from '../services/notes.js';
-import { AudioService } from '../services/audio.js';
-import { VideoService } from '../services/video.js';
 import { ArtifactsService } from '../services/artifacts.js';
 import { GenerationService } from '../services/generation.js';
 import { AutoRefreshManager, defaultAutoRefreshConfig } from '../auth/refresh.js';
@@ -33,13 +31,7 @@ export class NotebookLMClient {
   /** Note operations */
   public readonly notes: NotesService;
   
-  /** Audio overview operations */
-  public readonly audio: AudioService;
-  
-  /** Video overview operations */
-  public readonly video: VideoService;
-  
-  /** Artifact operations */
+  /** Artifact operations (includes audio, video, quizzes, flashcards, etc.) */
   public readonly artifacts: ArtifactsService;
   
   /** Generation operations (guides, outlines, chat) */
@@ -87,8 +79,6 @@ export class NotebookLMClient {
     this.notebooks = new NotebooksService(this.rpcClient, this.quotaManager);
     this.sources = new SourcesService(this.rpcClient, this.quotaManager);
     this.notes = new NotesService(this.rpcClient, this.quotaManager);
-    this.audio = new AudioService(this.rpcClient, this.quotaManager);
-    this.video = new VideoService(this.rpcClient, this.quotaManager);
     this.artifacts = new ArtifactsService(this.rpcClient, this.quotaManager);
     this.generation = new GenerationService(this.rpcClient, this.quotaManager);
     
@@ -173,6 +163,7 @@ export class NotebookLMClient {
    * const usage = client.getUsage();
    * console.log(`Chats: ${usage.daily.chats}/50`);
    * console.log(`Audio: ${usage.daily.audioOverviews}/3`);
+   * console.log(`Artifacts created: ${usage.daily.createReport || 0}`);
    * ```
    */
   getUsage() {
