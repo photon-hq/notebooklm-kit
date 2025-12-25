@@ -85,6 +85,16 @@ export {
   AudioLanguage,
 } from './types/audio.js';
 
+// Language support
+export {
+  NotebookLMLanguage,
+  getLanguageInfo,
+  isLanguageSupported,
+  getSupportedLanguages,
+  COMMON_LANGUAGES,
+  type LanguageInfo,
+} from './types/languages.js';
+
 export type {
   VideoOverview,
   CreateVideoOverviewOptions,

@@ -26,17 +26,17 @@ export class AudioService {
    * 
    * @example
    * ```typescript
-   * import { AudioLanguage } from 'notebooklm-kit';
+   * import { NotebookLMLanguage, AudioLanguage } from 'notebooklm-kit';
    * 
-   * // Create in Hindi
+   * // Create in Hindi (using NotebookLMLanguage enum - recommended)
    * const audio = await client.audio.create('notebook-id', {
    *   instructions: 'Focus on the key findings',
-   *   language: AudioLanguage.HINDI,
+   *   language: NotebookLMLanguage.HINDI, // or AudioLanguage.HINDI for backward compatibility
    * });
    * 
-   * // Create with customization
+   * // Create with customization (supports 80+ languages)
    * const audio = await client.audio.create('notebook-id', {
-   *   language: AudioLanguage.TAMIL,
+   *   language: NotebookLMLanguage.TAMIL, // or 'ta'
    *   customization: {
    *     tone: 'educational',
    *     length: 'detailed',

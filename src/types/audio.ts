@@ -42,7 +42,10 @@ export enum AudioStatus {
 
 /**
  * Supported languages for audio overview
- * Based on NotebookLM's multi-language support
+ * Based on NotebookLM's multi-language support (80+ languages)
+ * 
+ * @deprecated Use NotebookLMLanguage from './languages' instead
+ * This enum is kept for backward compatibility
  */
 export enum AudioLanguage {
   HINDI = 'hi',           // हिन्दी
@@ -57,6 +60,9 @@ export enum AudioLanguage {
   ENGLISH = 'en',         // English
 }
 
+// Re-export NotebookLMLanguage for convenience
+export { NotebookLMLanguage, getLanguageInfo, isLanguageSupported } from './languages.js';
+
 /**
  * Options for creating audio overview
  */
@@ -67,7 +73,7 @@ export interface CreateAudioOverviewOptions {
   /** Audio type (0 = default) */
   audioType?: number;
   
-  /** Language for audio overview */
+  /** Language for audio overview (use NotebookLMLanguage enum or ISO 639-1 code) */
   language?: AudioLanguage | string;
   
   /** Additional customization */

@@ -360,7 +360,9 @@ export class ArtifactsService {
    *   - `1` = Easy
    *   - `2` = Medium (default)
    *   - `3` = Hard
-   * - `customization.language` (string, optional): Language code (e.g., 'en', 'hi', 'ta')
+   * - `customization.language` (string, optional): Language code (use NotebookLMLanguage enum or ISO 639-1 code, e.g., 'en', 'hi', 'ta')
+ *   - NotebookLM supports 80+ languages for artifacts
+ *   - Use `NotebookLMLanguage` enum for type safety, or pass ISO 639-1 codes directly
    * - `instructions` (string, optional): Custom instructions for question focus
    * 
    * **Flashcards (`FlashcardCustomization`):**
@@ -372,14 +374,17 @@ export class ArtifactsService {
    *   - `1` = Easy
    *   - `2` = Medium (default)
    *   - `3` = Hard
-   * - `customization.language` (string, optional): Language code (e.g., 'en', 'hi', 'ta')
+   * - `customization.language` (string, optional): Language code (use NotebookLMLanguage enum or ISO 639-1 code, e.g., 'en', 'hi', 'ta')
+ *   - NotebookLM supports 80+ languages for artifacts
+ *   - Use `NotebookLMLanguage` enum for type safety, or pass ISO 639-1 codes directly
    * - `instructions` (string, optional): Custom instructions for topic focus
    * 
    * **Slide Deck (`SlideDeckCustomization`):**
    * - `customization.format` (2 | 3, optional): Presentation format
    *   - `2` = Presenter slides (default)
    *   - `3` = Detailed deck
-   * - `customization.language` (string, optional): Language code (e.g., 'en')
+   * - `customization.language` (string, optional): Language code (use NotebookLMLanguage enum or ISO 639-1 code, e.g., 'en')
+ *   - NotebookLM supports 80+ languages for slide decks
    * - `customization.length` (1 | 2 | 3, optional): Length preference
    *   - `1` = Short
    *   - `2` = Default (default)
@@ -387,7 +392,9 @@ export class ArtifactsService {
    * - `instructions` (string, optional): Used as description/theme for the presentation
    * 
    * **Infographic (`InfographicCustomization`):**
-   * - `customization.language` (string, optional): Language code (e.g., 'en', 'hi', 'ta')
+   * - `customization.language` (string, optional): Language code (use NotebookLMLanguage enum or ISO 639-1 code, e.g., 'en', 'hi', 'ta')
+ *   - NotebookLM supports 80+ languages for artifacts
+ *   - Use `NotebookLMLanguage` enum for type safety, or pass ISO 639-1 codes directly
    * - `customization.orientation` (1 | 2 | 3, optional): Visual orientation/style
    *   - `1` = Landscape (default)
    *   - `2` = Portrait
@@ -414,7 +421,8 @@ export class ArtifactsService {
    * - `customization.format` (1 | 2, optional): Video format
    *   - `1` = Explainer (default)
    *   - `2` = Brief
-   * - `customization.language` (string, optional): Language code (default: 'en')
+   * - `customization.language` (string, optional): Language code (use NotebookLMLanguage enum or ISO 639-1 code, default: 'en')
+ *   - NotebookLM supports 80+ languages for video overviews
    * - `customization.visualStyle` (0 | 1 | 2 | 3 | 4 | 5, optional): Visual style
    *   - `0` = Auto-select (default)
    *   - `1` = Custom
@@ -472,13 +480,15 @@ export class ArtifactsService {
    * });
    * 
    * // Create quiz with customization
+   * import { NotebookLMLanguage } from 'notebooklm-kit';
+   * 
    * const quiz = await client.artifacts.create('notebook-id', ArtifactType.QUIZ, {
    *   title: 'Chapter 1 Quiz',
    *   instructions: 'Focus on key concepts',
    *   customization: {
    *     numberOfQuestions: 3, // More questions
    *     difficulty: 3, // Hard
-   *     language: 'en',
+   *     language: NotebookLMLanguage.ENGLISH, // or 'en'
    *   },
    * });
    * 
@@ -488,7 +498,7 @@ export class ArtifactsService {
    *   customization: {
    *     numberOfCards: 2, // Standard
    *     difficulty: 2, // Medium
-   *     language: 'en',
+   *     language: NotebookLMLanguage.HINDI, // or 'hi'
    *   },
    * });
    * 
@@ -498,7 +508,7 @@ export class ArtifactsService {
    *   instructions: 'Focus on revenue and growth metrics',
    *   customization: {
    *     format: 3, // Detailed deck
-   *     language: 'en',
+   *     language: NotebookLMLanguage.SPANISH, // or 'es'
    *     length: 2, // Default
    *   },
    * });
@@ -506,7 +516,7 @@ export class ArtifactsService {
    * // Create infographic with customization
    * const infographic = await client.artifacts.create('notebook-id', ArtifactType.INFOGRAPHIC, {
    *   customization: {
-   *     language: 'en',
+   *     language: NotebookLMLanguage.TAMIL, // or 'ta'
    *     orientation: 1, // Landscape
    *     levelOfDetail: 2, // Standard
    *   },
@@ -517,7 +527,7 @@ export class ArtifactsService {
    *   instructions: 'Create an engaging podcast summary',
    *   customization: {
    *     format: 0, // Deep dive
-   *     language: 'en',
+   *     language: NotebookLMLanguage.FRENCH, // or 'fr' - supports 80+ languages
    *     length: 2, // Default
    *   },
    * });
@@ -528,7 +538,7 @@ export class ArtifactsService {
    *   sourceIds: ['source-id-1', 'source-id-2'],
    *   customization: {
    *     format: 1, // Explainer
-   *     language: 'en',
+   *     language: NotebookLMLanguage.JAPANESE, // or 'ja' - supports 80+ languages
    *     visualStyle: 0, // Auto-select
    *   },
    * });

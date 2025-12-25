@@ -2,6 +2,9 @@
  * Artifact types
  */
 
+// Re-export language constants for artifact customization
+export { NotebookLMLanguage, getLanguageInfo, isLanguageSupported, COMMON_LANGUAGES } from './languages.js';
+
 /**
  * Artifact type enum
  */
@@ -78,7 +81,7 @@ export interface QuizCustomization {
   /** Difficulty level: 1=Easy, 2=Medium, 3=Hard (default: 2) */
   difficulty?: 1 | 2 | 3;
   
-  /** Language code (e.g., 'en', 'hi', 'ta') - optional */
+  /** Language code (use NotebookLMLanguage enum or ISO 639-1 code, e.g., 'en', 'hi', 'ta') - optional */
   language?: string;
 }
 
@@ -92,7 +95,7 @@ export interface FlashcardCustomization {
   /** Difficulty level: 1=Easy, 2=Medium, 3=Hard (default: 2) */
   difficulty?: 1 | 2 | 3;
   
-  /** Language code (e.g., 'en', 'hi', 'ta') - optional */
+  /** Language code (use NotebookLMLanguage enum or ISO 639-1 code, e.g., 'en', 'hi', 'ta') - optional */
   language?: string;
 }
 
@@ -103,7 +106,7 @@ export interface SlideDeckCustomization {
   /** Format: 2=Presenter slides, 3=Detailed deck (default: 2) */
   format?: 2 | 3;
   
-  /** Language code (e.g., 'en') */
+  /** Language code (use NotebookLMLanguage enum or ISO 639-1 code, e.g., 'en') */
   language?: string;
   
   /** Length: 1=Short, 2=Default, 3=Long (default: 2) */
@@ -114,7 +117,7 @@ export interface SlideDeckCustomization {
  * Infographic customization options
  */
 export interface InfographicCustomization {
-  /** Language code (e.g., 'en', 'hi', 'ta') */
+  /** Language code (use NotebookLMLanguage enum or ISO 639-1 code, e.g., 'en', 'hi', 'ta') */
   language?: string;
   
   /** Orientation/Visual style: 1=Landscape, 2=Portrait, 3=Square (default: 1) */
@@ -131,7 +134,7 @@ export interface AudioCustomization {
   /** Format: 0=Deep dive, 1=Brief, 2=Critique, 3=Debate (default: 0) */
   format?: 0 | 1 | 2 | 3;
   
-  /** Language code (e.g., 'en', 'hi') */
+  /** Language code (use NotebookLMLanguage enum or ISO 639-1 code, e.g., 'en', 'hi') */
   language?: string;
   
   /** Length: 1=Short, 2=Default, 3=Long (default: 2) */
@@ -145,7 +148,7 @@ export interface VideoCustomization {
   /** Format: 1=Explainer, 2=Brief (default: 1) */
   format?: 1 | 2;
   
-  /** Language code (e.g., 'en') */
+  /** Language code (use NotebookLMLanguage enum or ISO 639-1 code, e.g., 'en') */
   language?: string;
   
   /** Visual style: 0=Auto-select, 1=Custom, 2=Classic, 3=Whiteboard, 4=Kawaii, 5=Anime (default: 0) */

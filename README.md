@@ -11,6 +11,18 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/bZd4CMd2H5)
 
+## Overview
+
+The NotebookLM Kit provides a clean, organized interface to all NotebookLM features through a service-based architecture:
+
+- **`sdk.notebooks`** - Create, list, update, delete notebooks
+- **`sdk.sources`** - Add sources (URLs, text, files, YouTube, Google Drive, web search)
+- **`sdk.notes`** - Create and manage notes within notebooks
+- **`sdk.artifacts`** - Generate quizzes, flashcards, study guides, mind maps, infographics, slides, reports, audio, video
+- **`sdk.generation`** - Chat with notebooks, generate guides, outlines, reports
+
+All features are organized logically and easy to discover. The SDK handles authentication, quota management, and session refresh automatically.
+
 ## Quick Start
 
 ### Installation
@@ -168,6 +180,31 @@ NOTEBOOKLM_COOKIES="SID=value; HSID=value; SSID=value; APISID=value; SAPISID=val
 | Create Notes | `sdk.notes.create()` | [Notes](#notes) |
 | Auto-Refresh | `sdk.refreshCredentials()` | [Auto-Refresh](#auto-refresh) |
 | Quota Management | `sdk.getUsage()` | [Quota Management](#quota-management) |
+
+## Quick Reference
+
+**Common Workflows:**
+
+```typescript
+// 1. Create notebook and add sources
+const notebook = await sdk.notebooks.create({ title: 'Research', emoji: '📚' })
+await sdk.sources.addFromURL(notebook.projectId, { url: 'https://example.com' })
+
+// 2. Chat with notebook
+const response = await sdk.generation.chat(notebook.projectId, 'Summarize this')
+
+// 3. Create artifacts
+const quiz = await sdk.artifacts.create(notebook.projectId, ArtifactType.QUIZ, {
+  instructions: 'Create 10 questions',
+})
+
+// 4. Check quota
+const usage = sdk.getUsage()
+console.log(`Chats used: ${usage.daily.chats}/50`)
+
+// 5. Clean up
+sdk.dispose()
+```
 
 ## Notebooks
 
@@ -435,32 +472,43 @@ const readyArtifacts = artifacts.filter(a => a.state === ArtifactState.READY)
 
 ### Audio Overviews
 
+NotebookLM supports **80+ languages** for audio overviews. Use the `NotebookLMLanguage` enum for type safety, or pass ISO 639-1 language codes directly.
+
 ```typescript
-import { ArtifactType, ArtifactState, AudioLanguage } from 'notebooklm-kit'
+import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
 
 // Create audio in English (default)
 const audio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   instructions: 'Focus on key findings and main conclusions',
 })
 
-// Create audio in Hindi (हिन्दी)
+// Create audio in Hindi (हिन्दी) using enum
 const hindiAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   customization: {
-    language: AudioLanguage.HINDI,
+    language: NotebookLMLanguage.HINDI, // or 'hi'
     format: 0, // Deep dive
     length: 2, // Default
   },
   instructions: 'मुख्य निष्कर्षों पर ध्यान दें',
 })
 
-// Create with customization
-const customAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
+// Create audio in French (Français)
+const frenchAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   customization: {
-    language: AudioLanguage.TAMIL,
+    language: NotebookLMLanguage.FRENCH, // or 'fr'
     format: 0, // 0=Deep dive, 1=Brief, 2=Critique, 3=Debate
     length: 3, // 1=Short, 2=Default, 3=Long
   },
   instructions: 'Focus on key findings and methodology',
+})
+
+// Create audio in Japanese (日本語)
+const japaneseAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
+  customization: {
+    language: NotebookLMLanguage.JAPANESE, // or 'ja'
+    format: 1, // Brief
+    length: 2, // Default
+  },
 })
 
 // Get audio status (use notebook ID for audio artifacts)
@@ -472,23 +520,49 @@ if (audioStatus.state === ArtifactState.READY) {
   console.log(`Audio saved to: ${audioData.filePath}`)
 }
 
-// Supported languages: Hindi, Bengali, Gujarati, Kannada, Malayalam, 
-// Marathi, Punjabi, Tamil, Telugu, English
+// Supported languages include: English, Spanish, French, German, Italian, Portuguese,
+// Russian, Japanese, Korean, Chinese, Hindi, Bengali, Tamil, Telugu, Gujarati, Kannada,
+// Malayalam, Marathi, Punjabi, Arabic, Turkish, Thai, Vietnamese, Indonesian, Malay,
+// and 60+ more languages. See NotebookLMLanguage enum for complete list.
 ```
 
 ### Video Overviews
 
-```typescript
-import { ArtifactType, ArtifactState } from 'notebooklm-kit'
+NotebookLM supports **80+ languages** for video overviews. Use the `NotebookLMLanguage` enum for type safety.
 
-// Create video overview
+```typescript
+import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
+
+// Create video overview in English
 const video = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
   instructions: 'Create an engaging video overview with key highlights',
   sourceIds: ['source-id-1', 'source-id-2'], // Required: specify sources
   customization: {
     format: 1, // 1=Explainer, 2=Brief
-    language: 'en',
+    language: NotebookLMLanguage.ENGLISH, // or 'en'
     visualStyle: 0, // 0=Auto, 1=Custom, 2=Classic, 3=Whiteboard, 4=Kawaii, 5=Anime
+  },
+})
+
+// Create video in Spanish (Español)
+const spanishVideo = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
+  instructions: 'Crear un resumen de video atractivo',
+  sourceIds: ['source-id-1'],
+  customization: {
+    format: 1,
+    language: NotebookLMLanguage.SPANISH, // or 'es'
+    visualStyle: 2, // Classic
+  },
+})
+
+// Create video in German (Deutsch)
+const germanVideo = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
+  instructions: 'Erstellen Sie eine ansprechende Videoübersicht',
+  sourceIds: ['source-id-1'],
+  customization: {
+    format: 2, // Brief
+    language: NotebookLMLanguage.GERMAN, // or 'de'
+    visualStyle: 3, // Whiteboard
   },
 })
 
@@ -504,17 +578,41 @@ if (videoStatus.state === ArtifactState.READY) {
 
 ### Quizzes
 
-```typescript
-import { ArtifactType, ArtifactState } from 'notebooklm-kit'
+Quizzes support **80+ languages**. Use `NotebookLMLanguage` enum for type safety.
 
-// Create quiz
+```typescript
+import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
+
+// Create quiz in English
 const quiz = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
   title: 'Chapter 1 Quiz',
   instructions: 'Create 10 multiple choice questions covering key concepts',
   customization: {
     numberOfQuestions: 3, // 1=Fewer, 2=Standard, 3=More
     difficulty: 2, // 1=Easy, 2=Medium, 3=Hard
-    language: 'en',
+    language: NotebookLMLanguage.ENGLISH, // or 'en'
+  },
+})
+
+// Create quiz in Hindi (हिन्दी)
+const hindiQuiz = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
+  title: 'अध्याय 1 प्रश्नोत्तरी',
+  instructions: 'मुख्य अवधारणाओं को कवर करने वाले 10 बहुविकल्पीय प्रश्न बनाएं',
+  customization: {
+    numberOfQuestions: 3,
+    difficulty: 3, // Hard
+    language: NotebookLMLanguage.HINDI, // or 'hi'
+  },
+})
+
+// Create quiz in Chinese (简体中文)
+const chineseQuiz = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
+  title: '第一章测验',
+  instructions: '创建10个涵盖关键概念的多项选择题',
+  customization: {
+    numberOfQuestions: 2, // Standard
+    difficulty: 2, // Medium
+    language: NotebookLMLanguage.CHINESE_SIMPLIFIED, // or 'zh'
   },
 })
 
@@ -534,16 +632,38 @@ if (artifact.state === ArtifactState.READY) {
 
 ### Flashcards
 
-```typescript
-import { ArtifactType, ArtifactState } from 'notebooklm-kit'
+Flashcards support **80+ languages**. Use `NotebookLMLanguage` enum for type safety.
 
-// Create flashcards
+```typescript
+import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
+
+// Create flashcards in English
 const flashcards = await sdk.artifacts.create('notebook-id', ArtifactType.FLASHCARDS, {
   instructions: 'Focus on terminology and definitions',
   customization: {
     numberOfCards: 2, // 1=Fewer, 2=Standard, 3=More
     difficulty: 2, // 1=Easy, 2=Medium, 3=Hard
-    language: 'en',
+    language: NotebookLMLanguage.ENGLISH, // or 'en'
+  },
+})
+
+// Create flashcards in Tamil (தமிழ்)
+const tamilFlashcards = await sdk.artifacts.create('notebook-id', ArtifactType.FLASHCARDS, {
+  instructions: 'சொற்களஞ்சியம் மற்றும் வரையறைகளில் கவனம் செலுத்துங்கள்',
+  customization: {
+    numberOfCards: 3, // More cards
+    difficulty: 2,
+    language: NotebookLMLanguage.TAMIL, // or 'ta'
+  },
+})
+
+// Create flashcards in Spanish (Español)
+const spanishFlashcards = await sdk.artifacts.create('notebook-id', ArtifactType.FLASHCARDS, {
+  instructions: 'Enfócate en terminología y definiciones',
+  customization: {
+    numberOfCards: 2,
+    difficulty: 1, // Easy
+    language: NotebookLMLanguage.SPANISH, // or 'es'
   },
 })
 
@@ -575,31 +695,58 @@ const mindMap = await sdk.artifacts.create('notebook-id', ArtifactType.MIND_MAP,
 
 ### Infographics
 
-```typescript
-import { ArtifactType } from 'notebooklm-kit'
+Infographics support **80+ languages**. Use `NotebookLMLanguage` enum for type safety.
 
+```typescript
+import { ArtifactType, NotebookLMLanguage } from 'notebooklm-kit'
+
+// Create infographic in English
 const infographic = await sdk.artifacts.create('notebook-id', ArtifactType.INFOGRAPHIC, {
   instructions: 'Visual summary of key data and statistics',
   customization: {
-    language: 'en',
+    language: NotebookLMLanguage.ENGLISH, // or 'en'
     orientation: 1, // 1=Landscape, 2=Portrait, 3=Square
     levelOfDetail: 2, // 1=Concise, 2=Standard, 3=Detailed
+  },
+})
+
+// Create infographic in Arabic (العربية)
+const arabicInfographic = await sdk.artifacts.create('notebook-id', ArtifactType.INFOGRAPHIC, {
+  instructions: 'ملخص مرئي للبيانات والإحصائيات الرئيسية',
+  customization: {
+    language: NotebookLMLanguage.ARABIC, // or 'ar'
+    orientation: 2, // Portrait
+    levelOfDetail: 3, // Detailed
   },
 })
 ```
 
 ### Slide Decks
 
-```typescript
-import { ArtifactType } from 'notebooklm-kit'
+Slide decks support **80+ languages**. Use `NotebookLMLanguage` enum for type safety.
 
+```typescript
+import { ArtifactType, NotebookLMLanguage } from 'notebooklm-kit'
+
+// Create slide deck in English
 const slideDeck = await sdk.artifacts.create('notebook-id', ArtifactType.SLIDE_DECK, {
   title: 'Presentation',
   instructions: 'Create 10 slides covering main topics with visuals',
   customization: {
     format: 3, // 2=Presenter slides, 3=Detailed deck
-    language: 'en',
+    language: NotebookLMLanguage.ENGLISH, // or 'en'
     length: 2, // 1=Short, 2=Default, 3=Long
+  },
+})
+
+// Create slide deck in French (Français)
+const frenchSlides = await sdk.artifacts.create('notebook-id', ArtifactType.SLIDE_DECK, {
+  title: 'Présentation',
+  instructions: 'Créer 10 diapositives couvrant les principaux sujets avec des visuels',
+  customization: {
+    format: 2, // Presenter slides
+    language: NotebookLMLanguage.FRENCH, // or 'fr'
+    length: 3, // Long
   },
 })
 ```
@@ -837,6 +984,101 @@ try {
 }
 ```
 
+## Language Support
+
+NotebookLM supports **80+ languages** for audio overviews, video overviews, and artifacts (quizzes, flashcards, slide decks, infographics). Use the `NotebookLMLanguage` enum for type safety, or pass ISO 639-1 language codes directly.
+
+### Supported Languages
+
+The SDK includes a comprehensive `NotebookLMLanguage` enum with 80+ supported languages:
+
+```typescript
+import { NotebookLMLanguage, getLanguageInfo, isLanguageSupported } from 'notebooklm-kit'
+
+// Use enum for type safety
+const language = NotebookLMLanguage.HINDI // 'hi'
+const language2 = NotebookLMLanguage.FRENCH // 'fr'
+const language3 = NotebookLMLanguage.JAPANESE // 'ja'
+
+// Or use ISO 639-1 codes directly
+const language4 = 'es' // Spanish
+const language5 = 'de' // German
+
+// Check if language is supported
+if (isLanguageSupported('ta')) {
+  console.log('Tamil is supported!')
+}
+
+// Get language information
+const info = getLanguageInfo(NotebookLMLanguage.HINDI)
+console.log(info.name) // 'Hindi'
+console.log(info.nativeName) // 'हिन्दी'
+```
+
+### Common Languages
+
+```typescript
+import { COMMON_LANGUAGES, NotebookLMLanguage } from 'notebooklm-kit'
+
+// Quick access to common languages
+const languages = {
+  english: COMMON_LANGUAGES.ENGLISH,      // 'en'
+  spanish: COMMON_LANGUAGES.SPANISH,      // 'es'
+  french: COMMON_LANGUAGES.FRENCH,        // 'fr'
+  german: COMMON_LANGUAGES.GERMAN,        // 'de'
+  hindi: COMMON_LANGUAGES.HINDI,          // 'hi'
+  chinese: COMMON_LANGUAGES.CHINESE,      // 'zh'
+  japanese: COMMON_LANGUAGES.JAPANESE,    // 'ja'
+  korean: COMMON_LANGUAGES.KOREAN,        // 'ko'
+  arabic: COMMON_LANGUAGES.ARABIC,         // 'ar'
+  // ... and more
+}
+```
+
+### Language Support by Artifact Type
+
+- **Audio Overviews**: 80+ languages supported
+- **Video Overviews**: 80+ languages supported
+- **Quizzes**: 80+ languages supported
+- **Flashcards**: 80+ languages supported
+- **Slide Decks**: 80+ languages supported
+- **Infographics**: 80+ languages supported
+
+### Example: Multi-Language Artifacts
+
+```typescript
+import { ArtifactType, NotebookLMLanguage } from 'notebooklm-kit'
+
+// Create artifacts in different languages
+const englishQuiz = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
+  customization: { language: NotebookLMLanguage.ENGLISH }
+})
+
+const hindiAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
+  customization: { language: NotebookLMLanguage.HINDI }
+})
+
+const spanishVideo = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
+  customization: { language: NotebookLMLanguage.SPANISH }
+})
+
+const frenchFlashcards = await sdk.artifacts.create('notebook-id', ArtifactType.FLASHCARDS, {
+  customization: { language: NotebookLMLanguage.FRENCH }
+})
+```
+
+### Complete Language List
+
+The `NotebookLMLanguage` enum includes languages from:
+- **Major World Languages**: English, Spanish, French, German, Italian, Portuguese, Russian, Japanese, Korean, Chinese
+- **Indian Languages**: Hindi, Bengali, Tamil, Telugu, Gujarati, Kannada, Malayalam, Marathi, Punjabi, Urdu, and more
+- **Middle Eastern Languages**: Arabic, Hebrew, Persian, Turkish, and more
+- **Southeast Asian Languages**: Thai, Vietnamese, Indonesian, Malay, Tagalog, and more
+- **European Languages**: Polish, Dutch, Swedish, Danish, Finnish, Norwegian, Czech, Slovak, Hungarian, Romanian, and more
+- **African Languages**: Swahili, Zulu, Afrikaans, Yoruba, Igbo, Hausa, and more
+
+See the `NotebookLMLanguage` enum in the SDK for the complete list of 80+ supported languages.
+
 ## Advanced Usage
 
 ### Direct RPC Calls
@@ -887,6 +1129,56 @@ const notebook: Notebook = await sdk.notebooks.get('id')
 const sources: Source[] = await sdk.sources.list('id')
 const notes: Note[] = await sdk.notes.list('id')
 const artifacts: Artifact[] = await sdk.artifacts.list('id')
+```
+
+## Client Structure
+
+The NotebookLM client organizes all features into logical services:
+
+```typescript
+const sdk = new NotebookLMClient({ ... })
+
+// Notebook operations
+sdk.notebooks.list()
+sdk.notebooks.create({ title: 'Research', emoji: '📚' })
+sdk.notebooks.get('notebook-id')
+sdk.notebooks.update('notebook-id', { title: 'New Title' })
+sdk.notebooks.delete('notebook-id')
+
+// Source operations
+sdk.sources.addFromURL('notebook-id', { url: 'https://example.com' })
+sdk.sources.addFromText('notebook-id', { title: 'Notes', content: '...' })
+sdk.sources.addFromFile('notebook-id', { content: buffer, fileName: 'doc.pdf' })
+sdk.sources.addYouTube('notebook-id', { urlOrId: 'video-id' })
+sdk.sources.addGoogleDrive('notebook-id', { fileId: 'file-id' })
+sdk.sources.searchWebAndWait('notebook-id', { query: 'AI research' })
+sdk.sources.addBatch('notebook-id', { sources: [...] })
+
+// Note operations
+sdk.notes.list('notebook-id')
+sdk.notes.create('notebook-id', { title: 'Note', content: '...' })
+sdk.notes.update('notebook-id', 'note-id', { content: 'Updated' })
+sdk.notes.delete('notebook-id', 'note-id')
+
+// Generation operations
+sdk.generation.chat('notebook-id', 'What are the key findings?')
+sdk.generation.generateNotebookGuide('notebook-id')
+sdk.generation.generateOutline('notebook-id')
+sdk.generation.generateReportSuggestions('notebook-id')
+
+// Artifact operations
+sdk.artifacts.list('notebook-id')
+sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, { instructions: '...' })
+sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, { instructions: '...' })
+sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, { instructions: '...' })
+sdk.artifacts.download('artifact-id', './downloads')
+sdk.artifacts.delete('artifact-id')
+
+// Utility methods
+sdk.getUsage()                    // Check quota usage
+sdk.getRemaining('chats')          // Check remaining quota
+sdk.refreshCredentials()           // Manually refresh session
+sdk.dispose()                      // Clean up resources
 ```
 
 ## API Reference
