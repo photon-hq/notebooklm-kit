@@ -24,9 +24,12 @@ npm install notebooklm-kit
 ```typescript
 import { NotebookLMClient } from 'notebooklm-kit'
 
+// Create client with auto-refresh enabled (default: 10-minute interval)
+// Credentials are refreshed immediately on initialization, then every 10 minutes
 const sdk = new NotebookLMClient({
   authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
   cookies: process.env.NOTEBOOKLM_COOKIES!,
+  // autoRefresh: true is the default - keeps session alive automatically
 })
 
 // Create a notebook
@@ -48,7 +51,7 @@ const response = await sdk.generation.chat(
 
 console.log(response)
 
-// Clean up
+// Clean up (stops auto-refresh)
 sdk.dispose()
 ```
 
@@ -59,16 +62,51 @@ interface NotebookLMConfig {
   authToken: string              // Required: Auth token from NotebookLM
   cookies: string                 // Required: Session cookies
   debug?: boolean                 // Enable debug logging (default: false)
-  autoRefresh?: boolean | {       // Keep session alive (default: true)
-    enabled: boolean
-    interval?: number             // Refresh interval in ms (default: 10 minutes)
-    gsessionId?: string           // Optional: Google session ID
+  autoRefresh?: boolean | {       // Auto-refresh credentials (default: true)
+    enabled: boolean              // Enable auto-refresh (default: true)
+    interval?: number             // Refresh interval in ms (default: 600000 = 10 minutes)
+    gsessionId?: string           // Optional: Google session ID (auto-extracted if not provided)
   }
   maxRetries?: number             // Retry attempts (default: 3)
   enforceQuotas?: boolean         // Enforce usage limits (default: true)
   headers?: Record<string, string> // Custom headers
   urlParams?: Record<string, string> // Custom URL params
 }
+```
+
+**Auto-Refresh Details:**
+
+The SDK automatically keeps your session alive by refreshing credentials periodically. This prevents session expiration during long-running operations.
+
+- **Default:** Auto-refresh is enabled with a 10-minute interval (600,000 ms)
+- **Initial refresh:** Credentials are refreshed immediately when the client is created
+- **Background refresh:** Subsequent refreshes happen automatically at the configured interval
+- **Recommended intervals:** 5-10 minutes (300,000 - 600,000 ms)
+- **Disable:** Set `autoRefresh: false` to disable automatic refresh
+
+```typescript
+// Default: Auto-refresh enabled, 10-minute interval
+const sdk = new NotebookLMClient({
+  authToken: '...',
+  cookies: '...',
+})
+
+// Custom 5-minute interval
+const sdk = new NotebookLMClient({
+  authToken: '...',
+  cookies: '...',
+  autoRefresh: {
+    enabled: true,
+    interval: 5 * 60 * 1000, // 5 minutes
+  },
+})
+
+// Disable auto-refresh
+const sdk = new NotebookLMClient({
+  authToken: '...',
+  cookies: '...',
+  autoRefresh: false,
+})
 ```
 
 ## Authentication
@@ -595,29 +633,70 @@ await sdk.artifacts.delete('notebook-id', 'notebook-id')
 
 ## Auto-Refresh
 
-Keep your session alive automatically. The SDK can refresh your credentials periodically to prevent session expiration.
+Keep your session alive automatically. The SDK automatically refreshes your credentials periodically to prevent session expiration during long-running operations.
 
-### Basic Auto-Refresh
+### How It Works
+
+When you create a `NotebookLMClient`, auto-refresh is enabled by default:
+
+1. **Initial refresh:** Credentials are refreshed immediately when the client is initialized
+2. **Background refresh:** Subsequent refreshes happen automatically at the configured interval
+3. **Default interval:** 10 minutes (600,000 ms)
+4. **Automatic cleanup:** Call `sdk.dispose()` to stop auto-refresh when done
+
+### Basic Auto-Refresh (Default)
 
 ```typescript
+// Auto-refresh is enabled by default with 10-minute interval
 const sdk = new NotebookLMClient({
   authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
   cookies: process.env.NOTEBOOKLM_COOKIES!,
-  autoRefresh: true, // Enabled by default, refreshes every 10 minutes
+  // No need to specify autoRefresh - it's enabled by default
 })
+
+// Credentials are refreshed:
+// - Immediately on initialization
+// - Every 10 minutes automatically
 ```
 
-### Configure Auto-Refresh
+### Configure Refresh Interval
 
 ```typescript
+// Custom 5-minute interval
 const sdk = new NotebookLMClient({
   authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
   cookies: process.env.NOTEBOOKLM_COOKIES!,
   autoRefresh: {
     enabled: true,
-    interval: 5 * 60 * 1000, // Refresh every 5 minutes
-    gsessionId: 'optional-gsession-id', // Optional: if you have it
+    interval: 5 * 60 * 1000, // 5 minutes (300,000 ms)
   },
+})
+
+// Custom 15-minute interval
+const sdk = new NotebookLMClient({
+  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
+  cookies: process.env.NOTEBOOKLM_COOKIES!,
+  autoRefresh: {
+    enabled: true,
+    interval: 15 * 60 * 1000, // 15 minutes (900,000 ms)
+  },
+})
+```
+
+### Refresh Interval Guidelines
+
+- **Recommended:** 5-10 minutes (300,000 - 600,000 ms)
+- **Minimum:** 1 minute (60,000 ms) - not recommended, may be too frequent
+- **Maximum:** 30 minutes (1,800,000 ms) - sessions may expire before refresh
+- **Default:** 10 minutes (600,000 ms) - optimal balance
+
+### Disable Auto-Refresh
+
+```typescript
+const sdk = new NotebookLMClient({
+  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
+  cookies: process.env.NOTEBOOKLM_COOKIES!,
+  autoRefresh: false, // Disable auto-refresh
 })
 ```
 

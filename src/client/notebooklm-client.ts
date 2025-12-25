@@ -40,6 +40,50 @@ export class NotebookLMClient {
   /**
    * Create a new NotebookLM client
    * 
+   * **Auto-Refresh Configuration:**
+   * 
+   * The SDK automatically keeps your session alive by refreshing credentials periodically.
+   * This prevents session expiration during long-running operations.
+   * 
+   * - **Default behavior:** Auto-refresh is enabled by default with a 10-minute interval
+   * - **Custom interval:** Set `autoRefresh: { enabled: true, interval: 5 * 60 * 1000 }` for 5 minutes
+   * - **Disable:** Set `autoRefresh: false` to disable automatic refresh
+   * - **Initial refresh:** Credentials are refreshed immediately when the client is created
+   * - **Background refresh:** Subsequent refreshes happen automatically at the configured interval
+   * 
+   * **Refresh Intervals:**
+   * - Recommended: 5-10 minutes (300,000 - 600,000 ms)
+   * - Minimum: 1 minute (60,000 ms) - not recommended as it may be too frequent
+   * - Maximum: 30 minutes (1,800,000 ms) - sessions may expire before refresh
+   * 
+   * **Example configurations:**
+   * ```typescript
+   * // Default: Auto-refresh enabled, 10-minute interval
+   * const client = new NotebookLMClient({
+   *   authToken: '...',
+   *   cookies: '...',
+   * });
+   * 
+   * // Custom 5-minute interval
+   * const client = new NotebookLMClient({
+   *   authToken: '...',
+   *   cookies: '...',
+   *   autoRefresh: {
+   *     enabled: true,
+   *     interval: 5 * 60 * 1000, // 5 minutes
+   *   },
+   * });
+   * 
+   * // Disable auto-refresh
+   * const client = new NotebookLMClient({
+   *   authToken: '...',
+   *   cookies: '...',
+   *   autoRefresh: false,
+   * });
+   * ```
+   * 
+   * @param config - Client configuration
+   * 
    * @example
    * ```typescript
    * const client = new NotebookLMClient({
@@ -83,19 +127,23 @@ export class NotebookLMClient {
     this.generation = new GenerationService(this.rpcClient, this.quotaManager);
     
     // Setup auto-refresh if enabled
-    if (config.autoRefresh) {
-      const refreshConfig = typeof config.autoRefresh === 'boolean'
+    // Default: enabled with 10-minute interval
+    // Set autoRefresh: false to disable, or configure custom interval
+    if (config.autoRefresh !== false) {
+      const autoRefreshConfig = config.autoRefresh;
+      const refreshConfig = typeof autoRefreshConfig === 'boolean' || autoRefreshConfig === undefined
         ? defaultAutoRefreshConfig()
         : {
-            enabled: config.autoRefresh.enabled,
-            interval: config.autoRefresh.interval || 10 * 60 * 1000,
-            gsessionId: config.autoRefresh.gsessionId,
+            enabled: autoRefreshConfig.enabled !== false,
+            interval: autoRefreshConfig.interval || 10 * 60 * 1000, // Default: 10 minutes
+            gsessionId: autoRefreshConfig.gsessionId,
             debug: config.debug,
           };
       
       this.refreshManager = new AutoRefreshManager(config.cookies, refreshConfig);
       
       // Start auto-refresh asynchronously (don't block constructor)
+      // Initial refresh happens immediately, then periodic refreshes at configured interval
       this.refreshManager.start().catch(error => {
         if (config.debug) {
           console.error('Failed to start auto-refresh:', error.message);
