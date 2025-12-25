@@ -459,6 +459,13 @@ const magicView = await sdk.generation.generateMagicView('notebook-id', [
 
 Create various types of artifacts from your notebook content. Artifacts include audio overviews, video overviews, quizzes, flashcards, study guides, mind maps, infographics, slide decks, and reports.
 
+**⚠️ Important: Sources Required**
+- **Your notebook must have at least one source** before creating artifacts
+- If you don't specify `sourceIds`, **all sources in the notebook** are used automatically
+- If you provide `sourceIds`, **only those specific sources** are used
+- **Video artifacts specifically require sources** - always provide `sourceIds` for videos
+- **Audio artifacts** automatically use all sources (you don't need to specify `sourceIds`)
+
 ### List Artifacts
 
 ```typescript
@@ -478,8 +485,10 @@ NotebookLM supports **80+ languages** for audio overviews. Use the `NotebookLMLa
 import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
 
 // Create audio in English (default)
+// Note: Audio automatically uses ALL sources in the notebook - no need to specify sourceIds
 const audio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   instructions: 'Focus on key findings and main conclusions',
+  // sourceIds is not needed for audio - all sources are used automatically
 })
 
 // Create audio in Hindi (हिन्दी) using enum
@@ -533,10 +542,10 @@ NotebookLM supports **80+ languages** for video overviews. Use the `NotebookLMLa
 ```typescript
 import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
 
-// Create video overview in English
+// Create video overview in English (sources are required for video)
 const video = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
   instructions: 'Create an engaging video overview with key highlights',
-  sourceIds: ['source-id-1', 'source-id-2'], // Required: specify sources
+  sourceIds: ['source-id-1', 'source-id-2'], // Required: video artifacts need sources
   customization: {
     format: 1, // 1=Explainer, 2=Brief
     language: NotebookLMLanguage.ENGLISH, // or 'en'
@@ -583,14 +592,27 @@ Quizzes support **80+ languages**. Use `NotebookLMLanguage` enum for type safety
 ```typescript
 import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
 
-// Create quiz in English
+// Create quiz in English (uses all sources)
 const quiz = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
   title: 'Chapter 1 Quiz',
   instructions: 'Create 10 multiple choice questions covering key concepts',
+  // sourceIds omitted = uses all sources in notebook
   customization: {
     numberOfQuestions: 3, // 1=Fewer, 2=Standard, 3=More
     difficulty: 2, // 1=Easy, 2=Medium, 3=Hard
     language: NotebookLMLanguage.ENGLISH, // or 'en'
+  },
+})
+
+// Create quiz from specific sources only
+const quizFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
+  title: 'Chapter 1 Quiz',
+  instructions: 'Create questions from these sources',
+  sourceIds: ['source-id-1', 'source-id-2'], // Only use these sources
+  customization: {
+    numberOfQuestions: 3,
+    difficulty: 2,
+    language: NotebookLMLanguage.ENGLISH,
   },
 })
 
@@ -637,13 +659,25 @@ Flashcards support **80+ languages**. Use `NotebookLMLanguage` enum for type saf
 ```typescript
 import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
 
-// Create flashcards in English
+// Create flashcards in English (uses all sources)
 const flashcards = await sdk.artifacts.create('notebook-id', ArtifactType.FLASHCARDS, {
   instructions: 'Focus on terminology and definitions',
+  // sourceIds omitted = uses all sources in notebook
   customization: {
     numberOfCards: 2, // 1=Fewer, 2=Standard, 3=More
     difficulty: 2, // 1=Easy, 2=Medium, 3=Hard
     language: NotebookLMLanguage.ENGLISH, // or 'en'
+  },
+})
+
+// Create flashcards from specific sources
+const flashcardsFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.FLASHCARDS, {
+  instructions: 'Focus on terminology from these sources',
+  sourceIds: ['source-id-1'], // Only use this source
+  customization: {
+    numberOfCards: 3, // More cards
+    difficulty: 2,
+    language: NotebookLMLanguage.ENGLISH,
   },
 })
 
@@ -677,9 +711,18 @@ console.log(flashcardData.data.cards) // Array of { front, back } cards
 ```typescript
 import { ArtifactType } from 'notebooklm-kit'
 
+// Create study guide (uses all sources)
 const studyGuide = await sdk.artifacts.create('notebook-id', ArtifactType.STUDY_GUIDE, {
   title: 'Exam Study Guide',
   instructions: 'Focus on key concepts, formulas, and important dates',
+  // sourceIds omitted = uses all sources in notebook
+})
+
+// Create study guide from specific sources
+const studyGuideFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.STUDY_GUIDE, {
+  title: 'Chapters 1-3 Study Guide',
+  instructions: 'Focus on chapters 1-3',
+  sourceIds: ['source-id-1', 'source-id-2', 'source-id-3'], // Only these sources
 })
 ```
 
@@ -688,8 +731,16 @@ const studyGuide = await sdk.artifacts.create('notebook-id', ArtifactType.STUDY_
 ```typescript
 import { ArtifactType } from 'notebooklm-kit'
 
+// Create mind map (uses all sources)
 const mindMap = await sdk.artifacts.create('notebook-id', ArtifactType.MIND_MAP, {
   title: 'Concept Map',
+  // sourceIds omitted = uses all sources in notebook
+})
+
+// Create mind map from specific sources
+const mindMapFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.MIND_MAP, {
+  title: 'Concept Map',
+  sourceIds: ['source-id-1', 'source-id-2'], // Only these sources
 })
 ```
 
@@ -700,15 +751,28 @@ Infographics support **80+ languages**. Use `NotebookLMLanguage` enum for type s
 ```typescript
 import { ArtifactType, NotebookLMLanguage } from 'notebooklm-kit'
 
-// Create infographic in English
+// Create infographic in English (uses all sources)
 const infographic = await sdk.artifacts.create('notebook-id', ArtifactType.INFOGRAPHIC, {
   instructions: 'Visual summary of key data and statistics',
+  // sourceIds omitted = uses all sources in notebook
   customization: {
     language: NotebookLMLanguage.ENGLISH, // or 'en'
     orientation: 1, // 1=Landscape, 2=Portrait, 3=Square
     levelOfDetail: 2, // 1=Concise, 2=Standard, 3=Detailed
   },
 })
+
+// Create infographic from specific sources
+const infographicFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.INFOGRAPHIC, {
+  instructions: 'Visual summary from these sources',
+  sourceIds: ['source-id-1', 'source-id-2'], // Only these sources
+  customization: {
+    language: NotebookLMLanguage.ARABIC, // or 'ar'
+    orientation: 2, // Portrait
+    levelOfDetail: 3, // Detailed
+  },
+})
+```
 
 // Create infographic in Arabic (العربية)
 const arabicInfographic = await sdk.artifacts.create('notebook-id', ArtifactType.INFOGRAPHIC, {
@@ -728,16 +792,30 @@ Slide decks support **80+ languages**. Use `NotebookLMLanguage` enum for type sa
 ```typescript
 import { ArtifactType, NotebookLMLanguage } from 'notebooklm-kit'
 
-// Create slide deck in English
+// Create slide deck in English (uses all sources)
 const slideDeck = await sdk.artifacts.create('notebook-id', ArtifactType.SLIDE_DECK, {
   title: 'Presentation',
   instructions: 'Create 10 slides covering main topics with visuals',
+  // sourceIds omitted = uses all sources in notebook
   customization: {
     format: 3, // 2=Presenter slides, 3=Detailed deck
     language: NotebookLMLanguage.ENGLISH, // or 'en'
     length: 2, // 1=Short, 2=Default, 3=Long
   },
 })
+
+// Create slide deck from specific sources
+const slideDeckFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.SLIDE_DECK, {
+  title: 'Presentation',
+  instructions: 'Create slides from these sources',
+  sourceIds: ['source-id-1', 'source-id-2'], // Only these sources
+  customization: {
+    format: 2, // Presenter slides
+    language: NotebookLMLanguage.FRENCH, // or 'fr'
+    length: 3, // Long
+  },
+})
+```
 
 // Create slide deck in French (Français)
 const frenchSlides = await sdk.artifacts.create('notebook-id', ArtifactType.SLIDE_DECK, {
@@ -756,9 +834,18 @@ const frenchSlides = await sdk.artifacts.create('notebook-id', ArtifactType.SLID
 ```typescript
 import { ArtifactType } from 'notebooklm-kit'
 
+// Create report (uses all sources)
 const report = await sdk.artifacts.create('notebook-id', ArtifactType.DOCUMENT, {
   title: 'Research Report',
   instructions: 'Comprehensive report covering all key findings',
+  // sourceIds omitted = uses all sources in notebook
+})
+
+// Create report from specific sources
+const reportFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.DOCUMENT, {
+  title: 'Chapter 1-3 Report',
+  instructions: 'Report covering chapters 1-3',
+  sourceIds: ['source-id-1', 'source-id-2', 'source-id-3'], // Only these sources
 })
 ```
 

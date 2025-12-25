@@ -326,6 +326,13 @@ export class ArtifactsService {
    * slide deck, report, audio overview, or video overview) from the sources in a notebook. The 
    * artifact generation process begins immediately but may take time to complete.
    * 
+   * **⚠️ IMPORTANT: Sources Required**
+   * - **The notebook must have at least one source** before creating artifacts
+   * - If `sourceIds` is omitted, **all sources in the notebook** are used automatically
+   * - If `sourceIds` is provided, **only those specific sources** are used
+   * - **Video artifacts specifically require sources** - always provide `sourceIds` for videos
+   * - **Audio artifacts** automatically use all sources in the notebook (sourceIds parameter is ignored)
+   * 
    * **Input:**
    * - `notebookId` (string, required): The notebook containing the sources to use
    * - `type` (ArtifactType, required): The type of artifact to create:
@@ -341,7 +348,16 @@ export class ArtifactsService {
    * - `options` (CreateArtifactOptions, optional): Creation parameters:
    *   - `title` (string, optional): Display name for the artifact
    *   - `instructions` (string, optional): Custom instructions for generation (e.g., "Focus on key concepts")
-   *   - `sourceIds` (string[], optional): Specific source IDs to use (if omitted, uses all sources in notebook)
+   *   - `sourceIds` (string[], optional): Source IDs to use for artifact generation:
+   *     - **For Video**: **Required** - always provide `sourceIds` (e.g., `['source-id-1', 'source-id-2']`)
+   *     - **For Audio**: Ignored - always uses all sources in notebook automatically
+   *     - **For Quiz**: Optional - omit to use all sources, or specify to use only selected sources
+   *     - **For Flashcards**: Optional - omit to use all sources, or specify to use only selected sources
+   *     - **For Slide Deck**: Optional - omit to use all sources, or specify to use only selected sources
+   *     - **For Infographic**: Optional - omit to use all sources, or specify to use only selected sources
+   *     - **For Study Guide**: Optional - omit to use all sources, or specify to use only selected sources
+   *     - **For Mind Map**: Optional - omit to use all sources, or specify to use only selected sources
+   *     - **For Report/Document**: Optional - omit to use all sources, or specify to use only selected sources
    *   - `customization` (object, optional): Type-specific customization options (see below)
    * 
    * **Customization Options by Type:**
@@ -430,7 +446,7 @@ export class ArtifactsService {
    *   - `3` = Whiteboard
    *   - `4` = Kawaii
    *   - `5` = Anime
-   * - `sourceIds` (string[], recommended): Specify sources to include (video requires sources)
+   * - `sourceIds` (string[], required for video): Specify sources to include - **video artifacts require sources**
    * - `instructions` (string, optional): Detailed instructions for video content and style
    * 
    * **Study Guide, Mind Map, Report, Document:**
@@ -543,10 +559,18 @@ export class ArtifactsService {
    *   },
    * });
    * 
-   * // Create study guide
+   * // Create study guide (uses all sources)
    * const guide = await client.artifacts.create('notebook-id', ArtifactType.STUDY_GUIDE, {
    *   title: 'Final Exam Study Guide',
    *   instructions: 'Focus on key concepts, formulas, and important dates',
+   *   // sourceIds omitted = uses all sources
+   * });
+   * 
+   * // Create study guide from specific sources
+   * const guideFromSelected = await client.artifacts.create('notebook-id', ArtifactType.STUDY_GUIDE, {
+   *   title: 'Chapter 1-3 Study Guide',
+   *   instructions: 'Focus on chapters 1-3',
+   *   sourceIds: ['source-id-1', 'source-id-2', 'source-id-3'], // Only these sources
    * });
    * 
    * // Poll until ready, then download

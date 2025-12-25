@@ -35,3 +35,6 @@ coverage/
 *.tmp
 *.temp
 
+# RPC directory
+rpc/
+

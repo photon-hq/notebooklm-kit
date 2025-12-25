@@ -158,6 +158,14 @@ export interface VideoCustomization {
 /**
  * Options for creating artifacts
  * 
+ * **Source Selection:**
+ * - `sourceIds` (optional): Specific source IDs to use for the artifact
+ *   - If omitted: Uses **all sources** in the notebook automatically
+ *   - If provided: Uses **only the specified sources**
+ *   - **Video artifacts**: `sourceIds` is **required** - always provide it
+ *   - **Audio artifacts**: `sourceIds` is ignored - always uses all sources
+ *   - **Other artifacts**: `sourceIds` is optional - omit to use all, or specify to use selected sources
+ * 
  * **Note:** The `customization` field is only supported for the following artifact types:
  * - Quiz (ArtifactType.QUIZ)
  * - Flashcards (ArtifactType.FLASHCARDS)
@@ -175,7 +183,27 @@ export interface CreateArtifactOptions {
   /** Custom instructions */
   instructions?: string;
   
-  /** Source IDs to use (optional, uses all sources if not specified) */
+  /** 
+   * Source IDs to use for artifact generation
+   * 
+   * **Behavior by artifact type:**
+   * - **Video**: Required - always provide `sourceIds`
+   * - **Audio**: Ignored - always uses all sources in notebook
+   * - **Quiz, Flashcards, Slide Deck, Infographic**: Optional - omit to use all sources, or specify to use selected sources
+   * - **Study Guide, Mind Map, Report, Document**: Optional - omit to use all sources, or specify to use selected sources
+   * 
+   * **Examples:**
+   * ```typescript
+   * // Use all sources (omit sourceIds)
+   * { instructions: 'Create quiz' }
+   * 
+   * // Use specific sources only
+   * { sourceIds: ['source-id-1', 'source-id-2'], instructions: 'Create quiz' }
+   * 
+   * // Video requires sources
+   * { sourceIds: ['source-id-1'], instructions: 'Create video' }
+   * ```
+   */
   sourceIds?: string[];
   
   /** 
