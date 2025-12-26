@@ -1,7 +1,7 @@
 {
   "name": "notebooklm-kit",
-  "version": "1.0.0",
-  "description": "TypeScript SDK for NotebookLM API - Full-featured SDK with quota management, multi-language support, and auto-refresh",
+  "version": "2.0.0",
+  "description": "TypeScript SDK for NotebookLM API",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -40,9 +40,9 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/photon-ai/notebooklm-kit"
+    "url": "https://github.com/photon-hq/notebooklm-kit"
   },
-  "author": "photon-ai",
+  "author": "photon-hq",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.0.0",
