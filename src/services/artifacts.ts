@@ -880,7 +880,7 @@ export class ArtifactsService {
     ];
     
     // Add customization based on artifact type
-    // Note: Slide decks and Audio always need customization array set, even with defaults
+    // Note: Slide decks, Audio, and Video ALWAYS need customization array set, even with defaults
     if (artifactType === ArtifactType.SLIDE_DECK) {
       // Slides customization at index 15: [[instructions, language, format, length]]
       // Structure from mm9.txt: [[null,"en",1,3]]
@@ -949,7 +949,39 @@ export class ArtifactsService {
           length, // Length (1=Short, 2=Default, 3=Long, or null for Brief)
         ],
       ];
-    } else if (customization) {
+    } else if (artifactType === ArtifactType.VIDEO) {
+      // Video customization at index 8: [null, null, [sourceIds, language, focus, null, format, visualStyle, customStyleDescription]]
+      // Structure from mm2.txt and mm16.txt examples
+      // Always set customization array, even if no customization object provided
+      const videoCustom = customization as VideoCustomization | undefined;
+      const sourceIdsFlat = formattedSourceIds.map(arr => arr[0]); // Flatten from [[[id]]] to [[id]]
+      const format = videoCustom?.format ?? 1; // 1=Explainer, 2=Brief
+      const visualStyle = videoCustom?.visualStyle ?? 0; // 0=Auto-select
+      
+      // Build the customization array
+      const customArray: any[] = [
+        [sourceIdsFlat], // IMPORTANT: Wrap in extra array! [[["id1"], ["id2"]]] format
+        videoCustom?.language || 'en',
+        videoCustom?.focus || null, // "What should the AI hosts focus on?"
+        null, // Placeholder
+        format,
+        visualStyle === 1 ? null : visualStyle, // If Custom (1), set to null and add description at end
+      ];
+      
+      // If visualStyle is Custom (1), add customStyleDescription at the end
+      if (visualStyle === 1 && videoCustom?.customStyleDescription) {
+        customArray.push(videoCustom.customStyleDescription);
+      }
+      
+      (args[2] as any[])[8] = [
+        null,
+        null,
+        customArray,
+      ];
+    }
+    
+    // Optional customization for other artifacts (only if provided)
+    if (customization) {
       if (artifactType === ArtifactType.QUIZ) {
         // Quiz customization at index 9: [null, [questionCount, null, instructions, null, null, null, null, [difficulty, difficulty]]]
         // Structure from mm11.txt: [null,[2,null,"hi",null,null,null,null,[3,3]]]
