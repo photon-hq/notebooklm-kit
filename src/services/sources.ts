@@ -215,18 +215,19 @@ export class SourcesService {
     this.quota?.validateFileSize(sizeBytes);
     this.quota?.checkQuota('addSource', notebookId);
     
+    // Files use o4cbdc RPC with structure: [[[fileName, 13]], notebookId, [2], [1,null,...,[1]]]
+    // The number 13 is the file type indicator
+    // Note: Files may need to be uploaded via a separate endpoint first, then referenced by filename
+    // For now, we'll try using o4cbdc with just the filename
     const response = await this.rpc.call(
-      RPC.RPC_ADD_SOURCES,
+      RPC.RPC_UPLOAD_FILE_BY_FILENAME,
       [
         [
-          [
-            base64Content,
-            fileName,
-            mimeType,
-            'base64',
-          ],
+          [fileName, 13], // [filename, fileType] where 13 = file upload
         ],
         notebookId,
+        [2],
+        [1, null, null, null, null, null, null, null, null, null, [1]],
       ],
       notebookId
     );
@@ -272,10 +273,11 @@ export class SourcesService {
     // Check quota before adding source
     this.quota?.checkQuota('addSource', notebookId);
     
-    // Extract video ID if URL provided
-    const videoId = this.isYouTubeURL(urlOrId) 
-      ? this.extractYouTubeVideoId(urlOrId)
-      : urlOrId;
+    // Use the full URL (not just video ID) - based on RPC examples
+    // Structure: [null, null, null, null, null, null, null, [url], null, null, 1]
+    const youtubeUrl = this.isYouTubeURL(urlOrId) 
+      ? urlOrId
+      : `https://www.youtube.com/watch?v=${urlOrId}`;
     
     const response = await this.rpc.call(
       RPC.RPC_ADD_SOURCES,
@@ -284,9 +286,15 @@ export class SourcesService {
           [
             null,
             null,
-            videoId,
             null,
-            4, // YouTube source type
+            null,
+            null,
+            null,
+            null,
+            [youtubeUrl], // URL at index 7 as an array
+            null,
+            null,
+            1, // YouTube source type indicator
           ],
         ],
         notebookId,
@@ -851,35 +859,36 @@ export class SourcesService {
   // ========================================================================
   
   /**
-   * Delete sources from a notebook
+   * Delete a source from a notebook
    * 
    * WORKFLOW USAGE:
-   * - Permanently removes sources from the notebook
-   * - Supports deleting a single source or multiple sources at once
+   * - Permanently removes a source from the notebook
    * - This action cannot be undone
+   * - To delete multiple sources, call this method multiple times
    * 
    * @param notebookId - The notebook ID
-   * @param sourceIds - Single source ID (string) or array of source IDs to delete
+   * @param sourceId - The source ID to delete
    * 
    * @example
    * ```typescript
    * // Delete a single source
    * await client.sources.delete('notebook-id', 'source-id-123');
    * 
-   * // Delete multiple sources at once
-   * await client.sources.delete('notebook-id', [
-   *   'source-id-1',
-   *   'source-id-2',
-   *   'source-id-3',
-   * ]);
+   * // Delete multiple sources (call multiple times)
+   * await client.sources.delete('notebook-id', 'source-id-1');
+   * await client.sources.delete('notebook-id', 'source-id-2');
+   * await client.sources.delete('notebook-id', 'source-id-3');
    * ```
    */
-  async delete(notebookId: string, sourceIds: string | string[]): Promise<void> {
-    const ids = Array.isArray(sourceIds) ? sourceIds : [sourceIds];
+  async delete(notebookId: string, sourceId: string): Promise<void> {
+    // RPC structure: [[["sourceId"]], [2]]
+    // The source ID must be triple-nested: [[["sourceId"]]], then [2] as a separate element
+    const formattedIds: any[] = [[[sourceId]]];
+    formattedIds.push([2]);
     
     await this.rpc.call(
       RPC.RPC_DELETE_SOURCES,
-      [ids],
+      formattedIds,
       notebookId
     );
   }
@@ -919,15 +928,31 @@ export class SourcesService {
    * ```
    */
   async update(notebookId: string, sourceId: string, updates: Partial<Source>): Promise<void> {
+    // RPC structure: [null, ["sourceId"], [[["title"]]]]
+    // Based on mm1.txt: [null, ["cfb47db0-..."], [[["1234"]]]]
+    // The title must be triple-nested: [[["title"]]]
+    const title = updates.title;
+    if (!title) {
+      throw new NotebookLMError('Title is required for source update');
+    }
+    
+    const args: any[] = [
+      null,
+      [sourceId],
+      [[[title]]],
+    ];
+    
     await this.rpc.call(
       RPC.RPC_MUTATE_SOURCE,
-      [sourceId, updates],
+      args,
       notebookId
     );
   }
   
   /**
    * Refresh a source (re-fetch and reprocess content)
+   * 
+   * @deprecated This method is deprecated and may not work correctly. The RPC structure is not fully validated.
    * 
    * WORKFLOW USAGE:
    * - Re-fetches source content from the original URL/file
@@ -963,6 +988,7 @@ export class SourcesService {
    * ```
    */
   async refresh(notebookId: string, sourceId: string): Promise<void> {
+    console.warn('⚠️  sources.refresh() is deprecated and may not work correctly. The RPC structure is not fully validated.');
     await this.rpc.call(
       RPC.RPC_REFRESH_SOURCE,
       [sourceId],
@@ -1254,12 +1280,34 @@ export class SourcesService {
   
   private extractSourceId(response: any): string {
     try {
+      // Handle JSON string responses (common in batch operations)
+      let parsedResponse = response;
+      if (typeof response === 'string' && (response.startsWith('[') || response.startsWith('{'))) {
+        try {
+          parsedResponse = JSON.parse(response);
+        } catch {
+          // If parsing fails, continue with original response
+        }
+      }
+      
       // Try different response formats
       const findId = (data: any, depth: number = 0): string | null => {
         if (depth > 5) return null; // Prevent infinite recursion
         
-        if (typeof data === 'string' && data.match(/^[a-f0-9-]+$/)) {
+        // Check if this is a UUID string
+        if (typeof data === 'string' && data.match(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i)) {
           return data;
+        }
+        
+        // Check if this is a JSON string containing arrays/objects
+        if (typeof data === 'string' && (data.startsWith('[') || data.startsWith('{'))) {
+          try {
+            const parsed = JSON.parse(data);
+            const id = findId(parsed, depth + 1);
+            if (id) return id;
+          } catch {
+            // Continue searching
+          }
         }
         
         if (Array.isArray(data)) {
@@ -1269,10 +1317,17 @@ export class SourcesService {
           }
         }
         
+        if (data && typeof data === 'object') {
+          for (const key in data) {
+            const id = findId(data[key], depth + 1);
+            if (id) return id;
+          }
+        }
+        
         return null;
       };
       
-      const sourceId = findId(response);
+      const sourceId = findId(parsedResponse);
       
       if (!sourceId) {
         throw new Error('Could not extract source ID from response');

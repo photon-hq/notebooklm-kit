@@ -45,7 +45,7 @@ export class BatchExecuteClient {
   constructor(config: BatchExecuteConfig) {
     // Set default retry configuration
     this.config = {
-      maxRetries: config.maxRetries ?? 3,
+      maxRetries: config.maxRetries ?? 1,
       retryDelay: config.retryDelay ?? 1000,
       retryMaxDelay: config.retryMaxDelay ?? 10000,
       ...config,
@@ -121,7 +121,7 @@ export class BatchExecuteClient {
     let lastResponseBody: string | undefined;
     
     // Ensure maxRetries is a valid number
-    const maxRetries = this.config.maxRetries ?? 3;
+    const maxRetries = this.config.maxRetries ?? 1;
     const retryDelay = this.config.retryDelay ?? 1000;
     const retryMaxDelay = this.config.retryMaxDelay ?? 10000;
     

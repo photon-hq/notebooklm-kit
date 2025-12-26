@@ -3,7 +3,7 @@
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { NotebookLMClient } from './dist/index.js';
+import { NotebookLMClient } from '../dist/index.js';
 
 // Load .env file from root directory
 const __filename = fileURLToPath(import.meta.url);

@@ -72,24 +72,12 @@ async function testSources() {
     console.log('────────────────────────────────────────────────────────────');
     try {
       const textSourceId = await sdk.sources.addFromText(NOTEBOOK_ID, {
-        title: 'Sample Research Notes',
-        content: `Artificial Intelligence (AI) is transforming industries across the globe.
-        
-Key Points:
-- Machine Learning enables computers to learn from data
-- Deep Learning uses neural networks for complex pattern recognition
-- Natural Language Processing allows machines to understand human language
-- Computer Vision enables machines to interpret visual information
-
-Applications:
-1. Healthcare: AI assists in diagnosis and treatment planning
-2. Finance: Fraud detection and algorithmic trading
-3. Transportation: Autonomous vehicles and route optimization
-4. Education: Personalized learning and automated grading`,
+        title: 'VANDIT KUMAR TEXT SAMPLE',
+        content: `VANDIT KUMAR TEXT SAMPLE,, PEWPEWPEPWPEPWEPWPEPSV JHJHSBDJHFBS`,
       });
       sourceIds.text = textSourceId;
       console.log(`✅ Added text source: ${textSourceId}`);
-      console.log('   Title: Sample Research Notes\n');
+      console.log('   Title: VANDIT KUMAR TEXT SAMPLE\n');
     } catch (error) {
       console.error(`❌ Failed to add text source: ${error.message}\n`);
     }
@@ -145,11 +133,11 @@ Applications:
     console.log('────────────────────────────────────────────────────────────');
     try {
       const youtubeSourceId = await sdk.sources.addYouTube(NOTEBOOK_ID, {
-        urlOrId: 'https://youtu.be/RBx4phCs-e8?si=jvPVGRk59eiP7txa',
+        urlOrId: 'https://www.youtube.com/watch?v=ANAyXxA5vtc',
       });
       sourceIds.youtube = youtubeSourceId;
       console.log(`✅ Added YouTube source: ${youtubeSourceId}`);
-      console.log('   URL: https://youtu.be/RBx4phCs-e8?si=jvPVGRk59eiP7txa\n');
+      console.log('   URL: https://www.youtube.com/watch?v=ANAyXxA5vtc\n');
     } catch (error) {
       console.error(`❌ Failed to add YouTube source: ${error.message}\n`);
     }
@@ -179,11 +167,11 @@ Applications:
           {
             type: 'url',
             url: 'https://en.wikipedia.org/wiki/Machine_learning',
-            title: 'Machine Learning Wikipedia',
+            title: 'Machine Learning Batch Source',
           },
           {
             type: 'text',
-            title: 'Quick Notes',
+            title: 'Quick Notes Batch Source',
             content: 'This is a batch-added text source for testing purposes.',
           },
         ],

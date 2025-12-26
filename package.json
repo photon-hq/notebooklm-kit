@@ -24,7 +24,8 @@
     "prepublishOnly": "npm run clean && npm run build",
     "create-notebook": "node create-notebook.js",
     "list-notebooks": "node list-notebooks.js",
-    "test-notebooks": "node test-notebooks.js"
+    "test-notebooks": "node test-notebooks.js",
+    "test-source-operations": "node test/test-source-operations.js"
   },
   "keywords": [
     "notebooklm",
