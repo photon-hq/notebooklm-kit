@@ -132,7 +132,6 @@ async function testSourceOperations() {
     
     const cleanupIds = [
       testSourceIds.toUpdate,
-      testSourceIds.toRefresh,
     ].filter(id => id !== null);
     
     if (cleanupIds.length > 0) {

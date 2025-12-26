@@ -109,7 +109,7 @@ export class RPCClient {
       console.log('Data (first 300 chars):', dataStr.substring(0, 300));
       if (dataStr.length > 300) {
         console.log(`... (${dataStr.length} total characters)`);
-      }
+    }
     }
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     

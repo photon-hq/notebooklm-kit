@@ -436,20 +436,20 @@ export class NotebooksService {
         if (parsedResponse.length > 2 && typeof parsedResponse[2] === 'string') {
           projectId = parsedResponse[2];
         } else {
-          // Try to find the project ID in the response
-          const findId = (data: any): string | null => {
+        // Try to find the project ID in the response
+        const findId = (data: any): string | null => {
             if (typeof data === 'string' && data.match(/^[a-f0-9-]{36}$/)) {
-              return data;
+            return data;
+          }
+          if (Array.isArray(data)) {
+            for (const item of data) {
+              const id = findId(item);
+              if (id) return id;
             }
-            if (Array.isArray(data)) {
-              for (const item of data) {
-                const id = findId(item);
-                if (id) return id;
-              }
-            }
-            return null;
-          };
-          
+          }
+          return null;
+        };
+        
           projectId = findId(parsedResponse) || '';
         }
       }

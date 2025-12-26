@@ -132,18 +132,18 @@ export class BatchExecuteClient {
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       console.log(`\n🔄 Attempt ${attempt + 1}/${maxRetries + 1}`);
-        if (attempt > 0) {
-          // Calculate retry delay with exponential backoff
-          const multiplier = Math.pow(2, attempt - 1);
+      if (attempt > 0) {
+        // Calculate retry delay with exponential backoff
+        const multiplier = Math.pow(2, attempt - 1);
           let delay = retryDelay * multiplier;
           if (delay > retryMaxDelay) {
             delay = retryMaxDelay;
-          }
-          
-          console.log(`⏳ Waiting ${delay}ms before retry...`);
-          
-          await this.sleep(delay);
         }
+        
+          console.log(`⏳ Waiting ${delay}ms before retry...`);
+        
+        await this.sleep(delay);
+      }
       
       try {
         // Parse and validate cookies
@@ -232,10 +232,10 @@ export class BatchExecuteClient {
         let response: Response;
         try {
           response = await fetch(url.toString(), {
-            method: 'POST',
-            headers,
-            body: formData.toString(),
-          });
+          method: 'POST',
+          headers,
+          body: formData.toString(),
+        });
         } catch (fetchError) {
           console.error('\n❌ Fetch Error (Network/Connection)');
           console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');

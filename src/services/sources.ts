@@ -313,14 +313,17 @@ export class SourcesService {
   }
   
   /**
-   * @deprecated This method is deprecated. Use `addBatch()` with `type: 'gdrive'` instead.
    * Add a Google Drive source directly (by file ID)
+   * 
+   * @deprecated This method is deprecated. Use `addBatch()` with `type: 'gdrive'` instead.
    * 
    * WORKFLOW USAGE:
    * - Returns immediately after source is queued
    * - Use pollProcessing() to check if source is ready
    * - Or use workflow functions that handle waiting automatically
    * - For searching Drive files first, use searchWeb() with sourceType: GOOGLE_DRIVE
+   * 
+   * **Note:** This method is deprecated. Use `addBatch()` with `type: 'gdrive'` instead.
    * 
    * @param notebookId - The notebook ID
    * @param options - Google Drive file ID and optional metadata
@@ -349,7 +352,10 @@ export class SourcesService {
    * to search your Drive, then use `addDiscovered()` to add the found files.
    */
   async addGoogleDrive(notebookId: string, options: AddGoogleDriveSourceOptions): Promise<string> {
-    console.warn('⚠️  Warning: `addGoogleDrive()` is deprecated. Use `addBatch()` with `type: \'gdrive\'` instead.');
+    console.warn(
+      '⚠️  WARNING: sources.addGoogleDrive() is deprecated. ' +
+      'Use addBatch() with type: \'gdrive\' instead.'
+    );
     const { fileId, mimeType } = options;
     
     // Check quota before adding source
@@ -401,6 +407,8 @@ export class SourcesService {
   /**
    * Search web sources (initiate search, returns sessionId)
    * 
+   * **NOTE: For most use cases, use `searchWebAndWait()` instead, which handles the complete workflow automatically.**
+   * 
    * **IMPORTANT: This is STEP 1 of a 3-step sequential workflow.**
    * 
    * You must complete the steps in order - you cannot skip to step 2 or 3 without completing step 1 first.
@@ -410,7 +418,7 @@ export class SourcesService {
    * 2. `getSearchResults()` → Returns discovered sources (requires step 1)
    * 3. `addDiscovered()` → Adds selected sources (requires sessionId from step 1)
    * 
-   * **Simplified Alternative:**
+   * **Simplified Alternative (RECOMMENDED):**
    * - Use `searchWebAndWait()` instead - it combines steps 1-2 with automatic polling
    * - Then use `addDiscovered()` to add sources (step 3)
    * 
@@ -511,11 +519,14 @@ export class SourcesService {
   /**
    * Search web sources and wait for results (complete workflow)
    * 
+   * **RECOMMENDED METHOD** - Use this instead of `searchWeb()` + `getSearchResults()` manually.
+   * 
    * WORKFLOW USAGE:
    * - This is a complete workflow that combines searchWeb() + getSearchResults() with polling
    * - Returns results once they're available (or timeout)
    * - Use the returned sessionId with addDiscovered() to add sources
    * - This is the recommended method for web search workflows
+   * - Automatically filters results by sessionId to avoid mixing with previous searches
    * 
    * @param notebookId - The notebook ID
    * @param options - Search options with waiting configuration
@@ -1243,6 +1254,9 @@ export class SourcesService {
   /**
    * Select/prepare source for viewing
    * 
+   * @deprecated This method is deprecated. It's only used with loadContent(), 
+   * which is also deprecated due to "Service unavailable" errors.
+   * 
    * WORKFLOW USAGE:
    * - REQUIRED: Must call this before loadContent() for reliable content loading
    * - NotebookLM requires sources to be selected before they can be loaded
@@ -1259,6 +1273,10 @@ export class SourcesService {
    * ```
    */
   async selectSource(sourceId: string): Promise<void> {
+    console.warn(
+      '⚠️  WARNING: sources.selectSource() is deprecated. ' +
+      'It\'s only used with loadContent(), which is also deprecated due to API reliability issues.'
+    );
     // RPC structure from curl: [["sourceId"], [2], [2]]
     await this.rpc.call(
       RPC.RPC_LOAD_SOURCE,
@@ -1268,6 +1286,9 @@ export class SourcesService {
   
   /**
    * Load source content
+   * 
+   * @deprecated This method is deprecated and may not work reliably.
+   * The API endpoint returns "Service unavailable" errors.
    * 
    * WORKFLOW USAGE:
    * - REQUIRED: Must call selectSource() first before calling this method
@@ -1285,6 +1306,10 @@ export class SourcesService {
    * ```
    */
   async loadContent(sourceId: string): Promise<SourceContent> {
+    console.warn(
+      '⚠️  WARNING: sources.loadContent() is deprecated and may not work reliably. ' +
+      'The API endpoint returns "Service unavailable" errors.'
+    );
     // RPC structure from curl: [[[["sourceId"]]]]
     // Note: Must call selectSource() first before calling this method
     const response = await this.rpc.call(
@@ -1303,6 +1328,9 @@ export class SourcesService {
   /**
    * Check source freshness
    * 
+   * @deprecated This method is deprecated and may not work reliably.
+   * The API endpoint returns "Service unavailable" errors.
+   * 
    * WORKFLOW USAGE:
    * - Use this to check if source content is up-to-date
    * - Can be used before refresh() to determine if refresh is needed
@@ -1310,6 +1338,10 @@ export class SourcesService {
    * @param sourceId - The source ID
    */
   async checkFreshness(sourceId: string): Promise<SourceFreshness> {
+    console.warn(
+      '⚠️  WARNING: sources.checkFreshness() is deprecated and may not work reliably. ' +
+      'The API endpoint returns "Service unavailable" errors.'
+    );
     const response = await this.rpc.call(
       RPC.RPC_CHECK_SOURCE_FRESHNESS,
       [sourceId]
@@ -1324,6 +1356,9 @@ export class SourcesService {
   
   /**
    * Add deep research report as a source
+   * 
+   * @deprecated This method is deprecated and may not work reliably.
+   * The API endpoint may return "Service unavailable" errors.
    * 
    * WORKFLOW USAGE:
    * - Creates an AI-generated deep research report on a topic and adds it as a source
@@ -1370,6 +1405,10 @@ export class SourcesService {
    * ```
    */
   async addDeepResearch(notebookId: string, query: string): Promise<string> {
+    console.warn(
+      '⚠️  WARNING: sources.addDeepResearch() is deprecated and may not work reliably. ' +
+      'The API endpoint may return "Service unavailable" errors.'
+    );
     // Check monthly quota
     this.quota?.checkQuota('deepResearch');
     
@@ -1393,10 +1432,17 @@ export class SourcesService {
   /**
    * Act on multiple sources (bulk action)
    * 
+   * @deprecated This method is deprecated and may not work reliably. 
+   * The RPC endpoint returns "Service unavailable" errors.
+   * 
    * WORKFLOW USAGE:
    * - Use this for bulk operations on multiple sources
    * - Different from update() which works on a single source
    * - Supports various AI-powered content transformation actions
+   * 
+   * **Note:** This method is deprecated due to API reliability issues.
+   * Consider using artifact creation methods (e.g., `sdk.artifacts.create()`) 
+   * for similar functionality.
    * 
    * @param notebookId - The notebook ID
    * @param action - Action to perform (see supported actions below)
@@ -1431,6 +1477,11 @@ export class SourcesService {
    * - `table_of_contents` - Generate table of contents from sources
    */
   async actOn(notebookId: string, action: string, sourceIds: string[]): Promise<void> {
+    console.warn(
+      '⚠️  WARNING: sources.actOn() is deprecated and may not work reliably. ' +
+      'The API endpoint returns "Service unavailable" errors. ' +
+      'Consider using artifact creation methods instead.'
+    );
     if (sourceIds.length === 0) {
       throw new NotebookLMError('At least one source ID is required');
     }
