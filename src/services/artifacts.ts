@@ -156,11 +156,11 @@ export class ArtifactsService {
    * ```
    */
   async delete(artifactId: string, notebookId?: string): Promise<void> {
-    // Audio artifacts use a different RPC method
+    // Audio artifacts use a different RPC method with different argument structure
     if (notebookId && artifactId === notebookId) {
       await this.rpc.call(
         RPC.RPC_DELETE_AUDIO_OVERVIEW,
-        [artifactId],
+        [[2], artifactId], // Audio delete uses [[2], artifactId] structure
         artifactId
       );
     } else {
@@ -616,11 +616,8 @@ export class ArtifactsService {
     
     let artifact: Artifact;
     
-    // Audio artifacts use a different RPC method
-    if (type === ArtifactType.AUDIO) {
-      artifact = await this.createAudio(notebookId, options);
-    } else if (type === ArtifactType.VIDEO || type === ArtifactType.QUIZ || type === ArtifactType.SLIDE_DECK || type === ArtifactType.INFOGRAPHIC) {
-      // Quiz, Slides, Infographics, and Video all use R7cb6c
+    // Audio, Video, Quiz, Slides, and Infographics all use R7cb6c
+    if (type === ArtifactType.AUDIO || type === ArtifactType.VIDEO || type === ArtifactType.QUIZ || type === ArtifactType.SLIDE_DECK || type === ArtifactType.INFOGRAPHIC) {
       artifact = await this.createR7cb6cArtifact(notebookId, type, options);
     } else {
       // Other artifacts use xpWGLf (Study Guide, Mind Map, Flashcards, Report, Document)
@@ -801,6 +798,8 @@ export class ArtifactsService {
         return 8;
       case ArtifactType.VIDEO:
         return 3;
+      case ArtifactType.AUDIO:
+        return 1;
       default:
         return artifactType;
     }
@@ -846,7 +845,22 @@ export class ArtifactsService {
     ];
     
     // Add customization based on artifact type
-    if (customization) {
+    // Note: Slide decks always need customization array set, even with defaults
+    if (artifactType === ArtifactType.SLIDE_DECK) {
+      // Slides customization at index 15: [[instructions, language, format, length]]
+      // Structure from mm9.txt: [[null,"en",1,3]]
+      // Always set customization array, even if no customization object provided
+      const slideCustom = customization as SlideDeckCustomization | undefined;
+      const format = slideCustom?.format ?? 2; // 2=Presenter, 3=Detailed deck
+      const length = slideCustom?.length ?? 2; // 1=Short, 2=Default, 3=Long
+      
+      (args[2] as any[])[15] = [[
+        instructions || null, // Description/instructions
+        slideCustom?.language || 'en', // Language (default: 'en')
+        format, // Format (2=presenter, 3=detailed deck)
+        length, // Length (1=short, 2=default, 3=long)
+      ]];
+    } else if (customization) {
       if (artifactType === ArtifactType.QUIZ) {
         // Quiz customization at index 9: [null, [questionCount, null, instructions, null, null, null, null, [difficulty, difficulty]]]
         // Structure from mm11.txt: [null,[2,null,"hi",null,null,null,null,[3,3]]]
@@ -867,19 +881,6 @@ export class ArtifactsService {
             [difficulty, difficulty], // Difficulty array
           ],
         ];
-      } else if (artifactType === ArtifactType.SLIDE_DECK) {
-        // Slides customization at index 15: [[instructions, language, format, length]]
-        // Structure from mm9.txt: [[null,"en",1,3]]
-        const slideCustom = customization as SlideDeckCustomization;
-        const format = slideCustom.format ?? 2; // 2=Presenter, 3=Detailed deck
-        const length = slideCustom.length ?? 2; // 1=Short, 2=Default, 3=Long
-        
-        (args[2] as any[])[15] = [[
-          instructions || null, // Description/instructions
-          slideCustom.language || 'en', // Language
-          format, // Format (2=presenter, 3=detailed deck)
-          length, // Length (1=short, 2=default, 3=long)
-        ]];
       } else if (artifactType === ArtifactType.INFOGRAPHIC) {
         // Infographic customization at index 13: [[language, "en", null, orientation, levelOfDetail]]
         // Structure from mm10.txt: [["hi","en",null,1,1]] or [[null,"en",null,1,3]]
@@ -894,6 +895,60 @@ export class ArtifactsService {
           orientation, // Orientation/visual style (1=Landscape, 2=Portrait, 3=Square)
           levelOfDetail, // Level of detail (1=Concise, 2=Standard, 3=Detailed)
         ]];
+      } else if (artifactType === ArtifactType.AUDIO) {
+        // Audio customization at index 8: [null, [null, format, null, [sourceIdsFlat], language, null, length]]
+        // Structure from mm3.txt and mm15.txt
+        // Format mapping: 0=Deep dive -> 1, 1=Brief -> 2, 2=Critique -> 3, 3=Debate -> 4
+        const audioCustom = customization as AudioCustomization;
+        const userFormat = audioCustom.format ?? 0; // 0=Deep dive, 1=Brief, 2=Critique, 3=Debate
+        const rpcFormat = userFormat + 1; // Map to RPC format: 1=Deep dive, 2=Brief, 3=Critique, 4=Debate
+        
+        // Length restrictions per format:
+        // - Deep dive (1): 1=Short, 2=Default, 3=Long (all 3 options)
+        // - Brief (2): no length option (should be null)
+        // - Critique (3): 1=Short, 2=Default (2 options)
+        // - Debate (4): 1=Short, 2=Default (2 options)
+        let length: number | null = null;
+        if (audioCustom.length !== undefined) {
+          if (rpcFormat === 1) {
+            // Deep dive: all 3 options (1, 2, 3)
+            length = audioCustom.length;
+          } else if (rpcFormat === 2) {
+            // Brief: no length option
+            length = null;
+          } else if (rpcFormat === 3 || rpcFormat === 4) {
+            // Critique or Debate: only 1=Short, 2=Default
+            if (audioCustom.length === 1 || audioCustom.length === 2) {
+              length = audioCustom.length;
+            } else {
+              // Default to 2 if invalid length provided
+              length = 2;
+            }
+          }
+        } else {
+          // Default length based on format
+          if (rpcFormat === 1) {
+            length = 2; // Deep dive default
+          } else if (rpcFormat === 3 || rpcFormat === 4) {
+            length = 2; // Critique/Debate default
+          }
+          // Brief (rpcFormat === 2) stays null
+        }
+        
+        const sourceIdsFlat = formattedSourceIds.map(arr => arr[0]); // Flatten from [[[id]]] to [[id]]
+        
+        (args[2] as any[])[8] = [
+          null,
+          [
+            null,
+            rpcFormat, // Format (1=Deep dive, 2=Brief, 3=Critique, 4=Debate)
+            null,
+            sourceIdsFlat, // [[id1], [id2]] format
+            audioCustom.language || 'en', // Language
+            null,
+            length, // Length (1=Short, 2=Default, 3=Long, or null for Brief)
+          ],
+        ];
       } else if (artifactType === ArtifactType.VIDEO) {
         // Video customization at index 8: [null, null, [sourceIdsFlat, language, instructions]]
         // Note: Video uses simpler structure - flatten one level for index 8

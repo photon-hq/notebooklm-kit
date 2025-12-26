@@ -102,7 +102,7 @@ export const RPC_CREATE_AUDIO_OVERVIEW = 'AHyHrd';
 export const RPC_GET_AUDIO_OVERVIEW = 'VUsiyb';
 
 /** Delete audio overview */
-export const RPC_DELETE_AUDIO_OVERVIEW = 'sJDbic';
+export const RPC_DELETE_AUDIO_OVERVIEW = 'V5N4be';
 
 // ============================================================================
 // NotebookLM Service - Video Operations

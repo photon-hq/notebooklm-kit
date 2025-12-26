@@ -491,32 +491,51 @@ const audio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   // sourceIds is not needed for audio - all sources are used automatically
 })
 
-// Create audio in Hindi (हिन्दी) using enum
+// Create audio in Hindi (हिन्दी) using enum - Deep dive format
 const hindiAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   customization: {
     language: NotebookLMLanguage.HINDI, // or 'hi'
-    format: 0, // Deep dive
-    length: 2, // Default
+    format: 0, // 0=Deep dive (supports all 3 length options)
+    length: 2, // 1=Short, 2=Default, 3=Long
   },
   instructions: 'मुख्य निष्कर्षों पर ध्यान दें',
 })
 
-// Create audio in French (Français)
+// Create audio in French (Français) - Deep dive with long length
 const frenchAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   customization: {
     language: NotebookLMLanguage.FRENCH, // or 'fr'
-    format: 0, // 0=Deep dive, 1=Brief, 2=Critique, 3=Debate
-    length: 3, // 1=Short, 2=Default, 3=Long
+    format: 0, // 0=Deep dive (supports: 1=Short, 2=Default, 3=Long)
+    length: 3, // Long
   },
   instructions: 'Focus on key findings and methodology',
 })
 
-// Create audio in Japanese (日本語)
+// Create audio in Japanese (日本語) - Brief format (no length option)
 const japaneseAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   customization: {
     language: NotebookLMLanguage.JAPANESE, // or 'ja'
-    format: 1, // Brief
+    format: 1, // 1=Brief (length option not available)
+    // length is ignored for Brief format
+  },
+})
+
+// Create audio - Critique format (supports: 1=Short, 2=Default)
+const critiqueAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
+  customization: {
+    format: 2, // 2=Critique (supports: 1=Short, 2=Default)
+    length: 1, // Short
+    language: 'en',
+  },
+})
+
+// Create audio - Debate format (supports: 1=Short, 2=Default)
+const debateAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
+  customization: {
+    format: 3, // 3=Debate (supports: 1=Short, 2=Default)
     length: 2, // Default
+    language: 'en',
+    instructions: 'Discuss the pros and cons of the main argument',
   },
 })
 
@@ -789,14 +808,31 @@ const arabicInfographic = await sdk.artifacts.create('notebook-id', ArtifactType
 
 Slide decks support **80+ languages**. Use `NotebookLMLanguage` enum for type safety.
 
-```typescript
-import { ArtifactType, NotebookLMLanguage } from 'notebooklm-kit'
+**⚠️ Important: Sources Required**
+- **You must add sources to your notebook before creating slide decks**
+- If you omit `sourceIds`, **all sources in the notebook** are used automatically
+- If you provide `sourceIds`, **only those specific sources** are used
 
-// Create slide deck in English (uses all sources)
+```typescript
+import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
+
+// Step 1: Add sources to your notebook first
+const sourceId1 = await sdk.sources.addFromURL('notebook-id', {
+  url: 'https://example.com/article1',
+})
+const sourceId2 = await sdk.sources.addFromText('notebook-id', {
+  title: 'Research Notes',
+  content: 'Key findings and insights...',
+})
+const sourceId3 = await sdk.sources.addFromURL('notebook-id', {
+  url: 'https://example.com/article2',
+})
+
+// Step 2: Create slide deck using ALL sources (omit sourceIds)
 const slideDeck = await sdk.artifacts.create('notebook-id', ArtifactType.SLIDE_DECK, {
   title: 'Presentation',
   instructions: 'Create 10 slides covering main topics with visuals',
-  // sourceIds omitted = uses all sources in notebook
+  // sourceIds omitted = uses ALL sources in notebook (sourceId1, sourceId2, sourceId3)
   customization: {
     format: 3, // 2=Presenter slides, 3=Detailed deck
     language: NotebookLMLanguage.ENGLISH, // or 'en'
@@ -804,11 +840,11 @@ const slideDeck = await sdk.artifacts.create('notebook-id', ArtifactType.SLIDE_D
   },
 })
 
-// Create slide deck from specific sources
+// Step 3: Create slide deck from SPECIFIC sources only
 const slideDeckFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.SLIDE_DECK, {
-  title: 'Presentation',
-  instructions: 'Create slides from these sources',
-  sourceIds: ['source-id-1', 'source-id-2'], // Only these sources
+  title: 'Focused Presentation',
+  instructions: 'Create slides from these specific sources',
+  sourceIds: [sourceId1, sourceId2], // Only use sourceId1 and sourceId2 (not sourceId3)
   customization: {
     format: 2, // Presenter slides
     language: NotebookLMLanguage.FRENCH, // or 'fr'
@@ -817,16 +853,31 @@ const slideDeckFromSelected = await sdk.artifacts.create('notebook-id', Artifact
 })
 ```
 
-// Create slide deck in French (Français)
+// Example: Create slide deck in French using all sources
 const frenchSlides = await sdk.artifacts.create('notebook-id', ArtifactType.SLIDE_DECK, {
   title: 'Présentation',
   instructions: 'Créer 10 diapositives couvrant les principaux sujets avec des visuels',
+  // sourceIds omitted = uses all sources in notebook
   customization: {
     format: 2, // Presenter slides
     language: NotebookLMLanguage.FRENCH, // or 'fr'
     length: 3, // Long
   },
 })
+
+// Poll until ready, then download
+let slideArtifact = slideDeck
+while (slideArtifact.state === ArtifactState.CREATING) {
+  await new Promise(r => setTimeout(r, 2000))
+  slideArtifact = await sdk.artifacts.get(slideDeck.artifactId)
+}
+
+// Download slide deck (saves as PDF)
+if (slideArtifact.state === ArtifactState.READY) {
+  const result = await sdk.artifacts.download(slideDeck.artifactId, './downloads')
+  console.log(`Slide deck saved to: ${result.filePath}`)
+  // File is saved as PDF: slides_<title>.pdf
+}
 ```
 
 ### Reports
@@ -855,14 +906,25 @@ const reportFromSelected = await sdk.artifacts.create('notebook-id', ArtifactTyp
 // Get artifact details
 const artifact = await sdk.artifacts.get('artifact-id')
 
-// Rename artifact
+// Rename artifact (works for all types including slide decks and audio)
 await sdk.artifacts.rename('artifact-id', 'New Title')
 
-// Delete artifact
+// Delete artifact (works for all types)
 await sdk.artifacts.delete('artifact-id')
 
-// For audio artifacts, use notebook ID
-await sdk.artifacts.delete('notebook-id', 'notebook-id')
+// For audio artifacts, use notebook ID for get, delete, and download
+await sdk.artifacts.get('notebook-id', 'notebook-id') // Get audio status
+await sdk.artifacts.delete('notebook-id', 'notebook-id') // Delete audio
+await sdk.artifacts.download('notebook-id', './downloads', 'notebook-id') // Download audio
+
+// Download artifact (works for all types)
+// - Slide decks: Saves as PDF
+// - Quizzes: Saves as JSON
+// - Flashcards: Saves as CSV
+// - Audio: Saves as MP3
+// - Video: Saves as MP4
+const result = await sdk.artifacts.download('artifact-id', './downloads')
+console.log(`File saved to: ${result.filePath}`)
 ```
 
 ## Auto-Refresh
