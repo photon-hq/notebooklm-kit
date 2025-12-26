@@ -36,26 +36,20 @@ npm install notebooklm-kit
 ```typescript
 import { NotebookLMClient } from 'notebooklm-kit'
 
-// Create client with auto-refresh enabled (default: 10-minute interval)
-// Credentials are refreshed immediately on initialization, then every 10 minutes
 const sdk = new NotebookLMClient({
   authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
   cookies: process.env.NOTEBOOKLM_COOKIES!,
-  // autoRefresh: true is the default - keeps session alive automatically
 })
 
-// Create a notebook
 const notebook = await sdk.notebooks.create({
   title: 'My Research',
   emoji: '📚',
 })
 
-// Add a source
 await sdk.sources.addFromURL(notebook.projectId, {
   url: 'https://example.com/article',
 })
 
-// Chat with your notebook
 const response = await sdk.generation.chat(
   notebook.projectId,
   'What are the key findings?'
@@ -63,11 +57,10 @@ const response = await sdk.generation.chat(
 
 console.log(response)
 
-// Clean up (stops auto-refresh)
 sdk.dispose()
 ```
 
-### Configuration
+## Configuration
 
 ```typescript
 interface NotebookLMConfig {
@@ -84,41 +77,6 @@ interface NotebookLMConfig {
   headers?: Record<string, string> // Custom headers
   urlParams?: Record<string, string> // Custom URL params
 }
-```
-
-**Auto-Refresh Details:**
-
-The SDK automatically keeps your session alive by refreshing credentials periodically. This prevents session expiration during long-running operations.
-
-- **Default:** Auto-refresh is enabled with a 10-minute interval (600,000 ms)
-- **Initial refresh:** Credentials are refreshed immediately when the client is created
-- **Background refresh:** Subsequent refreshes happen automatically at the configured interval
-- **Recommended intervals:** 5-10 minutes (300,000 - 600,000 ms)
-- **Disable:** Set `autoRefresh: false` to disable automatic refresh
-
-```typescript
-// Default: Auto-refresh enabled, 10-minute interval
-const sdk = new NotebookLMClient({
-  authToken: '...',
-  cookies: '...',
-})
-
-// Custom 5-minute interval
-const sdk = new NotebookLMClient({
-  authToken: '...',
-  cookies: '...',
-  autoRefresh: {
-    enabled: true,
-    interval: 5 * 60 * 1000, // 5 minutes
-  },
-})
-
-// Disable auto-refresh
-const sdk = new NotebookLMClient({
-  authToken: '...',
-  cookies: '...',
-  autoRefresh: false,
-})
 ```
 
 ## Authentication
@@ -153,19 +111,212 @@ NOTEBOOKLM_COOKIES="SID=value; HSID=value; SSID=value; APISID=value; SAPISID=val
 
 **Note:** HttpOnly cookies (HSID, SSID, SID, APISID) can only be copied from the Application tab, not from `document.cookie`.
 
+## Auto-Refresh Setup
+
+Auto-refresh keeps your session alive automatically by refreshing credentials periodically. This prevents session expiration during long-running operations.
+
+### Default Configuration
+
+Auto-refresh is **enabled by default** with a 10-minute interval:
+
+```typescript
+const sdk = new NotebookLMClient({
+  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
+  cookies: process.env.NOTEBOOKLM_COOKIES!,
+  // Auto-refresh is enabled by default
+  // - Initial refresh happens immediately on initialization
+  // - Subsequent refreshes happen every 10 minutes automatically
+})
+```
+
+### Custom Refresh Interval
+
+```typescript
+// 5-minute interval
+const sdk = new NotebookLMClient({
+  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
+  cookies: process.env.NOTEBOOKLM_COOKIES!,
+  autoRefresh: {
+    enabled: true,
+    interval: 5 * 60 * 1000, // 5 minutes (300,000 ms)
+  },
+})
+
+// 15-minute interval
+const sdk = new NotebookLMClient({
+  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
+  cookies: process.env.NOTEBOOKLM_COOKIES!,
+  autoRefresh: {
+    enabled: true,
+    interval: 15 * 60 * 1000, // 15 minutes (900,000 ms)
+  },
+})
+```
+
+### Refresh Interval Guidelines
+
+- **Recommended:** 5-10 minutes (300,000 - 600,000 ms)
+- **Minimum:** 1 minute (60,000 ms) - not recommended, may be too frequent
+- **Maximum:** 30 minutes (1,800,000 ms) - sessions may expire before refresh
+- **Default:** 10 minutes (600,000 ms) - optimal balance
+
+### Disable Auto-Refresh
+
+```typescript
+const sdk = new NotebookLMClient({
+  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
+  cookies: process.env.NOTEBOOKLM_COOKIES!,
+  autoRefresh: false, // Disable auto-refresh
+})
+```
+
+### Manual Refresh
+
+```typescript
+// Manually refresh credentials
+await sdk.refreshCredentials()
+
+// Get refresh manager status
+const refreshManager = sdk.getRefreshManager()
+if (refreshManager?.isRunning()) {
+  console.log('Auto-refresh is active')
+}
+```
+
+## Quota Management & Limits
+
+The SDK automatically tracks and enforces NotebookLM's usage limits to prevent API errors. All limits are enforced client-side before making API calls.
+
+### View All Limits
+
+```typescript
+import { NOTEBOOKLM_LIMITS } from 'notebooklm-kit'
+
+console.log('NotebookLM Limits:', NOTEBOOKLM_LIMITS)
+```
+
+**Account Limits:**
+- **Max Notebooks:** 100 per account
+- **Max Sources per Notebook:** 50 sources
+- **Max Words per Source:** 500,000 words
+- **Max File Size:** 200 MB per file
+
+**Daily Limits (reset after 24 hours):**
+- **Chats:** 50 per day
+- **Audio Overviews:** 3 per day
+- **Video Overviews:** 3 per day
+- **Reports:** 10 per day
+- **Flashcards:** 10 per day
+- **Quizzes:** 10 per day
+
+**Monthly Limits (reset after 30 days):**
+- **Deep Research Reports:** 10 per month
+
+**Unlimited (server-enforced):**
+- **Mind Maps:** No client-side limit
+- **Infographics:** Server-enforced limit
+- **Slide Decks:** Server-enforced limit
+
+### Check Current Usage
+
+```typescript
+// Get complete usage statistics
+const usage = sdk.getUsage()
+
+console.log('Daily Usage:')
+console.log(`  Chats: ${usage.daily.chats}/${NOTEBOOKLM_LIMITS.CHATS_PER_DAY}`)
+console.log(`  Audio: ${usage.daily.audioOverviews}/${NOTEBOOKLM_LIMITS.AUDIO_OVERVIEWS_PER_DAY}`)
+console.log(`  Video: ${usage.daily.videoOverviews}/${NOTEBOOKLM_LIMITS.VIDEO_OVERVIEWS_PER_DAY}`)
+console.log(`  Reports: ${usage.daily.reports}/${NOTEBOOKLM_LIMITS.REPORTS_PER_DAY}`)
+console.log(`  Flashcards: ${usage.daily.flashcards}/${NOTEBOOKLM_LIMITS.FLASHCARDS_PER_DAY}`)
+console.log(`  Quizzes: ${usage.daily.quizzes}/${NOTEBOOKLM_LIMITS.QUIZZES_PER_DAY}`)
+
+console.log('Monthly Usage:')
+console.log(`  Deep Research: ${usage.monthly.deepResearch}/${NOTEBOOKLM_LIMITS.DEEP_RESEARCH_PER_MONTH}`)
+
+console.log('Account Usage:')
+console.log(`  Notebooks: ${usage.notebooks.total}/${NOTEBOOKLM_LIMITS.MAX_NOTEBOOKS}`)
+```
+
+### Check Remaining Quota
+
+```typescript
+// Get remaining quota for specific resources
+const remainingChats = sdk.getRemaining('chats')
+const remainingAudio = sdk.getRemaining('audioOverviews')
+const remainingVideo = sdk.getRemaining('videoOverviews')
+const remainingQuizzes = sdk.getRemaining('quizzes')
+const remainingFlashcards = sdk.getRemaining('flashcards')
+const remainingReports = sdk.getRemaining('reports')
+const remainingNotebooks = sdk.getRemaining('notebooks')
+const remainingDeepResearch = sdk.getRemaining('deepResearch')
+
+console.log(`${remainingChats} chats remaining today`)
+console.log(`${remainingAudio} audio overviews remaining today`)
+console.log(`${remainingVideo} video overviews remaining today`)
+console.log(`${remainingQuizzes} quizzes remaining today`)
+console.log(`${remainingFlashcards} flashcards remaining today`)
+console.log(`${remainingReports} reports remaining today`)
+console.log(`${remainingNotebooks} notebooks remaining`)
+console.log(`${remainingDeepResearch} deep research reports remaining this month`)
+
+// Check before making requests
+if (remainingChats === 0) {
+  console.log('Daily chat limit reached. Wait for reset.')
+} else {
+  await sdk.generation.chat('notebook-id', 'Hello')
+}
+```
+
+### Quota Error Handling
+
+When a quota limit is exceeded, the SDK throws a `RateLimitError` with detailed information:
+
+```typescript
+import { RateLimitError } from 'notebooklm-kit'
+
+try {
+  await sdk.generation.chat('notebook-id', 'Hello')
+} catch (error) {
+  if (error instanceof RateLimitError) {
+    console.error('Rate limit exceeded:', error.message)
+    console.error(`Used: ${error.used}/${error.limit}`)
+    console.error('Resource:', error.resource)
+    console.error('Resets at:', error.resetTime)
+  }
+}
+```
+
+### Disable Quota Enforcement
+
+```typescript
+// Disable client-side quota checks (not recommended)
+const sdk = new NotebookLMClient({
+  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
+  cookies: process.env.NOTEBOOKLM_COOKIES!,
+  enforceQuotas: false, // Disable quota enforcement
+})
+
+// Get quota manager for advanced usage
+const quotaManager = sdk.getQuotaManager()
+
+// Reset usage (for testing only)
+quotaManager.resetUsage()
+```
+
 ## Features
 
 | Feature | Method | Example |
 |---------|---------|---------|
-| Create Notebook | `sdk.notebooks.create()` | [Create Notebook](#notebooks) |
-| List Notebooks | `sdk.notebooks.list()` | [List Notebooks](#notebooks) |
-| Add URL Source | `sdk.sources.addFromURL()` | [Add Sources](#sources) |
-| Add Text Source | `sdk.sources.addFromText()` | [Add Sources](#sources) |
-| Add File Source | `sdk.sources.addFromFile()` | [Add Sources](#sources) |
-| Add YouTube Source | `sdk.sources.addYouTube()` | [Add Sources](#sources) |
-| Add Google Drive | `sdk.sources.addGoogleDrive()` | [Add Sources](#sources) |
-| Web Search | `sdk.sources.searchWebAndWait()` | [Add Sources](#sources) |
-| Batch Add Sources | `sdk.sources.addBatch()` | [Add Sources](#sources) |
+| Create Notebook | `sdk.notebooks.create()` | [Notebooks](#notebooks) |
+| List Notebooks | `sdk.notebooks.list()` | [Notebooks](#notebooks) |
+| Add URL Source | `sdk.sources.addFromURL()` | [Sources](#sources) |
+| Add Text Source | `sdk.sources.addFromText()` | [Sources](#sources) |
+| Add File Source | `sdk.sources.addFromFile()` | [Sources](#sources) |
+| Add YouTube Source | `sdk.sources.addYouTube()` | [Sources](#sources) |
+| Add Google Drive | `sdk.sources.addGoogleDrive()` | [Sources](#sources) |
+| Web Search | `sdk.sources.searchWebAndWait()` | [Sources](#sources) |
+| Batch Add Sources | `sdk.sources.addBatch()` | [Sources](#sources) |
 | Chat | `sdk.generation.chat()` | [Generation](#generation) |
 | Create Audio | `sdk.artifacts.create(ArtifactType.AUDIO)` | [Artifacts](#artifacts) |
 | Create Video | `sdk.artifacts.create(ArtifactType.VIDEO)` | [Artifacts](#artifacts) |
@@ -178,33 +329,6 @@ NOTEBOOKLM_COOKIES="SID=value; HSID=value; SSID=value; APISID=value; SAPISID=val
 | Create Report | `sdk.artifacts.create(ArtifactType.DOCUMENT)` | [Artifacts](#artifacts) |
 | List Artifacts | `sdk.artifacts.list()` | [Artifacts](#artifacts) |
 | Create Notes | `sdk.notes.create()` | [Notes](#notes) |
-| Auto-Refresh | `sdk.refreshCredentials()` | [Auto-Refresh](#auto-refresh) |
-| Quota Management | `sdk.getUsage()` | [Quota Management](#quota-management) |
-
-## Quick Reference
-
-**Common Workflows:**
-
-```typescript
-// 1. Create notebook and add sources
-const notebook = await sdk.notebooks.create({ title: 'Research', emoji: '📚' })
-await sdk.sources.addFromURL(notebook.projectId, { url: 'https://example.com' })
-
-// 2. Chat with notebook
-const response = await sdk.generation.chat(notebook.projectId, 'Summarize this')
-
-// 3. Create artifacts
-const quiz = await sdk.artifacts.create(notebook.projectId, ArtifactType.QUIZ, {
-  instructions: 'Create 10 questions',
-})
-
-// 4. Check quota
-const usage = sdk.getUsage()
-console.log(`Chats used: ${usage.daily.chats}/50`)
-
-// 5. Clean up
-sdk.dispose()
-```
 
 ## Notebooks
 
@@ -460,11 +584,9 @@ const magicView = await sdk.generation.generateMagicView('notebook-id', [
 Create various types of artifacts from your notebook content. Artifacts include audio overviews, video overviews, quizzes, flashcards, study guides, mind maps, infographics, slide decks, and reports.
 
 **⚠️ Important: Sources Required**
-- **Your notebook must have at least one source** before creating artifacts
-- If you don't specify `sourceIds`, **all sources in the notebook** are used automatically
-- If you provide `sourceIds`, **only those specific sources** are used
-- **Video artifacts** work like slides - omit `sourceIds` to use all sources, or provide `sourceIds` to use specific sources
-- **Audio artifacts** work like slides - omit `sourceIds` to use all sources, or provide `sourceIds` to use specific sources
+- Your notebook must have at least one source before creating artifacts
+- If you don't specify `sourceIds`, all sources in the notebook are used automatically
+- If you provide `sourceIds`, only those specific sources are used
 
 ### List Artifacts
 
@@ -484,20 +606,19 @@ NotebookLM supports **80+ languages** for audio overviews. Use the `NotebookLMLa
 ```typescript
 import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
 
-// Create audio in English (default)
-// Uses all sources in the notebook (omit sourceIds to use all sources)
+// Create audio in English (uses all sources)
 const audio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   instructions: 'Focus on key findings and main conclusions',
   // sourceIds omitted = uses ALL sources in notebook
 })
 
-// OR: Create audio from specific sources only
+// Create audio from specific sources only
 const focusedAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   instructions: 'Focus on key findings and main conclusions',
   sourceIds: ['source-id-1', 'source-id-2'], // Only these sources
 })
 
-// Create audio in Hindi (हिन्दी) using enum - Deep dive format
+// Create audio in Hindi (हिन्दी) - Deep dive format
 const hindiAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   customization: {
     language: NotebookLMLanguage.HINDI, // or 'hi'
@@ -522,7 +643,6 @@ const japaneseAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUD
   customization: {
     language: NotebookLMLanguage.JAPANESE, // or 'ja'
     format: 1, // 1=Brief (length option not available)
-    // length is ignored for Brief format
   },
 })
 
@@ -553,11 +673,6 @@ if (audioStatus.state === ArtifactState.READY) {
   const audioData = await sdk.artifacts.download('notebook-id', './downloads', 'notebook-id')
   console.log(`Audio saved to: ${audioData.filePath}`)
 }
-
-// Supported languages include: English, Spanish, French, German, Italian, Portuguese,
-// Russian, Japanese, Korean, Chinese, Hindi, Bengali, Tamil, Telugu, Gujarati, Kannada,
-// Malayalam, Marathi, Punjabi, Arabic, Turkish, Thai, Vietnamese, Indonesian, Malay,
-// and 60+ more languages. See NotebookLMLanguage enum for complete list.
 ```
 
 ### Video Overviews
@@ -567,7 +682,7 @@ NotebookLM supports **80+ languages** for video overviews. Use the `NotebookLMLa
 ```typescript
 import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
 
-// Create video overview in English (uses all sources if sourceIds omitted)
+// Create video overview in English (uses all sources)
 const video = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
   instructions: 'Create an engaging video overview with key highlights',
   // sourceIds omitted = uses ALL sources in notebook
@@ -578,7 +693,7 @@ const video = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
   },
 })
 
-// OR: Create video from specific sources only
+// Create video from specific sources only
 const focusedVideo = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
   instructions: 'Create an engaging video overview with key highlights',
   sourceIds: ['source-id-1', 'source-id-2'], // Only use these sources
@@ -663,17 +778,6 @@ const hindiQuiz = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
   },
 })
 
-// Create quiz in Chinese (简体中文)
-const chineseQuiz = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
-  title: '第一章测验',
-  instructions: '创建10个涵盖关键概念的多项选择题',
-  customization: {
-    numberOfQuestions: 2, // Standard
-    difficulty: 2, // Medium
-    language: NotebookLMLanguage.CHINESE_SIMPLIFIED, // or 'zh'
-  },
-})
-
 // Poll until ready
 let artifact = quiz
 while (artifact.state === ArtifactState.CREATING) {
@@ -727,16 +831,6 @@ const tamilFlashcards = await sdk.artifacts.create('notebook-id', ArtifactType.F
   },
 })
 
-// Create flashcards in Spanish (Español)
-const spanishFlashcards = await sdk.artifacts.create('notebook-id', ArtifactType.FLASHCARDS, {
-  instructions: 'Enfócate en terminología y definiciones',
-  customization: {
-    numberOfCards: 2,
-    difficulty: 1, // Easy
-    language: NotebookLMLanguage.SPANISH, // or 'es'
-  },
-})
-
 // Download flashcard data
 const flashcardData = await sdk.artifacts.download(flashcards.artifactId, './downloads')
 console.log(flashcardData.data.cards) // Array of { front, back } cards
@@ -767,16 +861,11 @@ const studyGuideFromSelected = await sdk.artifacts.create('notebook-id', Artifac
 ```typescript
 import { ArtifactType } from 'notebooklm-kit'
 
-// Create mind map (uses all sources)
+// Create mind map (requires sourceIds)
 const mindMap = await sdk.artifacts.create('notebook-id', ArtifactType.MIND_MAP, {
   title: 'Concept Map',
-  // sourceIds omitted = uses all sources in notebook
-})
-
-// Create mind map from specific sources
-const mindMapFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.MIND_MAP, {
-  title: 'Concept Map',
-  sourceIds: ['source-id-1', 'source-id-2'], // Only these sources
+  instructions: 'Focus on key concepts and their relationships',
+  sourceIds: ['source-id-1', 'source-id-2'], // REQUIRED: Must specify sources
 })
 ```
 
@@ -810,25 +899,14 @@ const infographicFromSelected = await sdk.artifacts.create('notebook-id', Artifa
 })
 ```
 
-// Create infographic in Arabic (العربية)
-const arabicInfographic = await sdk.artifacts.create('notebook-id', ArtifactType.INFOGRAPHIC, {
-  instructions: 'ملخص مرئي للبيانات والإحصائيات الرئيسية',
-  customization: {
-    language: NotebookLMLanguage.ARABIC, // or 'ar'
-    orientation: 2, // Portrait
-    levelOfDetail: 3, // Detailed
-  },
-})
-```
-
 ### Slide Decks
 
 Slide decks support **80+ languages**. Use `NotebookLMLanguage` enum for type safety.
 
 **⚠️ Important: Sources Required**
-- **You must add sources to your notebook before creating slide decks**
-- If you omit `sourceIds`, **all sources in the notebook** are used automatically
-- If you provide `sourceIds`, **only those specific sources** are used
+- You must add sources to your notebook before creating slide decks
+- If you omit `sourceIds`, all sources in the notebook are used automatically
+- If you provide `sourceIds`, only those specific sources are used
 
 ```typescript
 import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
@@ -868,19 +946,6 @@ const slideDeckFromSelected = await sdk.artifacts.create('notebook-id', Artifact
     length: 3, // Long
   },
 })
-```
-
-// Example: Create slide deck in French using all sources
-const frenchSlides = await sdk.artifacts.create('notebook-id', ArtifactType.SLIDE_DECK, {
-  title: 'Présentation',
-  instructions: 'Créer 10 diapositives couvrant les principaux sujets avec des visuels',
-  // sourceIds omitted = uses all sources in notebook
-  customization: {
-    format: 2, // Presenter slides
-    language: NotebookLMLanguage.FRENCH, // or 'fr'
-    length: 3, // Long
-  },
-})
 
 // Poll until ready, then download
 let slideArtifact = slideDeck
@@ -893,7 +958,6 @@ while (slideArtifact.state === ArtifactState.CREATING) {
 if (slideArtifact.state === ArtifactState.READY) {
   const result = await sdk.artifacts.download(slideDeck.artifactId, './downloads')
   console.log(`Slide deck saved to: ${result.filePath}`)
-  // File is saved as PDF: slides_<title>.pdf
 }
 ```
 
@@ -923,7 +987,7 @@ const reportFromSelected = await sdk.artifacts.create('notebook-id', ArtifactTyp
 // Get artifact details
 const artifact = await sdk.artifacts.get('artifact-id')
 
-// Rename artifact (works for all types including slide decks and audio)
+// Rename artifact (works for all types)
 await sdk.artifacts.rename('artifact-id', 'New Title')
 
 // Delete artifact (works for all types)
@@ -934,222 +998,16 @@ await sdk.artifacts.get('notebook-id', 'notebook-id') // Get audio status
 await sdk.artifacts.delete('notebook-id', 'notebook-id') // Delete audio
 await sdk.artifacts.download('notebook-id', './downloads', 'notebook-id') // Download audio
 
-// Note: Video artifacts use the same delete RPC as audio (V5N4be) - handled automatically
-
 // Download artifact (works for all types)
 // - Slide decks: Saves as PDF
 // - Quizzes: Saves as JSON
 // - Flashcards: Saves as CSV
 // - Audio: Saves as MP3
 // - Video: Saves as MP4
+// - Mind maps, reports, study guides: Saves as JSON
+// - Infographics: Saves as PNG or JSON
 const result = await sdk.artifacts.download('artifact-id', './downloads')
 console.log(`File saved to: ${result.filePath}`)
-```
-
-## Auto-Refresh
-
-Keep your session alive automatically. The SDK automatically refreshes your credentials periodically to prevent session expiration during long-running operations.
-
-### How It Works
-
-When you create a `NotebookLMClient`, auto-refresh is enabled by default:
-
-1. **Initial refresh:** Credentials are refreshed immediately when the client is initialized
-2. **Background refresh:** Subsequent refreshes happen automatically at the configured interval
-3. **Default interval:** 10 minutes (600,000 ms)
-4. **Automatic cleanup:** Call `sdk.dispose()` to stop auto-refresh when done
-
-### Basic Auto-Refresh (Default)
-
-```typescript
-// Auto-refresh is enabled by default with 10-minute interval
-const sdk = new NotebookLMClient({
-  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
-  cookies: process.env.NOTEBOOKLM_COOKIES!,
-  // No need to specify autoRefresh - it's enabled by default
-})
-
-// Credentials are refreshed:
-// - Immediately on initialization
-// - Every 10 minutes automatically
-```
-
-### Configure Refresh Interval
-
-```typescript
-// Custom 5-minute interval
-const sdk = new NotebookLMClient({
-  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
-  cookies: process.env.NOTEBOOKLM_COOKIES!,
-  autoRefresh: {
-    enabled: true,
-    interval: 5 * 60 * 1000, // 5 minutes (300,000 ms)
-  },
-})
-
-// Custom 15-minute interval
-const sdk = new NotebookLMClient({
-  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
-  cookies: process.env.NOTEBOOKLM_COOKIES!,
-  autoRefresh: {
-    enabled: true,
-    interval: 15 * 60 * 1000, // 15 minutes (900,000 ms)
-  },
-})
-```
-
-### Refresh Interval Guidelines
-
-- **Recommended:** 5-10 minutes (300,000 - 600,000 ms)
-- **Minimum:** 1 minute (60,000 ms) - not recommended, may be too frequent
-- **Maximum:** 30 minutes (1,800,000 ms) - sessions may expire before refresh
-- **Default:** 10 minutes (600,000 ms) - optimal balance
-
-### Disable Auto-Refresh
-
-```typescript
-const sdk = new NotebookLMClient({
-  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
-  cookies: process.env.NOTEBOOKLM_COOKIES!,
-  autoRefresh: false, // Disable auto-refresh
-})
-```
-
-### Manual Refresh
-
-```typescript
-// Manually refresh credentials
-await sdk.refreshCredentials()
-
-// Get refresh manager
-const refreshManager = sdk.getRefreshManager()
-if (refreshManager) {
-  await refreshManager.refresh()
-}
-```
-
-### Disable Auto-Refresh
-
-```typescript
-const sdk = new NotebookLMClient({
-  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
-  cookies: process.env.NOTEBOOKLM_COOKIES!,
-  autoRefresh: false, // Disable auto-refresh
-})
-```
-
-## Quota Management
-
-The SDK automatically enforces NotebookLM's usage limits to prevent API errors. You can check your usage and customize quota behavior.
-
-### View Limits
-
-```typescript
-import { NOTEBOOKLM_LIMITS } from 'notebooklm-kit'
-
-console.log('NotebookLM Limits:', NOTEBOOKLM_LIMITS)
-// {
-//   MAX_NOTEBOOKS: 100,
-//   MAX_SOURCES_PER_NOTEBOOK: 50,
-//   MAX_WORDS_PER_SOURCE: 500000,
-//   MAX_FILE_SIZE_MB: 200,
-//   CHATS_PER_DAY: 50,
-//   AUDIO_OVERVIEWS_PER_DAY: 3,
-//   VIDEO_OVERVIEWS_PER_DAY: 3,
-//   REPORTS_PER_DAY: 10,
-//   FLASHCARDS_PER_DAY: 10,
-//   QUIZZES_PER_DAY: 10,
-//   DEEP_RESEARCH_PER_MONTH: 10,
-// }
-```
-
-### Check Usage
-
-```typescript
-// Get current usage
-const usage = sdk.getUsage()
-
-console.log(`Chats: ${usage.daily.chats}/${NOTEBOOKLM_LIMITS.CHATS_PER_DAY}`)
-console.log(`Audio: ${usage.daily.audioOverviews}/${NOTEBOOKLM_LIMITS.AUDIO_OVERVIEWS_PER_DAY}`)
-console.log(`Video: ${usage.daily.videoOverviews}/${NOTEBOOKLM_LIMITS.VIDEO_OVERVIEWS_PER_DAY}`)
-console.log(`Reports: ${usage.daily.reports}/${NOTEBOOKLM_LIMITS.REPORTS_PER_DAY}`)
-console.log(`Flashcards: ${usage.daily.flashcards}/${NOTEBOOKLM_LIMITS.FLASHCARDS_PER_DAY}`)
-console.log(`Quizzes: ${usage.daily.quizzes}/${NOTEBOOKLM_LIMITS.QUIZZES_PER_DAY}`)
-console.log(`Notebooks: ${usage.notebooks.total}/${NOTEBOOKLM_LIMITS.MAX_NOTEBOOKS}`)
-```
-
-### Check Remaining Quota
-
-```typescript
-// Get remaining quota for a resource
-const remainingChats = sdk.getRemaining('chats')
-const remainingAudio = sdk.getRemaining('audioOverviews')
-const remainingVideo = sdk.getRemaining('videoOverviews')
-
-console.log(`${remainingChats} chats remaining today`)
-console.log(`${remainingAudio} audio overviews remaining today`)
-```
-
-### Customize Quota Behavior
-
-```typescript
-// Disable quota enforcement (not recommended)
-const sdk = new NotebookLMClient({
-  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
-  cookies: process.env.NOTEBOOKLM_COOKIES!,
-  enforceQuotas: false, // Disable client-side quota checks
-})
-
-// Get quota manager for advanced usage
-const quotaManager = sdk.getQuotaManager()
-
-// Reset usage (for testing)
-quotaManager.resetUsage()
-```
-
-### Quota Error Handling
-
-```typescript
-import { RateLimitError } from 'notebooklm-kit'
-
-try {
-  await sdk.generation.chat('notebook-id', 'Hello')
-} catch (error) {
-  if (error instanceof RateLimitError) {
-    console.error('Rate limit exceeded:', error.message)
-    console.error(`Used: ${error.used}/${error.limit}`)
-    console.error('Resource:', error.resource)
-    console.error('Resets at:', error.resetTime)
-  }
-}
-```
-
-## Error Handling
-
-```typescript
-import {
-  NotebookLMError,
-  NotebookLMAuthError,
-  NotebookLMNetworkError,
-  RateLimitError,
-} from 'notebooklm-kit'
-
-try {
-  const notebooks = await sdk.notebooks.list()
-} catch (error) {
-  if (error instanceof NotebookLMAuthError) {
-    console.error('Authentication failed - check your credentials')
-  } else if (error instanceof RateLimitError) {
-    console.error('Rate limit exceeded:', error.message)
-    console.error(`Used: ${error.used}/${error.limit}`)
-  } else if (error instanceof NotebookLMNetworkError) {
-    console.error('Network error:', error.message)
-  } else if (error instanceof NotebookLMError) {
-    console.error('API error:', error.message)
-  } else {
-    console.error('Unknown error:', error)
-  }
-}
 ```
 
 ## Language Support
@@ -1183,26 +1041,6 @@ console.log(info.name) // 'Hindi'
 console.log(info.nativeName) // 'हिन्दी'
 ```
 
-### Common Languages
-
-```typescript
-import { COMMON_LANGUAGES, NotebookLMLanguage } from 'notebooklm-kit'
-
-// Quick access to common languages
-const languages = {
-  english: COMMON_LANGUAGES.ENGLISH,      // 'en'
-  spanish: COMMON_LANGUAGES.SPANISH,      // 'es'
-  french: COMMON_LANGUAGES.FRENCH,        // 'fr'
-  german: COMMON_LANGUAGES.GERMAN,        // 'de'
-  hindi: COMMON_LANGUAGES.HINDI,          // 'hi'
-  chinese: COMMON_LANGUAGES.CHINESE,      // 'zh'
-  japanese: COMMON_LANGUAGES.JAPANESE,    // 'ja'
-  korean: COMMON_LANGUAGES.KOREAN,        // 'ko'
-  arabic: COMMON_LANGUAGES.ARABIC,         // 'ar'
-  // ... and more
-}
-```
-
 ### Language Support by Artifact Type
 
 - **Audio Overviews**: 80+ languages supported
@@ -1212,40 +1050,33 @@ const languages = {
 - **Slide Decks**: 80+ languages supported
 - **Infographics**: 80+ languages supported
 
-### Example: Multi-Language Artifacts
+## Error Handling
 
 ```typescript
-import { ArtifactType, NotebookLMLanguage } from 'notebooklm-kit'
+import {
+  NotebookLMError,
+  NotebookLMAuthError,
+  NotebookLMNetworkError,
+  RateLimitError,
+} from 'notebooklm-kit'
 
-// Create artifacts in different languages
-const englishQuiz = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
-  customization: { language: NotebookLMLanguage.ENGLISH }
-})
-
-const hindiAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
-  customization: { language: NotebookLMLanguage.HINDI }
-})
-
-const spanishVideo = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
-  customization: { language: NotebookLMLanguage.SPANISH }
-})
-
-const frenchFlashcards = await sdk.artifacts.create('notebook-id', ArtifactType.FLASHCARDS, {
-  customization: { language: NotebookLMLanguage.FRENCH }
-})
+try {
+  const notebooks = await sdk.notebooks.list()
+} catch (error) {
+  if (error instanceof NotebookLMAuthError) {
+    console.error('Authentication failed - check your credentials')
+  } else if (error instanceof RateLimitError) {
+    console.error('Rate limit exceeded:', error.message)
+    console.error(`Used: ${error.used}/${error.limit}`)
+  } else if (error instanceof NotebookLMNetworkError) {
+    console.error('Network error:', error.message)
+  } else if (error instanceof NotebookLMError) {
+    console.error('API error:', error.message)
+  } else {
+    console.error('Unknown error:', error)
+  }
+}
 ```
-
-### Complete Language List
-
-The `NotebookLMLanguage` enum includes languages from:
-- **Major World Languages**: English, Spanish, French, German, Italian, Portuguese, Russian, Japanese, Korean, Chinese
-- **Indian Languages**: Hindi, Bengali, Tamil, Telugu, Gujarati, Kannada, Malayalam, Marathi, Punjabi, Urdu, and more
-- **Middle Eastern Languages**: Arabic, Hebrew, Persian, Turkish, and more
-- **Southeast Asian Languages**: Thai, Vietnamese, Indonesian, Malay, Tagalog, and more
-- **European Languages**: Polish, Dutch, Swedish, Danish, Finnish, Norwegian, Czech, Slovak, Hungarian, Romanian, and more
-- **African Languages**: Swahili, Zulu, Afrikaans, Yoruba, Igbo, Hausa, and more
-
-See the `NotebookLMLanguage` enum in the SDK for the complete list of 80+ supported languages.
 
 ## Advanced Usage
 
@@ -1348,57 +1179,6 @@ sdk.getRemaining('chats')          // Check remaining quota
 sdk.refreshCredentials()           // Manually refresh session
 sdk.dispose()                      // Clean up resources
 ```
-
-## API Reference
-
-### Core Methods
-
-| Method | Description |
-|--------|-------------|
-| `sdk.notebooks.list()` | List all notebooks |
-| `sdk.notebooks.get(id)` | Get notebook by ID |
-| `sdk.notebooks.create(options)` | Create new notebook |
-| `sdk.notebooks.update(id, options)` | Update notebook |
-| `sdk.notebooks.delete(id)` | Delete notebook |
-| `sdk.sources.addFromURL(id, options)` | Add source from URL |
-| `sdk.sources.addFromText(id, options)` | Add source from text |
-| `sdk.sources.addFromFile(id, options)` | Add source from file |
-| `sdk.sources.addYouTube(id, options)` | Add YouTube video |
-| `sdk.sources.addGoogleDrive(id, options)` | Add Google Drive file |
-| `sdk.sources.searchWeb(id, options)` | Search web/Drive |
-| `sdk.sources.searchWebAndWait(id, options)` | Search and wait for results |
-| `sdk.sources.addDiscovered(id, options)` | Add discovered sources |
-| `sdk.sources.addBatch(id, options)` | Batch add sources |
-| `sdk.sources.pollProcessing(id)` | Check source processing status |
-| `sdk.sources.delete(id, sourceId)` | Delete source |
-| `sdk.notes.list(id)` | List notes |
-| `sdk.notes.create(id, options)` | Create note |
-| `sdk.notes.update(id, noteId, options)` | Update note |
-| `sdk.notes.delete(id, noteId)` | Delete note |
-| `sdk.generation.chat(id, prompt, sourceIds?)` | Chat with notebook |
-| `sdk.generation.generateDocumentGuides(id)` | Generate document guides |
-| `sdk.generation.generateNotebookGuide(id)` | Generate notebook guide |
-| `sdk.generation.generateOutline(id)` | Generate outline |
-| `sdk.generation.generateReportSuggestions(id)` | Generate report suggestions |
-| `sdk.generation.generateMagicView(id, sourceIds)` | Generate magic view |
-| `sdk.artifacts.list(id)` | List artifacts |
-| `sdk.artifacts.get(id, notebookId?)` | Get artifact |
-| `sdk.artifacts.create(id, ArtifactType.AUDIO, options)` | Create audio overview |
-| `sdk.artifacts.create(id, ArtifactType.VIDEO, options)` | Create video overview |
-| `sdk.artifacts.create(id, ArtifactType.QUIZ, options)` | Create quiz |
-| `sdk.artifacts.create(id, ArtifactType.FLASHCARDS, options)` | Create flashcards |
-| `sdk.artifacts.create(id, ArtifactType.STUDY_GUIDE, options)` | Create study guide |
-| `sdk.artifacts.create(id, ArtifactType.MIND_MAP, options)` | Create mind map |
-| `sdk.artifacts.create(id, ArtifactType.INFOGRAPHIC, options)` | Create infographic |
-| `sdk.artifacts.create(id, ArtifactType.SLIDE_DECK, options)` | Create slide deck |
-| `sdk.artifacts.create(id, ArtifactType.DOCUMENT, options)` | Create report/document |
-| `sdk.artifacts.download(id, folderPath, notebookId?)` | Download artifact |
-| `sdk.artifacts.rename(id, title)` | Rename artifact |
-| `sdk.artifacts.delete(id, notebookId?)` | Delete artifact |
-| `sdk.getUsage()` | Get usage statistics |
-| `sdk.getRemaining(resource)` | Get remaining quota |
-| `sdk.refreshCredentials()` | Manually refresh credentials |
-| `sdk.dispose()` | Clean up and stop auto-refresh |
 
 ## Requirements
 
