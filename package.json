@@ -25,7 +25,9 @@
     "create-notebook": "node create-notebook.js",
     "list-notebooks": "node list-notebooks.js",
     "test-notebooks": "node test-notebooks.js",
-    "test-source-operations": "node test/test-source-operations.js"
+    "test-source-operations": "node test/test-source-operations.js",
+    "test-web-search": "node test/test-web-search-interactive.js",
+    "test-deep-search": "node test/test-deep-search-interactive.js"
   },
   "keywords": [
     "notebooklm",

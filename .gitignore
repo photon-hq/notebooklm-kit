@@ -37,4 +37,5 @@ coverage/
 
 # RPC directory
 rpc/
+test/
 

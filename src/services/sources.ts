@@ -313,6 +313,7 @@ export class SourcesService {
   }
   
   /**
+   * @deprecated This method is deprecated. Use `addBatch()` with `type: 'gdrive'` instead.
    * Add a Google Drive source directly (by file ID)
    * 
    * WORKFLOW USAGE:
@@ -326,16 +327,21 @@ export class SourcesService {
    * 
    * @example
    * ```typescript
-   * // Add Drive file directly with file ID
+   * // DEPRECATED: Use addBatch() instead
    * const sourceId = await client.sources.addGoogleDrive('notebook-id', {
    *   fileId: '1a2b3c4d5e6f7g8h9i0j',
    *   mimeType: 'application/vnd.google-apps.document',
    *   title: 'My Document',
    * });
    * 
-   * // Add Drive file with just file ID (mimeType will be inferred if not provided)
-   * const sourceId = await client.sources.addGoogleDrive('notebook-id', {
-   *   fileId: '1a2b3c4d5e6f7g8h9i0j',
+   * // RECOMMENDED: Use addBatch() instead
+   * const sourceIds = await client.sources.addBatch('notebook-id', {
+   *   sources: [{
+   *     type: 'gdrive',
+   *     fileId: '1a2b3c4d5e6f7g8h9i0j',
+   *     mimeType: 'application/vnd.google-apps.document',
+   *     title: 'My Document',
+   *   }],
    * });
    * ```
    * 
@@ -343,6 +349,7 @@ export class SourcesService {
    * to search your Drive, then use `addDiscovered()` to add the found files.
    */
   async addGoogleDrive(notebookId: string, options: AddGoogleDriveSourceOptions): Promise<string> {
+    console.warn('⚠️  Warning: `addGoogleDrive()` is deprecated. Use `addBatch()` with `type: \'gdrive\'` instead.');
     const { fileId, mimeType } = options;
     
     // Check quota before adding source
@@ -462,10 +469,12 @@ export class SourcesService {
       throw new NotebookLMError('Google Drive search only supports fast research mode');
     }
     
+    // RPC structure from curl: [["query", sourceType], null, researchMode, notebookId]
+    // Example: [["photon-hq", 1], null, 1, "notebook-id"]
     const response = await this.rpc.call(
       RPC.RPC_SEARCH_WEB_SOURCES,
       [
-        [query, sourceType], // [query, source_type]
+        [query, sourceType], // [query, source_type] - 1=WEB, 2=GOOGLE_DRIVE
         null,                // null
         mode,                // research_mode: 1=Fast, 2=Deep
         notebookId,
@@ -474,8 +483,29 @@ export class SourcesService {
     );
     
     // Extract session ID from response
-    const data = Array.isArray(response) ? response[0] : response;
-    return data?.[0] || data?.sessionId || data?.searchId || '';
+    // Response might be a JSON string like "[\"sessionId\"]" or an array
+    let data = response;
+    if (typeof response === 'string') {
+      try {
+        data = JSON.parse(response);
+      } catch (e) {
+        // If parsing fails, use response as-is
+      }
+    }
+    
+    // Handle different response formats
+    if (Array.isArray(data)) {
+      // If it's ["sessionId"], return the first element
+      if (data.length > 0 && typeof data[0] === 'string') {
+        return data[0];
+      }
+      // If it's [["sessionId"]], return the nested first element
+      if (data.length > 0 && Array.isArray(data[0]) && data[0].length > 0) {
+        return data[0][0];
+      }
+    }
+    
+    return data?.sessionId || data?.searchId || (typeof data === 'string' ? data : '');
   }
   
   /**
@@ -527,9 +557,11 @@ export class SourcesService {
     // Step 2: Poll for results
     const startTime = Date.now();
     let results: { web: DiscoveredWebSource[]; drive: DiscoveredDriveSource[] } = { web: [], drive: [] };
+    let lastResultCount = 0;
+    let stableCount = 0; // Count consecutive polls with same result count
     
     while (Date.now() - startTime < timeout) {
-      results = await this.getSearchResults(notebookId);
+      results = await this.getSearchResults(notebookId, sessionId);
       
       const hasResults = results.web.length > 0 || results.drive.length > 0;
       const resultCount = results.web.length + results.drive.length;
@@ -538,15 +570,29 @@ export class SourcesService {
         onProgress({ hasResults, resultCount });
       }
       
+      // If we have results, check if they're stable (same count for 2 consecutive polls)
+      // This indicates search is complete
       if (hasResults) {
-        return { sessionId, ...results };
+        if (resultCount === lastResultCount && resultCount > 0) {
+          stableCount++;
+          // If results are stable for 2 polls, consider search complete
+          if (stableCount >= 2) {
+            return { sessionId, ...results };
+          }
+        } else {
+          stableCount = 0; // Reset if count changed
+        }
+        lastResultCount = resultCount;
+      } else {
+        stableCount = 0;
+        lastResultCount = 0;
       }
       
       // Wait before next poll
       await new Promise(resolve => setTimeout(resolve, pollInterval));
     }
     
-    // Timeout reached - return whatever we have
+    // Timeout reached - return whatever we have (even if empty)
     return { sessionId, ...results };
   }
   
@@ -566,7 +612,11 @@ export class SourcesService {
    * **Note:** If you haven't called `searchWeb()` yet, you'll get empty results.
    * Use `searchWebAndWait()` if you want to combine steps 1-2 automatically.
    * 
+   * **Filtering:** If `sessionId` is provided, only results from that session will be returned.
+   * Otherwise, results from all sessions will be returned (may include previous searches).
+   * 
    * @param notebookId - The notebook ID (must match the notebookId used in step 1)
+   * @param sessionId - Optional session ID to filter results to only this search session
    * @returns Discovered sources (web and/or drive)
    * 
    * @example
@@ -575,7 +625,11 @@ export class SourcesService {
    * const sessionId = await client.sources.searchWeb('notebook-id', { query: 'AI' });
    * 
    * // STEP 2: Get results (only works after step 1)
+   * // Option 1: Get all results (may include previous searches)
    * const results = await client.sources.getSearchResults('notebook-id');
+   * 
+   * // Option 2: Get results only from current search (recommended)
+   * const results = await client.sources.getSearchResults('notebook-id', sessionId);
    * console.log(`Found ${results.web.length} web sources and ${results.drive.length} drive sources`);
    * 
    * // STEP 3: Add selected sources
@@ -585,7 +639,7 @@ export class SourcesService {
    * });
    * ```
    */
-  async getSearchResults(notebookId: string): Promise<{
+  async getSearchResults(notebookId: string, sessionId?: string): Promise<{
     web: DiscoveredWebSource[];
     drive: DiscoveredDriveSource[];
   }> {
@@ -595,50 +649,116 @@ export class SourcesService {
       notebookId
     );
     
-    const data = Array.isArray(response) ? response[0] : response;
-    const sources = data?.[0] || [];
+    // Response structure: [[[sessionId, [notebookId, [query, type], mode, [webSources]], ...]]]
+    // Example: [[["0057e489-...", ["notebook-id", ["query", 1], 1, [["url", "title", "description", 1], ...]], ...]]]
+    // Web sources are at session[1][4] (index 4 of the metadata array, which is the 5th element)
     
-    if (!Array.isArray(sources)) {
-      return { web: [], drive: [] };
+    // Handle JSON string response
+    let data = response;
+    if (typeof response === 'string') {
+      try {
+        data = JSON.parse(response);
+      } catch (e) {
+        // If parsing fails, use response as-is
+      }
+    }
+    
+    // Extract the sessions array
+    // Response might be: [[sessions]] or [sessions] or sessions
+    let sessions: any[] = [];
+    if (Array.isArray(data)) {
+      if (data.length > 0 && Array.isArray(data[0])) {
+        // Check if first element is an array of sessions
+        if (data[0].length > 0 && Array.isArray(data[0][0])) {
+          sessions = data[0]; // [[[session], ...]]
+        } else {
+          sessions = data; // [[session], ...]
+        }
+      } else {
+        sessions = data; // [session, ...]
+      }
     }
     
     const web: DiscoveredWebSource[] = [];
     const drive: DiscoveredDriveSource[] = [];
     
-    for (const source of sources) {
-      if (Array.isArray(source)) {
-        const sourceType = source[1] || source[2];
-        
-        if (sourceType === SearchSourceType.WEB || sourceType === 1) {
-          web.push({
-            url: (source[0] as string) || '',
-            title: (source[1] as string) || (source[2] as string) || '',
-            id: (source[3] as string),
-          });
-        } else if (sourceType === SearchSourceType.GOOGLE_DRIVE || sourceType === 5) {
-          drive.push({
-            fileId: (source[0] as string) || '',
-            mimeType: (source[1] as string) || '',
-            title: (source[2] as string) || '',
-            id: (source[3] as string),
-          });
-        }
-      } else if (typeof source === 'object') {
-        if (source.url) {
-          web.push({
-            url: source.url,
-            title: source.title || '',
-            id: source.id,
-          });
-        } else if (source.fileId) {
-          drive.push({
-            fileId: source.fileId,
-            mimeType: source.mimeType || '',
-            title: source.title || '',
-            id: source.id,
-          });
+    for (const session of sessions) {
+      if (!Array.isArray(session) || session.length < 2) {
+        continue;
+      }
+      
+      // session[0] = sessionId
+      // session[1] = [notebookId, [query, type], mode, [webSources]]
+      // Example: ["9c40da15-...", ["nit kkr", 1], 1, [[["https://...", "title", ...], ...]]]
+      const currentSessionId = session[0];
+      
+      // Filter by sessionId if provided (normalize both to strings for comparison)
+      if (sessionId) {
+        const normalizedSessionId = String(sessionId).trim();
+        const normalizedCurrentId = String(currentSessionId || '').trim();
+        if (normalizedSessionId && normalizedCurrentId !== normalizedSessionId) {
+          continue; // Skip sessions that don't match
         }
       }
+      
+      const metadata = session[1];
+      if (Array.isArray(metadata) && metadata.length > 3) {
+        // Web sources are at metadata[3] (index 3, the 4th element)
+        const webSources = metadata[3];
+        
+        // Skip if webSources is null (search is still in progress)
+        if (webSources === null || webSources === undefined) {
+          continue;
+        }
+        
+        if (Array.isArray(webSources) && webSources.length > 0) {
+          // Helper function to recursively flatten arrays until we find source arrays
+          const flattenSources = (arr: any[]): any[] => {
+            const result: any[] = [];
+            for (const item of arr) {
+              if (Array.isArray(item)) {
+                // Check if this array looks like a source: [url, title, ...]
+                if (item.length >= 2 && typeof item[0] === 'string' && item[0].startsWith('http')) {
+                  result.push(item);
+                } else {
+                  // Recursively flatten nested arrays
+                  result.push(...flattenSources(item));
+                }
+              }
+            }
+            return result;
+          };
+          
+          // Flatten the webSources array
+          const sourcesToProcess = flattenSources(webSources);
+          
+          // Process all sources
+          for (const source of sourcesToProcess) {
+            if (Array.isArray(source) && source.length >= 2) {
+              // Format: [url, title, description, ...]
+              const url = source[0];
+              const title = source[1];
+              // Only add if URL exists, is a string, and is a valid URL
+              if (url && typeof url === 'string' && url.startsWith('http')) {
+                web.push({
+                  url: url,
+                  title: (typeof title === 'string' ? title : '') || '',
+                  id: url, // Use URL as ID
+                });
+              }
+            } else if (typeof source === 'object' && source && 'url' in source) {
+              web.push({
+                url: source.url,
+                title: source.title || '',
+                id: source.id || source.url,
+              });
+            }
+          }
+        }
+      }
+      
+      // Drive sources might be at a different index, need to check structure
+      // For now, we'll parse drive sources if they exist in the same structure
     }
     
     return { web, drive };
@@ -697,32 +817,102 @@ export class SourcesService {
       this.quota?.checkQuota('addSource', notebookId);
     }
     
-    // Build request arguments
-    const webArgs = webSources.map(src => [src.url, src.title]);
-    const driveArgs = driveSources.map(src => [src.fileId, src.mimeType, src.title]);
+    // RPC structure from curl: [null, [1], sessionId, notebookId, [[null, null, [url, title], null, null, null, null, null, null, null, 2]]]
+    // Each web source: [null, null, [url, title], null, null, null, null, null, null, null, 2]
+    const webSourceArgs = webSources.map(src => [
+      null,
+      null,
+      [src.url, src.title],
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      2, // Type indicator for web source
+    ]);
+    
+    // Drive sources structure (if needed in future)
+    const driveSourceArgs = driveSources.map(src => [
+      null,
+      null,
+      [src.fileId, src.title],
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      1, // Type indicator for drive source (if different)
+    ]);
+    
+    const allSources = [...webSourceArgs, ...driveSourceArgs];
     
     const response = await this.rpc.call(
       RPC.RPC_ADD_DISCOVERED_SOURCES,
       [
-        notebookId,
-        sessionId,
-        webArgs.length > 0 ? webArgs : null,
-        driveArgs.length > 0 ? driveArgs : null,
+        null,           // null
+        [1],            // [1] - flag
+        sessionId,      // session ID from searchWeb
+        notebookId,     // notebook ID
+        allSources,     // array of source arrays
       ],
       notebookId
     );
     
     const addedIds: string[] = [];
-    const data = Array.isArray(response) ? response[0] : response;
-    const sources = data?.[0] || [];
     
-    if (Array.isArray(sources)) {
-      for (const source of sources) {
-        const sourceId = source?.[0] || source?.id || '';
-        if (sourceId) {
-          addedIds.push(sourceId);
-          this.quota?.recordUsage('addSource', notebookId);
+    // Handle JSON string response
+    let data = response;
+    if (typeof response === 'string') {
+      try {
+        data = JSON.parse(response);
+      } catch (e) {
+        // If parsing fails, use response as-is
+      }
+    }
+    
+    // Response structure: [[[[sourceId], title, [...metadata...], [null, 2]]]]
+    // Example: [[[[\"435170a5-...\"], \"Title\", [...], [null, 2]]]]
+    // We need to extract sourceId from the nested structure
+    
+    // Helper function to recursively find source IDs
+    const extractSourceIds = (arr: any): string[] => {
+      const ids: string[] = [];
+      
+      if (Array.isArray(arr)) {
+        for (const item of arr) {
+          if (Array.isArray(item)) {
+            // Check if first element is a UUID-like string (source ID)
+            if (item.length > 0 && typeof item[0] === 'string' && 
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item[0])) {
+              ids.push(item[0]);
+            } else {
+              // Recursively search nested arrays
+              ids.push(...extractSourceIds(item));
+            }
+          } else if (typeof item === 'string' && 
+                     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item)) {
+            // Direct UUID string
+            ids.push(item);
+          }
         }
+      }
+      
+      return ids;
+    };
+    
+    // Extract source IDs from the response
+    const extractedIds = extractSourceIds(data);
+    
+    // Remove duplicates and add to result
+    const uniqueIds = [...new Set(extractedIds)];
+    for (const sourceId of uniqueIds) {
+      if (sourceId) {
+        addedIds.push(sourceId);
+        this.quota?.recordUsage('addSource', notebookId);
       }
     }
     
@@ -1069,6 +1259,7 @@ export class SourcesService {
    * ```
    */
   async selectSource(sourceId: string): Promise<void> {
+    // RPC structure from curl: [["sourceId"], [2], [2]]
     await this.rpc.call(
       RPC.RPC_LOAD_SOURCE,
       [[sourceId], [2], [2]]
@@ -1094,9 +1285,11 @@ export class SourcesService {
    * ```
    */
   async loadContent(sourceId: string): Promise<SourceContent> {
+    // RPC structure from curl: [[[["sourceId"]]]]
+    // Note: Must call selectSource() first before calling this method
     const response = await this.rpc.call(
       RPC.RPC_LOAD_SOURCE_CONTENT,
-      [[[sourceId]]]
+      [[[[sourceId]]]]
     );
     
     // Parse response - extract text content
