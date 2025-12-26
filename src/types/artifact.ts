@@ -151,8 +151,36 @@ export interface VideoCustomization {
   /** Language code (use NotebookLMLanguage enum or ISO 639-1 code, e.g., 'en') */
   language?: string;
   
-  /** Visual style: 0=Auto-select, 1=Custom, 2=Classic, 3=Whiteboard, 4=Kawaii, 5=Anime (default: 0) */
-  visualStyle?: 0 | 1 | 2 | 3 | 4 | 5;
+  /** 
+   * Visual style options:
+   * - 0 = Auto-select (default) - AI chooses the best style
+   * - 1 = Custom - Requires customStyleDescription
+   * - 2 = Classic - Traditional, professional style
+   * - 3 = Whiteboard - Hand-drawn whiteboard style
+   * - 4 = Kawaii - Cute, colorful style
+   * - 5 = Anime - Anime-inspired style
+   * - 6 = Watercolour - Watercolor painting style
+   * - 7 = Anime (alternative) - Alternative anime style
+   * - 8 = Retro print - Vintage print/poster style
+   * - 9 = Heritage - Traditional ink-wash/woodcut style
+   * - 10 = Paper-craft - Layered paper cutout style
+   * 
+   * Note: All styles except Custom (1) support only the `focus` option.
+   * Custom (1) additionally requires `customStyleDescription`.
+   */
+  visualStyle?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+  
+  /** 
+   * What should the AI hosts focus on? (optional)
+   * Supported by all visual styles (including Auto-select and Custom)
+   */
+  focus?: string;
+  
+  /** 
+   * Custom visual style description (required when visualStyle=1/Custom)
+   * Only used when visualStyle=1
+   */
+  customStyleDescription?: string;
 }
 
 /**

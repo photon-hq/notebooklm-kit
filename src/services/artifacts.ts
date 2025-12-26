@@ -156,18 +156,41 @@ export class ArtifactsService {
    * ```
    */
   async delete(artifactId: string, notebookId?: string): Promise<void> {
-    // Audio artifacts use a different RPC method with different argument structure
+    // Audio and Video artifacts use V5N4be RPC with [[2], artifactId] structure
+    // Audio: notebookId === artifactId
+    // Video: need to check artifact type
     if (notebookId && artifactId === notebookId) {
+      // Audio artifacts
       await this.rpc.call(
         RPC.RPC_DELETE_AUDIO_OVERVIEW,
         [[2], artifactId], // Audio delete uses [[2], artifactId] structure
         artifactId
       );
     } else {
-    await this.rpc.call(
-      RPC.RPC_DELETE_ARTIFACT,
-      [artifactId]
-    );
+      // Check if it's a video artifact
+      try {
+        const artifact = await this.get(artifactId);
+        if (artifact.type === ArtifactType.VIDEO) {
+          // Video artifacts also use V5N4be with same structure
+          await this.rpc.call(
+            RPC.RPC_DELETE_AUDIO_OVERVIEW, // V5N4be - used for both audio and video
+            [[2], artifactId],
+            artifactId
+          );
+        } else {
+          // Other artifacts use WxBZtb
+          await this.rpc.call(
+            RPC.RPC_DELETE_ARTIFACT,
+            [artifactId]
+          );
+        }
+      } catch (error) {
+        // If we can't get artifact, fall back to standard delete
+        await this.rpc.call(
+          RPC.RPC_DELETE_ARTIFACT,
+          [artifactId]
+        );
+      }
     }
   }
   
@@ -950,22 +973,40 @@ export class ArtifactsService {
           levelOfDetail, // Level of detail (1=Concise, 2=Standard, 3=Detailed)
         ]];
       } else if (artifactType === ArtifactType.VIDEO) {
-        // Video customization at index 8: [null, null, [sourceIdsFlat, language, instructions]]
-        // Note: Video uses simpler structure - flatten one level for index 8
+        // Video customization at index 8: [null, null, [sourceIds, language, focus, null, format, visualStyle, customStyleDescription]]
+        // Structure from mm2.txt and mm16.txt examples:
+        // - sourceIds: [[[id1]],[id2]] format (flattened from [[[id]]])
+        // - language: string (e.g., "en", "hi", "id")
+        // - focus: string or null ("What should the AI hosts focus on?") - supported by all styles
+        // - null: placeholder
+        // - format: 1=Explainer, 2=Brief
+        // - visualStyle: 0=Auto-select, 1=Custom, 2=Classic, 3=Whiteboard, 4=Kawaii, 5=Anime, 6=Watercolour, 7=Anime (alt), 8=Retro print, 9=Heritage, 10=Paper-craft
+        // - customStyleDescription: string or null (only when visualStyle=1/Custom)
         const videoCustom = customization as VideoCustomization;
         const sourceIdsFlat = formattedSourceIds.map(arr => arr[0]); // Flatten from [[[id]]] to [[id]]
+        const format = videoCustom.format ?? 1; // 1=Explainer, 2=Brief
+        const visualStyle = videoCustom.visualStyle ?? 0; // 0=Auto-select
+        
+        // Build the customization array
+        const customArray: any[] = [
+          sourceIdsFlat, // [[id1], [id2]] format
+          videoCustom.language || 'en',
+          videoCustom.focus || null, // "What should the AI hosts focus on?"
+          null, // Placeholder
+          format,
+          visualStyle === 1 ? null : visualStyle, // If Custom (1), set to null and add description at end
+        ];
+        
+        // If visualStyle is Custom (1), add customStyleDescription at the end
+        if (visualStyle === 1) {
+          customArray.push(videoCustom.customStyleDescription || null);
+        }
         
         (args[2] as any[])[8] = [
           null,
           null,
-          [
-            sourceIdsFlat, // [[id1], [id2]] format
-            videoCustom.language || 'en',
-            instructions,
-          ],
+          customArray,
         ];
-        // Note: Video format and visualStyle are not directly supported in the current RPC structure
-        // They may need to be passed via instructions
       }
     }
     

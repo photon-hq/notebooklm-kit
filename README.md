@@ -463,7 +463,7 @@ Create various types of artifacts from your notebook content. Artifacts include 
 - **Your notebook must have at least one source** before creating artifacts
 - If you don't specify `sourceIds`, **all sources in the notebook** are used automatically
 - If you provide `sourceIds`, **only those specific sources** are used
-- **Video artifacts specifically require sources** - always provide `sourceIds` for videos
+- **Video artifacts** work like slides - omit `sourceIds` to use all sources, or provide `sourceIds` to use specific sources
 - **Audio artifacts** work like slides - omit `sourceIds` to use all sources, or provide `sourceIds` to use specific sources
 
 ### List Artifacts
@@ -567,21 +567,32 @@ NotebookLM supports **80+ languages** for video overviews. Use the `NotebookLMLa
 ```typescript
 import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
 
-// Create video overview in English (sources are required for video)
+// Create video overview in English (uses all sources if sourceIds omitted)
 const video = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
   instructions: 'Create an engaging video overview with key highlights',
-  sourceIds: ['source-id-1', 'source-id-2'], // Required: video artifacts need sources
+  // sourceIds omitted = uses ALL sources in notebook
   customization: {
     format: 1, // 1=Explainer, 2=Brief
     language: NotebookLMLanguage.ENGLISH, // or 'en'
-    visualStyle: 0, // 0=Auto, 1=Custom, 2=Classic, 3=Whiteboard, 4=Kawaii, 5=Anime
+    visualStyle: 0, // 0=Auto-select, 1=Custom, 2=Classic, 3=Whiteboard, 4=Kawaii, 5=Anime, 6=Watercolour, 7=Anime (alt), 8=Retro print, 9=Heritage, 10=Paper-craft
+  },
+})
+
+// OR: Create video from specific sources only
+const focusedVideo = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
+  instructions: 'Create an engaging video overview with key highlights',
+  sourceIds: ['source-id-1', 'source-id-2'], // Only use these sources
+  customization: {
+    format: 1, // 1=Explainer, 2=Brief
+    language: NotebookLMLanguage.ENGLISH, // or 'en'
+    visualStyle: 2, // Classic
   },
 })
 
 // Create video in Spanish (Español)
 const spanishVideo = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
   instructions: 'Crear un resumen de video atractivo',
-  sourceIds: ['source-id-1'],
+  // sourceIds omitted = uses all sources
   customization: {
     format: 1,
     language: NotebookLMLanguage.SPANISH, // or 'es'
@@ -592,7 +603,7 @@ const spanishVideo = await sdk.artifacts.create('notebook-id', ArtifactType.VIDE
 // Create video in German (Deutsch)
 const germanVideo = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
   instructions: 'Erstellen Sie eine ansprechende Videoübersicht',
-  sourceIds: ['source-id-1'],
+  // sourceIds omitted = uses all sources
   customization: {
     format: 2, // Brief
     language: NotebookLMLanguage.GERMAN, // or 'de'
@@ -922,6 +933,8 @@ await sdk.artifacts.delete('artifact-id')
 await sdk.artifacts.get('notebook-id', 'notebook-id') // Get audio status
 await sdk.artifacts.delete('notebook-id', 'notebook-id') // Delete audio
 await sdk.artifacts.download('notebook-id', './downloads', 'notebook-id') // Download audio
+
+// Note: Video artifacts use the same delete RPC as audio (V5N4be) - handled automatically
 
 // Download artifact (works for all types)
 // - Slide decks: Saves as PDF
