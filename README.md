@@ -464,7 +464,7 @@ Create various types of artifacts from your notebook content. Artifacts include 
 - If you don't specify `sourceIds`, **all sources in the notebook** are used automatically
 - If you provide `sourceIds`, **only those specific sources** are used
 - **Video artifacts specifically require sources** - always provide `sourceIds` for videos
-- **Audio artifacts** automatically use all sources (you don't need to specify `sourceIds`)
+- **Audio artifacts** work like slides - omit `sourceIds` to use all sources, or provide `sourceIds` to use specific sources
 
 ### List Artifacts
 
@@ -485,10 +485,16 @@ NotebookLM supports **80+ languages** for audio overviews. Use the `NotebookLMLa
 import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
 
 // Create audio in English (default)
-// Note: Audio automatically uses ALL sources in the notebook - no need to specify sourceIds
+// Uses all sources in the notebook (omit sourceIds to use all sources)
 const audio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   instructions: 'Focus on key findings and main conclusions',
-  // sourceIds is not needed for audio - all sources are used automatically
+  // sourceIds omitted = uses ALL sources in notebook
+})
+
+// OR: Create audio from specific sources only
+const focusedAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
+  instructions: 'Focus on key findings and main conclusions',
+  sourceIds: ['source-id-1', 'source-id-2'], // Only these sources
 })
 
 // Create audio in Hindi (हिन्दी) using enum - Deep dive format
