@@ -81,35 +81,42 @@ interface NotebookLMConfig {
 
 ## Authentication
 
-### Quick Setup (Recommended)
+To use the SDK, you need to provide authentication credentials from your NotebookLM session.
 
-1. Open https://notebooklm.google.com in your browser and log in
-2. Open Developer Tools (F12 or Cmd+Option+I)
-3. Go to Console tab
-4. Copy and paste the script from `extract-credentials.js`
-5. Follow the instructions to add HttpOnly cookies if needed
-6. Copy the output to your `.env` file
+### Getting Credentials
 
-### Manual Setup
-
-1. **Get Auth Token:**
-   - Open DevTools Console on https://notebooklm.google.com
+1. **Get Auth Token (`NOTEBOOKLM_AUTH_TOKEN`):**
+   - Open https://notebooklm.google.com in your browser and log in
+   - Open Developer Tools (F12 or Cmd+Option+I)
+   - Go to **Console** tab
    - Run: `window.WIZ_global_data.SNlM0e`
-   - Copy the value as `NOTEBOOKLM_AUTH_TOKEN`
+   - Copy the returned value - this is your `NOTEBOOKLM_AUTH_TOKEN`
 
-2. **Get Cookies:**
-   - Open DevTools → Application → Cookies → https://notebooklm.google.com
-   - Find these cookies: `SID`, `HSID`, `SSID`, `APISID`, `SAPISID`
-   - Copy each as `Name=Value` and join with `; `
-   - Set as `NOTEBOOKLM_COOKIES`
+2. **Get Cookies (`NOTEBOOKLM_COOKIES`):**
+   - In the same browser session, open Developer Tools
+   - Go to **Network** tab
+   - Make any request to notebooklm.google.com (refresh the page or navigate)
+   - Find any request to `notebooklm.google.com` in the Network tab
+   - Click on the request → Go to **Headers** section
+   - Find the **Cookie** header
+   - Copy the **entire Cookie value** as-is (it's a long string with all cookies)
+   - This is your `NOTEBOOKLM_COOKIES`
+
+### Setup `.env` File
+
+Create a `.env` file in your project root:
 
 ```bash
 # .env file
-NOTEBOOKLM_AUTH_TOKEN="your-token-here"
-NOTEBOOKLM_COOKIES="SID=value; HSID=value; SSID=value; APISID=value; SAPISID=value; ..."
+NOTEBOOKLM_AUTH_TOKEN="ACi2F2NZSD7yrNvFMrCkP3vZJY1R:1766720233448"
+NOTEBOOKLM_COOKIES="_ga=GA1.1.1949425436.1764104083; _gcl_au=1.1.97624223.1766334541; SID=g.a0005AiwX1RtlIPQBj7__D1pWyMMI4OZ96lR1jORFU-zhw0PyJjFPhsuA6wz-fDn5ePHz4FgJQACgYKARgSARISFQHGX2MiJLpitYn6kL6yvitaZn3QWhoVAUF8yKqOII_qVxsGB0zENq9N26M50076; APISID=2-7oUEYiopHvktji/Adx9rNhzIF8Oe-MPI; SAPISID=eMePV31yEdEOSnUq/AFdcsHac_J0t3DMBT; ..."
 ```
 
-**Note:** HttpOnly cookies (HSID, SSID, SID, APISID) can only be copied from the Application tab, not from `document.cookie`.
+**Important Notes:**
+- The Cookie header value from Network tab contains all cookies in the correct format
+- Copy the entire Cookie value exactly as it appears (it's already properly formatted)
+- Both credentials are required for the SDK to work
+- Credentials expire after some time - you may need to refresh them periodically
 
 ## Auto-Refresh Setup
 

@@ -67,11 +67,16 @@ export class RPCClient {
    * Execute an RPC call
    */
   async call(rpcId: string, args: any[], notebookId?: string): Promise<any> {
+    // Always log RPC calls
+    console.log('\n🔷 RPC Call');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('RPC ID:', rpcId);
+    console.log('Notebook ID:', notebookId || '(none)');
+    
     if (this.config.debug) {
-      console.log('\n=== RPC Call ===');
-      console.log('ID:', rpcId);
-      console.log('NotebookID:', notebookId || '(none)');
       console.log('Args:', JSON.stringify(args, null, 2));
+    } else {
+      console.log('Args:', JSON.stringify(args).substring(0, 200));
     }
     
     // Create request-specific URL parameters
@@ -92,11 +97,21 @@ export class RPCClient {
     
     const response = await this.batchClient.do(rpcCall);
     
+    // Always log RPC response
+    console.log('\n✅ RPC Response');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('RPC ID:', response.id);
+    
     if (this.config.debug) {
-      console.log('\n=== RPC Response ===');
-      console.log('ID:', response.id);
-      console.log('Data:', JSON.stringify(response.data, null, 2).substring(0, 500));
+      console.log('Data:', JSON.stringify(response.data, null, 2).substring(0, 1000));
+    } else {
+      const dataStr = JSON.stringify(response.data);
+      console.log('Data (first 300 chars):', dataStr.substring(0, 300));
+      if (dataStr.length > 300) {
+        console.log(`... (${dataStr.length} total characters)`);
+      }
     }
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     
     return response.data;
   }

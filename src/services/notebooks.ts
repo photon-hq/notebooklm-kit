@@ -28,7 +28,8 @@ export class NotebooksService {
    * ```
    */
   async list(): Promise<Notebook[]> {
-    const response = await this.rpc.call(RPC.RPC_LIST_RECENTLY_VIEWED_PROJECTS, []);
+    // RPC structure: [null, 1, null, [2]]
+    const response = await this.rpc.call(RPC.RPC_LIST_RECENTLY_VIEWED_PROJECTS, [null, 1, null, [2]]);
     
     // Parse response - handle NotebookLM's complex response format
     return this.parseListResponse(response);
@@ -46,9 +47,10 @@ export class NotebooksService {
    * ```
    */
   async get(notebookId: string): Promise<Notebook> {
+    // RPC structure: [notebookId, null, [2], null, 0]
     const response = await this.rpc.call(
       RPC.RPC_GET_PROJECT,
-      [notebookId],
+      [notebookId, null, [2], null, 0],
       notebookId
     );
     
@@ -70,14 +72,16 @@ export class NotebooksService {
    * ```
    */
   async create(options: CreateNotebookOptions): Promise<Notebook> {
-    const { title, emoji = '📄' } = options;
+    const { title = '', emoji = '📄' } = options;
     
     // Check quota before creating
     this.quota?.checkQuota('createNotebook');
     
+    // RPC structure: [title, null, null, [2], [1, null, null, null, null, null, null, null, null, [1]]]
+    // The last array [1, null, null, null, null, null, null, null, null, [1]] appears to be default settings
     const response = await this.rpc.call(
       RPC.RPC_CREATE_PROJECT,
-      [title, emoji]
+      [title, null, null, [2], [1, null, null, null, null, null, null, null, null, [1]]]
     );
     
     const notebook = this.parseCreateResponse(response, title, emoji);
@@ -103,24 +107,27 @@ export class NotebooksService {
    * ```
    */
   async update(notebookId: string, options: UpdateNotebookOptions): Promise<Notebook> {
-    // Build updates object
-    const updates: any = {};
+    // Build the update structure based on observed RPC format:
+    // Structure: [notebookId, [[null, null, null, [null, title]]]]
+    // Based on curl example: ["6767b030-...", [[null, null, null, [null, "test101"]]]]
+    
+    // For title updates, the structure is: [[null, null, null, [null, title]]]
+    const updateArray: any[] = [null, null, null, null];
     
     if (options.title !== undefined) {
-      updates.title = options.title;
+      // Title goes at index 3: [null, title]
+      updateArray[3] = [null, options.title];
+    } else {
+      // If no title is provided, we still need the structure but with null at index 3
+      updateArray[3] = null;
     }
     
-    if (options.emoji !== undefined) {
-      updates.emoji = options.emoji;
-    }
+    // Note: Emoji updates structure is not yet confirmed from RPC examples
+    // For now, we support title updates. Emoji updates may require a different structure
+    // or separate RPC call - this will be implemented once we have the correct format
     
-    if (options.description !== undefined) {
-      updates.description = options.description;
-    }
-    
-    if (options.metadata !== undefined) {
-      updates.metadata = options.metadata;
-    }
+    // Build the nested array structure: [[null, null, null, [null, title]]]
+    const updates = [updateArray];
     
     const response = await this.rpc.call(
       RPC.RPC_MUTATE_PROJECT,
@@ -373,10 +380,22 @@ export class NotebooksService {
   
   private parseGetResponse(response: any, notebookId: string): Notebook {
     try {
-      // Basic parsing - extend as needed based on actual response format
-      if (Array.isArray(response) && response.length > 0) {
-        const data = response[0];
+      // Handle JSON string response
+      let parsedResponse = response;
+      if (typeof response === 'string') {
+        parsedResponse = JSON.parse(response);
+      }
+      
+      // Handle nested array structure: [[title, null, projectId, ...]]
+      if (Array.isArray(parsedResponse) && parsedResponse.length > 0) {
+        let data = parsedResponse;
         
+        // If first element is an array, it's nested: [[title, null, projectId, ...]]
+        if (Array.isArray(parsedResponse[0])) {
+          data = parsedResponse[0];
+        }
+        
+        // Extract title (index 0) and emoji (index 1, usually null, so we use default)
         return {
           projectId: notebookId,
           title: data[0] || '',
@@ -400,22 +419,39 @@ export class NotebooksService {
       // Extract project ID from response
       let projectId = '';
       
-      if (Array.isArray(response)) {
-        // Try to find the project ID in the response
-        const findId = (data: any): string | null => {
-          if (typeof data === 'string' && data.match(/^[a-f0-9-]+$/)) {
-            return data;
-          }
-          if (Array.isArray(data)) {
-            for (const item of data) {
-              const id = findId(item);
-              if (id) return id;
+      // Response might be a JSON string that needs parsing
+      let parsedResponse = response;
+      if (typeof response === 'string') {
+        try {
+          parsedResponse = JSON.parse(response);
+        } catch {
+          // If parsing fails, use original response
+          parsedResponse = response;
+        }
+      }
+      
+      if (Array.isArray(parsedResponse)) {
+        // Response structure: ["title", null, "projectId", ...]
+        // Project ID is typically at index 2
+        if (parsedResponse.length > 2 && typeof parsedResponse[2] === 'string') {
+          projectId = parsedResponse[2];
+        } else {
+          // Try to find the project ID in the response
+          const findId = (data: any): string | null => {
+            if (typeof data === 'string' && data.match(/^[a-f0-9-]{36}$/)) {
+              return data;
             }
-          }
-          return null;
-        };
-        
-        projectId = findId(response) || '';
+            if (Array.isArray(data)) {
+              for (const item of data) {
+                const id = findId(item);
+                if (id) return id;
+              }
+            }
+            return null;
+          };
+          
+          projectId = findId(parsedResponse) || '';
+        }
       }
       
       if (!projectId) {

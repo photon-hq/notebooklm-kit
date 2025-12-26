@@ -21,7 +21,10 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run build",
+    "create-notebook": "node create-notebook.js",
+    "list-notebooks": "node list-notebooks.js",
+    "test-notebooks": "node test-notebooks.js"
   },
   "keywords": [
     "notebooklm",
@@ -48,7 +51,9 @@
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0"
   },
-  "dependencies": {},
+  "dependencies": {
+    "dotenv": "^17.2.3"
+  },
   "engines": {
     "node": ">=18.0.0"
   },
@@ -56,4 +61,3 @@
     "access": "public"
   }
 }
-
