@@ -639,11 +639,14 @@ export class ArtifactsService {
     
     let artifact: Artifact;
     
-    // Audio, Video, Quiz, Slides, and Infographics all use R7cb6c
-    if (type === ArtifactType.AUDIO || type === ArtifactType.VIDEO || type === ArtifactType.QUIZ || type === ArtifactType.SLIDE_DECK || type === ArtifactType.INFOGRAPHIC) {
+    // Mind Map uses yyryJe (RPC_ACT_ON_SOURCES) with special structure
+    if (type === ArtifactType.MIND_MAP) {
+      artifact = await this.createMindMap(notebookId, options);
+    } else if (type === ArtifactType.AUDIO || type === ArtifactType.VIDEO || type === ArtifactType.QUIZ || type === ArtifactType.FLASHCARDS || type === ArtifactType.SLIDE_DECK || type === ArtifactType.INFOGRAPHIC) {
+      // Audio, Video, Quiz, Flashcards, Slides, and Infographics all use R7cb6c
       artifact = await this.createR7cb6cArtifact(notebookId, type, options);
     } else {
-      // Other artifacts use xpWGLf (Study Guide, Mind Map, Flashcards, Report, Document)
+      // Other artifacts use xpWGLf (Study Guide, Report, Document)
       artifact = await this.createStandardArtifact(notebookId, type, options);
     }
     
@@ -789,8 +792,15 @@ export class ArtifactsService {
     if (notebookId && artifactId === notebookId) {
       // Audio artifacts use a different RPC method
       data = await this.downloadAudio(artifactId);
+    } else if (artifact.type === ArtifactType.QUIZ) {
+      // Quiz artifacts use v9rmvd RPC for download
+      const response = await this.rpc.call(
+        RPC.RPC_GET_QUIZ_DATA,
+        [artifactId]
+      );
+      data = this.parseDownloadResponse(response, artifact.type);
     } else {
-      // Get full artifact data
+      // Get full artifact data for other types
       const response = await this.rpc.call(
         RPC.RPC_GET_ARTIFACT,
         [artifactId]
@@ -815,6 +825,8 @@ export class ArtifactsService {
     switch (artifactType) {
       case ArtifactType.QUIZ:
         return 4;
+      case ArtifactType.FLASHCARDS:
+        return 4; // Flashcards use same API type as Quiz
       case ArtifactType.INFOGRAPHIC:
         return 7;
       case ArtifactType.SLIDE_DECK:
@@ -958,6 +970,25 @@ export class ArtifactsService {
             [difficulty, difficulty], // Difficulty array
           ],
         ];
+      } else if (artifactType === ArtifactType.FLASHCARDS) {
+        // Flashcard customization at index 9: [null, [numberOfCards, null, instructions, null, null, null, [difficulty1, difficulty2]]]
+        // Structure from mm13.txt: [null,[1,null,"add a logo at bottom of \"PHOTON\"",null,null,null,[1,2]]]
+        const flashcardCustom = customization as FlashcardCustomization;
+        const numberOfCards = flashcardCustom.numberOfCards ?? 2; // 1=Fewer, 2=Standard, 3=More
+        const difficulty = flashcardCustom.difficulty ?? 2; // 1=Easy, 2=Medium, 3=Hard
+        
+        (args[2] as any[])[9] = [
+          null,
+          [
+            numberOfCards,
+            null,
+            flashcardCustom.language || instructions || null, // Language or instructions at index 2
+            null,
+            null,
+            null,
+            [difficulty, difficulty === 1 ? 2 : difficulty], // Difficulty array - note: [1,2] pattern observed for Easy
+          ],
+        ];
       } else if (artifactType === ArtifactType.INFOGRAPHIC) {
         // Infographic customization at index 13: [[language, "en", null, orientation, levelOfDetail]]
         // Structure from mm10.txt: [["hi","en",null,1,1]] or [[null,"en",null,1,3]]
@@ -1036,6 +1067,49 @@ export class ArtifactsService {
       default:
         return 2;
     }
+  }
+  
+  /**
+   * Create mind map using yyryJe RPC (RPC_ACT_ON_SOURCES)
+   * Structure from RPC: [[[sourceId1]], [[sourceId2]], ...], null, null, null, null, ["interactive_mindmap", [["[CONTEXT]", ""]], "", null, [2, null, [1]]]
+   */
+  private async createMindMap(
+    notebookId: string,
+    options: CreateArtifactOptions
+  ): Promise<Artifact> {
+    const { sourceIds = [], instructions = '' } = options;
+    
+    if (sourceIds.length === 0) {
+      throw new NotebookLMError('Mind map requires at least one source ID');
+    }
+    
+    // Format source IDs as nested arrays: [[[sourceId1]], [[sourceId2]]]
+    const formattedSourceIds = sourceIds.map(id => [[id]]);
+    
+    // Build mind map arguments matching observed RPC structure
+    // Structure: [sourceIds, null, null, null, null, ["interactive_mindmap", [["[CONTEXT]", instructions]], "", null, [2, null, [1]]]]
+    const args: any[] = [
+      formattedSourceIds, // [[[sourceId1]], [[sourceId2]], ...]
+      null,
+      null,
+      null,
+      null,
+      [
+        'interactive_mindmap', // Action type
+        [[instructions || '[CONTEXT]', '']], // Context/instructions: [["[CONTEXT]", ""]] or [["instructions", ""]]
+        '', // Empty string
+        null,
+        [2, null, [1]], // Configuration: [2, null, [1]]
+      ],
+    ];
+    
+    const response = await this.rpc.call(
+      RPC.RPC_ACT_ON_SOURCES,
+      args,
+      notebookId
+    );
+    
+    return this.parseArtifactResponse(response);
   }
   
   private async createStandardArtifact(

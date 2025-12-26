@@ -207,6 +207,9 @@ export const RPC_CREATE_ARTIFACT = 'xpWGLf';
 /** Get artifact */
 export const RPC_GET_ARTIFACT = 'BnLyuf';
 
+/** Get quiz data (download quiz as JSON) */
+export const RPC_GET_QUIZ_DATA = 'v9rmvd';
+
 /** Update artifact */
 export const RPC_UPDATE_ARTIFACT = 'DJezBc';
 

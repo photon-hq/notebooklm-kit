@@ -1,27 +1,29 @@
 <div align="center">
-   
-# @photon-ai/NotebookLM-kit
 
-> A TypeScript SDK for programmatic access to Google NotebookLM.
+# NotebookLM Kit
 
-</div>
+> TypeScript SDK for Google NotebookLM — Build AI-powered research workflows, generate content, and automate knowledge management.
 
 [![npm version](https://img.shields.io/npm/v/notebooklm-kit.svg)](https://www.npmjs.com/package/notebooklm-kit)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/bZd4CMd2H5)
 
-## Overview
+</div>
 
-The NotebookLM Kit provides a clean, organized interface to all NotebookLM features through a service-based architecture:
+## What is NotebookLM Kit?
 
-- **`sdk.notebooks`** - Create, list, update, delete notebooks
-- **`sdk.sources`** - Add sources (URLs, text, files, YouTube, Google Drive, web search)
-- **`sdk.notes`** - Create and manage notes within notebooks
-- **`sdk.artifacts`** - Generate quizzes, flashcards, study guides, mind maps, infographics, slides, reports, audio, video
-- **`sdk.generation`** - Chat with notebooks, generate guides, outlines, reports
+NotebookLM Kit is a powerful TypeScript SDK that gives you programmatic access to Google NotebookLM's full feature set. Create notebooks, add sources, generate AI-powered content, and automate your research workflows—all from code.
 
-All features are organized logically and easy to discover. The SDK handles authentication, quota management, and session refresh automatically.
+### Key Features
+
+- 📚 **Notebook Management** — Create, organize, and manage research notebooks
+- 📄 **Source Integration** — Add URLs, files, YouTube videos, Google Drive, and web search results
+- 💬 **AI Chat** — Interactive conversations with your notebook content
+- 🎨 **Content Generation** — Create quizzes, flashcards, study guides, mind maps, infographics, slide decks, reports, audio, and video
+- 🌍 **80+ Languages** — Generate content in multiple languages
+- 🔄 **Auto-Refresh** — Automatic session management keeps you connected
+- 📊 **Quota Management** — Built-in usage tracking and limit enforcement
 
 ## Quick Start
 
@@ -31,22 +33,19 @@ All features are organized logically and easy to discover. The SDK handles authe
 npm install notebooklm-kit
 ```
 
-### Basic Usage
+### Basic Example
 
 ```typescript
-import { NotebookLMClient } from 'notebooklm-kit'
+import { NotebookLMClient, ArtifactType } from 'notebooklm-kit'
 
-// Create client with auto-refresh enabled (default: 10-minute interval)
-// Credentials are refreshed immediately on initialization, then every 10 minutes
 const sdk = new NotebookLMClient({
   authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
   cookies: process.env.NOTEBOOKLM_COOKIES!,
-  // autoRefresh: true is the default - keeps session alive automatically
 })
 
 // Create a notebook
 const notebook = await sdk.notebooks.create({
-  title: 'My Research',
+  title: 'My Research Project',
   emoji: '📚',
 })
 
@@ -61,13 +60,47 @@ const response = await sdk.generation.chat(
   'What are the key findings?'
 )
 
-console.log(response)
+// Generate a quiz
+const quiz = await sdk.artifacts.create(notebook.projectId, ArtifactType.QUIZ, {
+  title: 'Chapter 1 Quiz',
+  instructions: 'Create 10 questions covering key concepts',
+})
 
-// Clean up (stops auto-refresh)
+// Clean up
 sdk.dispose()
 ```
 
-### Configuration
+## Authentication
+
+### Quick Setup
+
+1. Open [NotebookLM](https://notebooklm.google.com) in your browser and log in
+2. Open Developer Tools (F12 or Cmd+Option+I)
+3. Go to Console tab
+4. Copy and paste the script from `extract-credentials.js`
+5. Follow the instructions to add HttpOnly cookies if needed
+6. Copy the output to your `.env` file
+
+### Manual Setup
+
+**Get Auth Token:**
+- Open DevTools Console on https://notebooklm.google.com
+- Run: `window.WIZ_global_data.SNlM0e`
+- Copy the value as `NOTEBOOKLM_AUTH_TOKEN`
+
+**Get Cookies:**
+- Open DevTools → Application → Cookies → https://notebooklm.google.com
+- Find: `SID`, `HSID`, `SSID`, `APISID`, `SAPISID`
+- Copy each as `Name=Value` and join with `; `
+- Set as `NOTEBOOKLM_COOKIES`
+
+```bash
+# .env file
+NOTEBOOKLM_AUTH_TOKEN="your-token-here"
+NOTEBOOKLM_COOKIES="SID=value; HSID=value; SSID=value; APISID=value; SAPISID=value; ..."
+```
+
+## Configuration
 
 ```typescript
 interface NotebookLMConfig {
@@ -77,7 +110,7 @@ interface NotebookLMConfig {
   autoRefresh?: boolean | {       // Auto-refresh credentials (default: true)
     enabled: boolean              // Enable auto-refresh (default: true)
     interval?: number             // Refresh interval in ms (default: 600000 = 10 minutes)
-    gsessionId?: string           // Optional: Google session ID (auto-extracted if not provided)
+    gsessionId?: string           // Optional: Google session ID
   }
   maxRetries?: number             // Retry attempts (default: 3)
   enforceQuotas?: boolean         // Enforce usage limits (default: true)
@@ -86,18 +119,17 @@ interface NotebookLMConfig {
 }
 ```
 
-**Auto-Refresh Details:**
+### Auto-Refresh
 
-The SDK automatically keeps your session alive by refreshing credentials periodically. This prevents session expiration during long-running operations.
+The SDK automatically keeps your session alive by refreshing credentials periodically.
 
-- **Default:** Auto-refresh is enabled with a 10-minute interval (600,000 ms)
-- **Initial refresh:** Credentials are refreshed immediately when the client is created
-- **Background refresh:** Subsequent refreshes happen automatically at the configured interval
-- **Recommended intervals:** 5-10 minutes (300,000 - 600,000 ms)
-- **Disable:** Set `autoRefresh: false` to disable automatic refresh
+- **Default:** Enabled with 10-minute interval
+- **Initial refresh:** Happens immediately on client creation
+- **Background refresh:** Continues automatically at configured interval
+- **Recommended:** 5-10 minute intervals
 
 ```typescript
-// Default: Auto-refresh enabled, 10-minute interval
+// Default: 10-minute interval
 const sdk = new NotebookLMClient({
   authToken: '...',
   cookies: '...',
@@ -121,105 +153,24 @@ const sdk = new NotebookLMClient({
 })
 ```
 
-## Authentication
-
-### Quick Setup (Recommended)
-
-1. Open https://notebooklm.google.com in your browser and log in
-2. Open Developer Tools (F12 or Cmd+Option+I)
-3. Go to Console tab
-4. Copy and paste the script from `extract-credentials.js`
-5. Follow the instructions to add HttpOnly cookies if needed
-6. Copy the output to your `.env` file
-
-### Manual Setup
-
-1. **Get Auth Token:**
-   - Open DevTools Console on https://notebooklm.google.com
-   - Run: `window.WIZ_global_data.SNlM0e`
-   - Copy the value as `NOTEBOOKLM_AUTH_TOKEN`
-
-2. **Get Cookies:**
-   - Open DevTools → Application → Cookies → https://notebooklm.google.com
-   - Find these cookies: `SID`, `HSID`, `SSID`, `APISID`, `SAPISID`
-   - Copy each as `Name=Value` and join with `; `
-   - Set as `NOTEBOOKLM_COOKIES`
-
-```bash
-# .env file
-NOTEBOOKLM_AUTH_TOKEN="your-token-here"
-NOTEBOOKLM_COOKIES="SID=value; HSID=value; SSID=value; APISID=value; SAPISID=value; ..."
-```
-
-**Note:** HttpOnly cookies (HSID, SSID, SID, APISID) can only be copied from the Application tab, not from `document.cookie`.
-
 ## Features
 
-| Feature | Method | Example |
-|---------|---------|---------|
-| Create Notebook | `sdk.notebooks.create()` | [Create Notebook](#notebooks) |
-| List Notebooks | `sdk.notebooks.list()` | [List Notebooks](#notebooks) |
-| Add URL Source | `sdk.sources.addFromURL()` | [Add Sources](#sources) |
-| Add Text Source | `sdk.sources.addFromText()` | [Add Sources](#sources) |
-| Add File Source | `sdk.sources.addFromFile()` | [Add Sources](#sources) |
-| Add YouTube Source | `sdk.sources.addYouTube()` | [Add Sources](#sources) |
-| Add Google Drive | `sdk.sources.addGoogleDrive()` | [Add Sources](#sources) |
-| Web Search | `sdk.sources.searchWebAndWait()` | [Add Sources](#sources) |
-| Batch Add Sources | `sdk.sources.addBatch()` | [Add Sources](#sources) |
-| Chat | `sdk.generation.chat()` | [Generation](#generation) |
-| Create Audio | `sdk.artifacts.create(ArtifactType.AUDIO)` | [Artifacts](#artifacts) |
-| Create Video | `sdk.artifacts.create(ArtifactType.VIDEO)` | [Artifacts](#artifacts) |
-| Create Quiz | `sdk.artifacts.create(ArtifactType.QUIZ)` | [Artifacts](#artifacts) |
-| Create Flashcards | `sdk.artifacts.create(ArtifactType.FLASHCARDS)` | [Artifacts](#artifacts) |
-| Create Study Guide | `sdk.artifacts.create(ArtifactType.STUDY_GUIDE)` | [Artifacts](#artifacts) |
-| Create Mind Map | `sdk.artifacts.create(ArtifactType.MIND_MAP)` | [Artifacts](#artifacts) |
-| Create Infographic | `sdk.artifacts.create(ArtifactType.INFOGRAPHIC)` | [Artifacts](#artifacts) |
-| Create Slide Deck | `sdk.artifacts.create(ArtifactType.SLIDE_DECK)` | [Artifacts](#artifacts) |
-| Create Report | `sdk.artifacts.create(ArtifactType.DOCUMENT)` | [Artifacts](#artifacts) |
-| List Artifacts | `sdk.artifacts.list()` | [Artifacts](#artifacts) |
-| Create Notes | `sdk.notes.create()` | [Notes](#notes) |
-| Auto-Refresh | `sdk.refreshCredentials()` | [Auto-Refresh](#auto-refresh) |
-| Quota Management | `sdk.getUsage()` | [Quota Management](#quota-management) |
+### Notebooks
 
-## Quick Reference
-
-**Common Workflows:**
-
-```typescript
-// 1. Create notebook and add sources
-const notebook = await sdk.notebooks.create({ title: 'Research', emoji: '📚' })
-await sdk.sources.addFromURL(notebook.projectId, { url: 'https://example.com' })
-
-// 2. Chat with notebook
-const response = await sdk.generation.chat(notebook.projectId, 'Summarize this')
-
-// 3. Create artifacts
-const quiz = await sdk.artifacts.create(notebook.projectId, ArtifactType.QUIZ, {
-  instructions: 'Create 10 questions',
-})
-
-// 4. Check quota
-const usage = sdk.getUsage()
-console.log(`Chats used: ${usage.daily.chats}/50`)
-
-// 5. Clean up
-sdk.dispose()
-```
-
-## Notebooks
+Create and manage your research notebooks.
 
 ```typescript
 // List all notebooks
 const notebooks = await sdk.notebooks.list()
-
-// Get specific notebook
-const notebook = await sdk.notebooks.get('notebook-id')
 
 // Create notebook
 const notebook = await sdk.notebooks.create({
   title: 'My Research Project',
   emoji: '📚',
 })
+
+// Get notebook
+const notebook = await sdk.notebooks.get('notebook-id')
 
 // Update notebook
 await sdk.notebooks.update('notebook-id', {
@@ -230,14 +181,13 @@ await sdk.notebooks.update('notebook-id', {
 await sdk.notebooks.delete('notebook-id')
 ```
 
-## Sources
+### Sources
 
-Add sources from various formats to your notebooks. The SDK supports URLs, text, files, YouTube videos, Google Drive files, and web search results.
+Add content from multiple sources to your notebooks.
 
-### Add from URL
+#### Add from URL
 
 ```typescript
-// Add a regular URL
 const sourceId = await sdk.sources.addFromURL('notebook-id', {
   url: 'https://example.com/article',
 })
@@ -248,7 +198,7 @@ const youtubeId = await sdk.sources.addFromURL('notebook-id', {
 })
 ```
 
-### Add from Text
+#### Add from Text
 
 ```typescript
 const sourceId = await sdk.sources.addFromText('notebook-id', {
@@ -257,12 +207,11 @@ const sourceId = await sdk.sources.addFromText('notebook-id', {
 })
 ```
 
-### Add from File
+#### Add from File
 
 ```typescript
 import { readFile } from 'fs/promises'
 
-// Read file as buffer
 const buffer = await readFile('document.pdf')
 
 const sourceId = await sdk.sources.addFromFile('notebook-id', {
@@ -271,50 +220,33 @@ const sourceId = await sdk.sources.addFromFile('notebook-id', {
   mimeType: 'application/pdf',
 })
 
-// Supported file types: PDF, DOC, DOCX, TXT, MD, and more
+// Supported: PDF, DOC, DOCX, TXT, MD, and more
 // Max file size: 200MB
 ```
 
-### Add YouTube Video
+#### Add YouTube Video
 
 ```typescript
-// From YouTube URL
+// From URL or video ID
 const sourceId = await sdk.sources.addYouTube('notebook-id', {
   urlOrId: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
 })
-
-// From video ID
-const sourceId = await sdk.sources.addYouTube('notebook-id', {
-  urlOrId: 'dQw4w9WgXcQ',
-})
 ```
 
-### Add Google Drive File
+#### Add Google Drive File
 
 ```typescript
-// Add by file ID
 const sourceId = await sdk.sources.addGoogleDrive('notebook-id', {
   fileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
 })
-
-// Search Drive first, then add
-const searchResult = await sdk.sources.searchWebAndWait('notebook-id', {
-  query: 'research paper',
-  sourceType: SearchSourceType.GOOGLE_DRIVE,
-})
-
-const sourceIds = await sdk.sources.addDiscovered('notebook-id', {
-  sessionId: searchResult.sessionId,
-  sourceIds: searchResult.sources.slice(0, 3).map(s => s.sourceId),
-})
 ```
 
-### Web Search
+#### Web Search
 
 ```typescript
 import { SearchSourceType, ResearchMode } from 'notebooklm-kit'
 
-// Search and wait for results (recommended)
+// Search and wait for results
 const result = await sdk.sources.searchWebAndWait('notebook-id', {
   query: 'machine learning trends 2024',
   sourceType: SearchSourceType.WEB,
@@ -326,31 +258,11 @@ const sourceIds = await sdk.sources.addDiscovered('notebook-id', {
   sessionId: result.sessionId,
   sourceIds: result.sources.slice(0, 5).map(s => s.sourceId),
 })
-
-// Manual workflow (if you need more control)
-const sessionId = await sdk.sources.searchWeb('notebook-id', {
-  query: 'AI research',
-  sourceType: SearchSourceType.WEB,
-})
-
-// Poll for results
-let searchResults
-do {
-  await new Promise(r => setTimeout(r, 2000))
-  searchResults = await sdk.sources.getSearchResults('notebook-id', sessionId)
-} while (!searchResults.complete)
-
-// Add sources
-const addedIds = await sdk.sources.addDiscovered('notebook-id', {
-  sessionId,
-  sourceIds: searchResults.sources.map(s => s.sourceId),
-})
 ```
 
-### Batch Add Sources
+#### Batch Add Sources
 
 ```typescript
-// Add multiple sources at once
 const sourceIds = await sdk.sources.addBatch('notebook-id', {
   sources: [
     { type: 'url', url: 'https://example.com/article1' },
@@ -362,15 +274,12 @@ const sourceIds = await sdk.sources.addBatch('notebook-id', {
 })
 ```
 
-### Check Source Processing Status
+#### Check Processing Status
 
 ```typescript
-// Check if sources are ready
 const status = await sdk.sources.pollProcessing('notebook-id')
 
 console.log(`Ready: ${status.readyCount}/${status.totalCount}`)
-console.log(`Processing: ${status.processingCount}`)
-console.log(`Failed: ${status.failedCount}`)
 
 // Wait for all sources to be ready
 while (!status.allReady) {
@@ -380,13 +289,9 @@ while (!status.allReady) {
 }
 ```
 
-### Delete Source
+### Notes
 
-```typescript
-await sdk.sources.delete('notebook-id', 'source-id')
-```
-
-## Notes
+Create and manage notes within your notebooks.
 
 ```typescript
 // List notes
@@ -407,11 +312,11 @@ await sdk.notes.update('notebook-id', 'note-id', {
 await sdk.notes.delete('notebook-id', 'note-id')
 ```
 
-## Generation
+### Generation
 
 Chat with your notebook and generate various content types.
 
-### Chat
+#### Chat
 
 ```typescript
 // Simple chat
@@ -424,7 +329,7 @@ const response = await sdk.generation.chat('notebook-id', 'Summarize these sourc
 ])
 ```
 
-### Generate Guides
+#### Generate Guides
 
 ```typescript
 // Generate document guides
@@ -434,42 +339,21 @@ const guides = await sdk.generation.generateDocumentGuides('notebook-id')
 const guide = await sdk.generation.generateNotebookGuide('notebook-id')
 ```
 
-### Generate Outline
+#### Generate Outline
 
 ```typescript
 const outline = await sdk.generation.generateOutline('notebook-id')
 ```
 
-### Generate Report Suggestions
+### Artifacts
+
+Generate quizzes, flashcards, study guides, mind maps, infographics, slide decks, reports, audio, and video from your notebook content.
+
+**Important:** Your notebook must have at least one source before creating artifacts. If you omit `sourceIds`, all sources in the notebook are used automatically. If you provide `sourceIds`, only those specific sources are used.
+
+#### List Artifacts
 
 ```typescript
-const suggestions = await sdk.generation.generateReportSuggestions('notebook-id')
-```
-
-### Magic View
-
-```typescript
-const magicView = await sdk.generation.generateMagicView('notebook-id', [
-  'source-id-1',
-  'source-id-2',
-])
-```
-
-## Artifacts
-
-Create various types of artifacts from your notebook content. Artifacts include audio overviews, video overviews, quizzes, flashcards, study guides, mind maps, infographics, slide decks, and reports.
-
-**⚠️ Important: Sources Required**
-- **Your notebook must have at least one source** before creating artifacts
-- If you don't specify `sourceIds`, **all sources in the notebook** are used automatically
-- If you provide `sourceIds`, **only those specific sources** are used
-- **Video artifacts** work like slides - omit `sourceIds` to use all sources, or provide `sourceIds` to use specific sources
-- **Audio artifacts** work like slides - omit `sourceIds` to use all sources, or provide `sourceIds` to use specific sources
-
-### List Artifacts
-
-```typescript
-// List all artifacts
 const artifacts = await sdk.artifacts.list('notebook-id')
 
 // Filter by type
@@ -477,59 +361,46 @@ const quizzes = artifacts.filter(a => a.type === ArtifactType.QUIZ)
 const readyArtifacts = artifacts.filter(a => a.state === ArtifactState.READY)
 ```
 
-### Audio Overviews
+#### Audio Overviews
 
-NotebookLM supports **80+ languages** for audio overviews. Use the `NotebookLMLanguage` enum for type safety, or pass ISO 639-1 language codes directly.
+Create podcast-style audio overviews in 80+ languages.
 
 ```typescript
 import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
 
-// Create audio in English (default)
-// Uses all sources in the notebook (omit sourceIds to use all sources)
+// Create audio in English (uses all sources)
 const audio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   instructions: 'Focus on key findings and main conclusions',
-  // sourceIds omitted = uses ALL sources in notebook
+  // sourceIds omitted = uses all sources
 })
 
-// OR: Create audio from specific sources only
+// Create audio from specific sources
 const focusedAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
-  instructions: 'Focus on key findings and main conclusions',
-  sourceIds: ['source-id-1', 'source-id-2'], // Only these sources
+  instructions: 'Focus on key findings',
+  sourceIds: ['source-id-1', 'source-id-2'],
 })
 
-// Create audio in Hindi (हिन्दी) using enum - Deep dive format
+// Create audio in Hindi - Deep dive format
 const hindiAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   customization: {
     language: NotebookLMLanguage.HINDI, // or 'hi'
-    format: 0, // 0=Deep dive (supports all 3 length options)
+    format: 0, // 0=Deep dive (supports: 1=Short, 2=Default, 3=Long)
     length: 2, // 1=Short, 2=Default, 3=Long
   },
-  instructions: 'मुख्य निष्कर्षों पर ध्यान दें',
 })
 
-// Create audio in French (Français) - Deep dive with long length
-const frenchAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
+// Create audio - Brief format (no length option)
+const briefAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   customization: {
-    language: NotebookLMLanguage.FRENCH, // or 'fr'
-    format: 0, // 0=Deep dive (supports: 1=Short, 2=Default, 3=Long)
-    length: 3, // Long
-  },
-  instructions: 'Focus on key findings and methodology',
-})
-
-// Create audio in Japanese (日本語) - Brief format (no length option)
-const japaneseAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
-  customization: {
-    language: NotebookLMLanguage.JAPANESE, // or 'ja'
     format: 1, // 1=Brief (length option not available)
-    // length is ignored for Brief format
+    language: 'en',
   },
 })
 
 // Create audio - Critique format (supports: 1=Short, 2=Default)
 const critiqueAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   customization: {
-    format: 2, // 2=Critique (supports: 1=Short, 2=Default)
+    format: 2, // 2=Critique
     length: 1, // Short
     language: 'en',
   },
@@ -538,10 +409,9 @@ const critiqueAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUD
 // Create audio - Debate format (supports: 1=Short, 2=Default)
 const debateAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
   customization: {
-    format: 3, // 3=Debate (supports: 1=Short, 2=Default)
+    format: 3, // 3=Debate
     length: 2, // Default
     language: 'en',
-    instructions: 'Discuss the pros and cons of the main argument',
   },
 })
 
@@ -550,27 +420,28 @@ const audioStatus = await sdk.artifacts.get('notebook-id', 'notebook-id')
 
 // Download audio (when ready)
 if (audioStatus.state === ArtifactState.READY) {
-  const audioData = await sdk.artifacts.download('notebook-id', './downloads', 'notebook-id')
-  console.log(`Audio saved to: ${audioData.filePath}`)
+  const result = await sdk.artifacts.download('notebook-id', './downloads', 'notebook-id')
+  console.log(`Audio saved to: ${result.filePath}`) // Saves as MP3
 }
-
-// Supported languages include: English, Spanish, French, German, Italian, Portuguese,
-// Russian, Japanese, Korean, Chinese, Hindi, Bengali, Tamil, Telugu, Gujarati, Kannada,
-// Malayalam, Marathi, Punjabi, Arabic, Turkish, Thai, Vietnamese, Indonesian, Malay,
-// and 60+ more languages. See NotebookLMLanguage enum for complete list.
 ```
 
-### Video Overviews
+**Audio Format Options:**
+- **Deep dive** (format: 0) — Supports all 3 length options: Short, Default, Long
+- **Brief** (format: 1) — No length option
+- **Critique** (format: 2) — Supports: Short, Default
+- **Debate** (format: 3) — Supports: Short, Default
 
-NotebookLM supports **80+ languages** for video overviews. Use the `NotebookLMLanguage` enum for type safety.
+#### Video Overviews
+
+Create engaging video overviews in 80+ languages with multiple visual styles.
 
 ```typescript
 import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
 
-// Create video overview in English (uses all sources if sourceIds omitted)
+// Create video in English (uses all sources)
 const video = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
   instructions: 'Create an engaging video overview with key highlights',
-  // sourceIds omitted = uses ALL sources in notebook
+  // sourceIds omitted = uses all sources
   customization: {
     format: 1, // 1=Explainer, 2=Brief
     language: NotebookLMLanguage.ENGLISH, // or 'en'
@@ -578,52 +449,52 @@ const video = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
   },
 })
 
-// OR: Create video from specific sources only
+// Create video from specific sources
 const focusedVideo = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
-  instructions: 'Create an engaging video overview with key highlights',
-  sourceIds: ['source-id-1', 'source-id-2'], // Only use these sources
-  customization: {
-    format: 1, // 1=Explainer, 2=Brief
-    language: NotebookLMLanguage.ENGLISH, // or 'en'
-    visualStyle: 2, // Classic
-  },
-})
-
-// Create video in Spanish (Español)
-const spanishVideo = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
-  instructions: 'Crear un resumen de video atractivo',
-  // sourceIds omitted = uses all sources
-  customization: {
-    format: 1,
-    language: NotebookLMLanguage.SPANISH, // or 'es'
-    visualStyle: 2, // Classic
-  },
-})
-
-// Create video in German (Deutsch)
-const germanVideo = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
-  instructions: 'Erstellen Sie eine ansprechende Videoübersicht',
-  // sourceIds omitted = uses all sources
+  instructions: 'Create video from these sources',
+  sourceIds: ['source-id-1', 'source-id-2'],
   customization: {
     format: 2, // Brief
-    language: NotebookLMLanguage.GERMAN, // or 'de'
-    visualStyle: 3, // Whiteboard
+    language: 'en',
+    visualStyle: 2, // Classic
   },
 })
 
-// Get video status
-const videoStatus = await sdk.artifacts.get(video.artifactId)
+// Create video with custom style
+const customVideo = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
+  customization: {
+    format: 1,
+    language: 'en',
+    visualStyle: 1, // Custom (requires customStyleDescription)
+    customStyleDescription: 'A minimalist design with pastel colors',
+    focus: 'Focus on the methodology and results',
+  },
+})
 
 // Download video (when ready)
+const videoStatus = await sdk.artifacts.get(video.artifactId)
 if (videoStatus.state === ArtifactState.READY) {
-  const videoData = await sdk.artifacts.download(video.artifactId, './downloads')
-  console.log(`Video saved to: ${videoData.filePath}`)
+  const result = await sdk.artifacts.download(video.artifactId, './downloads')
+  console.log(`Video saved to: ${result.filePath}`) // Saves as MP4
 }
 ```
 
-### Quizzes
+**Visual Style Options:**
+- `0` = Auto-select (AI chooses the best style)
+- `1` = Custom (requires `customStyleDescription`)
+- `2` = Classic (traditional, professional)
+- `3` = Whiteboard (hand-drawn style)
+- `4` = Kawaii (cute, colorful)
+- `5` = Anime (anime-inspired)
+- `6` = Watercolour (watercolor painting)
+- `7` = Anime (alternative)
+- `8` = Retro print (vintage print/poster)
+- `9` = Heritage (traditional ink-wash)
+- `10` = Paper-craft (paper cut-out)
 
-Quizzes support **80+ languages**. Use `NotebookLMLanguage` enum for type safety.
+#### Quizzes
+
+Generate interactive quizzes in 80+ languages.
 
 ```typescript
 import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
@@ -632,7 +503,7 @@ import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
 const quiz = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
   title: 'Chapter 1 Quiz',
   instructions: 'Create 10 multiple choice questions covering key concepts',
-  // sourceIds omitted = uses all sources in notebook
+  // sourceIds omitted = uses all sources
   customization: {
     numberOfQuestions: 3, // 1=Fewer, 2=Standard, 3=More
     difficulty: 2, // 1=Easy, 2=Medium, 3=Hard
@@ -640,57 +511,35 @@ const quiz = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
   },
 })
 
-// Create quiz from specific sources only
+// Create quiz from specific sources
 const quizFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
-  title: 'Chapter 1 Quiz',
-  instructions: 'Create questions from these sources',
-  sourceIds: ['source-id-1', 'source-id-2'], // Only use these sources
-  customization: {
-    numberOfQuestions: 3,
-    difficulty: 2,
-    language: NotebookLMLanguage.ENGLISH,
-  },
-})
-
-// Create quiz in Hindi (हिन्दी)
-const hindiQuiz = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
-  title: 'अध्याय 1 प्रश्नोत्तरी',
-  instructions: 'मुख्य अवधारणाओं को कवर करने वाले 10 बहुविकल्पीय प्रश्न बनाएं',
+  title: 'Focused Quiz',
+  sourceIds: ['source-id-1', 'source-id-2'],
   customization: {
     numberOfQuestions: 3,
     difficulty: 3, // Hard
-    language: NotebookLMLanguage.HINDI, // or 'hi'
+    language: 'en',
   },
 })
 
-// Create quiz in Chinese (简体中文)
-const chineseQuiz = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
-  title: '第一章测验',
-  instructions: '创建10个涵盖关键概念的多项选择题',
-  customization: {
-    numberOfQuestions: 2, // Standard
-    difficulty: 2, // Medium
-    language: NotebookLMLanguage.CHINESE_SIMPLIFIED, // or 'zh'
-  },
-})
-
-// Poll until ready
+// Wait for quiz to be ready
 let artifact = quiz
 while (artifact.state === ArtifactState.CREATING) {
   await new Promise(r => setTimeout(r, 2000))
   artifact = await sdk.artifacts.get(quiz.artifactId)
 }
 
-// Download quiz data
+// Download quiz (saves as JSON)
 if (artifact.state === ArtifactState.READY) {
-  const quizData = await sdk.artifacts.download(quiz.artifactId, './downloads')
-  console.log(quizData.data.questions) // Array of questions with answers
+  const result = await sdk.artifacts.download(quiz.artifactId, './downloads')
+  console.log(`Quiz saved to: ${result.filePath}`)
+  console.log(result.data.questions) // Array of questions with answers
 }
 ```
 
-### Flashcards
+#### Flashcards
 
-Flashcards support **80+ languages**. Use `NotebookLMLanguage` enum for type safety.
+Generate flashcard sets in 80+ languages.
 
 ```typescript
 import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
@@ -698,7 +547,7 @@ import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
 // Create flashcards in English (uses all sources)
 const flashcards = await sdk.artifacts.create('notebook-id', ArtifactType.FLASHCARDS, {
   instructions: 'Focus on terminology and definitions',
-  // sourceIds omitted = uses all sources in notebook
+  // sourceIds omitted = uses all sources
   customization: {
     numberOfCards: 2, // 1=Fewer, 2=Standard, 3=More
     difficulty: 2, // 1=Easy, 2=Medium, 3=Hard
@@ -706,134 +555,21 @@ const flashcards = await sdk.artifacts.create('notebook-id', ArtifactType.FLASHC
   },
 })
 
-// Create flashcards from specific sources
-const flashcardsFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.FLASHCARDS, {
-  instructions: 'Focus on terminology from these sources',
-  sourceIds: ['source-id-1'], // Only use this source
-  customization: {
-    numberOfCards: 3, // More cards
-    difficulty: 2,
-    language: NotebookLMLanguage.ENGLISH,
-  },
-})
-
-// Create flashcards in Tamil (தமிழ்)
-const tamilFlashcards = await sdk.artifacts.create('notebook-id', ArtifactType.FLASHCARDS, {
-  instructions: 'சொற்களஞ்சியம் மற்றும் வரையறைகளில் கவனம் செலுத்துங்கள்',
-  customization: {
-    numberOfCards: 3, // More cards
-    difficulty: 2,
-    language: NotebookLMLanguage.TAMIL, // or 'ta'
-  },
-})
-
-// Create flashcards in Spanish (Español)
-const spanishFlashcards = await sdk.artifacts.create('notebook-id', ArtifactType.FLASHCARDS, {
-  instructions: 'Enfócate en terminología y definiciones',
-  customization: {
-    numberOfCards: 2,
-    difficulty: 1, // Easy
-    language: NotebookLMLanguage.SPANISH, // or 'es'
-  },
-})
-
-// Download flashcard data
-const flashcardData = await sdk.artifacts.download(flashcards.artifactId, './downloads')
-console.log(flashcardData.data.cards) // Array of { front, back } cards
+// Download flashcards (saves as CSV)
+const result = await sdk.artifacts.download(flashcards.artifactId, './downloads')
+console.log(`Flashcards saved to: ${result.filePath}`)
+console.log(result.data.csv) // CSV string
+console.log(result.data.flashcards) // Parsed array
 ```
 
-### Study Guides
+#### Slide Decks
 
-```typescript
-import { ArtifactType } from 'notebooklm-kit'
-
-// Create study guide (uses all sources)
-const studyGuide = await sdk.artifacts.create('notebook-id', ArtifactType.STUDY_GUIDE, {
-  title: 'Exam Study Guide',
-  instructions: 'Focus on key concepts, formulas, and important dates',
-  // sourceIds omitted = uses all sources in notebook
-})
-
-// Create study guide from specific sources
-const studyGuideFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.STUDY_GUIDE, {
-  title: 'Chapters 1-3 Study Guide',
-  instructions: 'Focus on chapters 1-3',
-  sourceIds: ['source-id-1', 'source-id-2', 'source-id-3'], // Only these sources
-})
-```
-
-### Mind Maps
-
-```typescript
-import { ArtifactType } from 'notebooklm-kit'
-
-// Create mind map (uses all sources)
-const mindMap = await sdk.artifacts.create('notebook-id', ArtifactType.MIND_MAP, {
-  title: 'Concept Map',
-  // sourceIds omitted = uses all sources in notebook
-})
-
-// Create mind map from specific sources
-const mindMapFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.MIND_MAP, {
-  title: 'Concept Map',
-  sourceIds: ['source-id-1', 'source-id-2'], // Only these sources
-})
-```
-
-### Infographics
-
-Infographics support **80+ languages**. Use `NotebookLMLanguage` enum for type safety.
-
-```typescript
-import { ArtifactType, NotebookLMLanguage } from 'notebooklm-kit'
-
-// Create infographic in English (uses all sources)
-const infographic = await sdk.artifacts.create('notebook-id', ArtifactType.INFOGRAPHIC, {
-  instructions: 'Visual summary of key data and statistics',
-  // sourceIds omitted = uses all sources in notebook
-  customization: {
-    language: NotebookLMLanguage.ENGLISH, // or 'en'
-    orientation: 1, // 1=Landscape, 2=Portrait, 3=Square
-    levelOfDetail: 2, // 1=Concise, 2=Standard, 3=Detailed
-  },
-})
-
-// Create infographic from specific sources
-const infographicFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.INFOGRAPHIC, {
-  instructions: 'Visual summary from these sources',
-  sourceIds: ['source-id-1', 'source-id-2'], // Only these sources
-  customization: {
-    language: NotebookLMLanguage.ARABIC, // or 'ar'
-    orientation: 2, // Portrait
-    levelOfDetail: 3, // Detailed
-  },
-})
-```
-
-// Create infographic in Arabic (العربية)
-const arabicInfographic = await sdk.artifacts.create('notebook-id', ArtifactType.INFOGRAPHIC, {
-  instructions: 'ملخص مرئي للبيانات والإحصائيات الرئيسية',
-  customization: {
-    language: NotebookLMLanguage.ARABIC, // or 'ar'
-    orientation: 2, // Portrait
-    levelOfDetail: 3, // Detailed
-  },
-})
-```
-
-### Slide Decks
-
-Slide decks support **80+ languages**. Use `NotebookLMLanguage` enum for type safety.
-
-**⚠️ Important: Sources Required**
-- **You must add sources to your notebook before creating slide decks**
-- If you omit `sourceIds`, **all sources in the notebook** are used automatically
-- If you provide `sourceIds`, **only those specific sources** are used
+Create presentation slide decks in 80+ languages.
 
 ```typescript
 import { ArtifactType, ArtifactState, NotebookLMLanguage } from 'notebooklm-kit'
 
-// Step 1: Add sources to your notebook first
+// Step 1: Add sources first
 const sourceId1 = await sdk.sources.addFromURL('notebook-id', {
   url: 'https://example.com/article1',
 })
@@ -841,15 +577,12 @@ const sourceId2 = await sdk.sources.addFromText('notebook-id', {
   title: 'Research Notes',
   content: 'Key findings and insights...',
 })
-const sourceId3 = await sdk.sources.addFromURL('notebook-id', {
-  url: 'https://example.com/article2',
-})
 
-// Step 2: Create slide deck using ALL sources (omit sourceIds)
+// Step 2: Create slide deck using all sources
 const slideDeck = await sdk.artifacts.create('notebook-id', ArtifactType.SLIDE_DECK, {
   title: 'Presentation',
   instructions: 'Create 10 slides covering main topics with visuals',
-  // sourceIds omitted = uses ALL sources in notebook (sourceId1, sourceId2, sourceId3)
+  // sourceIds omitted = uses all sources
   customization: {
     format: 3, // 2=Presenter slides, 3=Detailed deck
     language: NotebookLMLanguage.ENGLISH, // or 'en'
@@ -857,24 +590,10 @@ const slideDeck = await sdk.artifacts.create('notebook-id', ArtifactType.SLIDE_D
   },
 })
 
-// Step 3: Create slide deck from SPECIFIC sources only
+// Step 3: Create slide deck from specific sources
 const slideDeckFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.SLIDE_DECK, {
   title: 'Focused Presentation',
-  instructions: 'Create slides from these specific sources',
-  sourceIds: [sourceId1, sourceId2], // Only use sourceId1 and sourceId2 (not sourceId3)
-  customization: {
-    format: 2, // Presenter slides
-    language: NotebookLMLanguage.FRENCH, // or 'fr'
-    length: 3, // Long
-  },
-})
-```
-
-// Example: Create slide deck in French using all sources
-const frenchSlides = await sdk.artifacts.create('notebook-id', ArtifactType.SLIDE_DECK, {
-  title: 'Présentation',
-  instructions: 'Créer 10 diapositives couvrant les principaux sujets avec des visuels',
-  // sourceIds omitted = uses all sources in notebook
+  sourceIds: [sourceId1, sourceId2], // Only these sources
   customization: {
     format: 2, // Presenter slides
     language: NotebookLMLanguage.FRENCH, // or 'fr'
@@ -882,7 +601,7 @@ const frenchSlides = await sdk.artifacts.create('notebook-id', ArtifactType.SLID
   },
 })
 
-// Poll until ready, then download
+// Wait for slide deck to be ready
 let slideArtifact = slideDeck
 while (slideArtifact.state === ArtifactState.CREATING) {
   await new Promise(r => setTimeout(r, 2000))
@@ -893,11 +612,97 @@ while (slideArtifact.state === ArtifactState.CREATING) {
 if (slideArtifact.state === ArtifactState.READY) {
   const result = await sdk.artifacts.download(slideDeck.artifactId, './downloads')
   console.log(`Slide deck saved to: ${result.filePath}`)
-  // File is saved as PDF: slides_<title>.pdf
 }
 ```
 
-### Reports
+#### Infographics
+
+Create visual infographics in 80+ languages.
+
+```typescript
+import { ArtifactType, NotebookLMLanguage } from 'notebooklm-kit'
+
+// Create infographic in English (uses all sources)
+const infographic = await sdk.artifacts.create('notebook-id', ArtifactType.INFOGRAPHIC, {
+  instructions: 'Visual summary of key data and statistics',
+  // sourceIds omitted = uses all sources
+  customization: {
+    language: NotebookLMLanguage.ENGLISH, // or 'en'
+    orientation: 1, // 1=Landscape, 2=Portrait, 3=Square
+    levelOfDetail: 2, // 1=Concise, 2=Standard, 3=Detailed
+  },
+})
+
+// Create infographic from specific sources
+const infographicFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.INFOGRAPHIC, {
+  instructions: 'Use a blue colour theme and highlight the 3 key stats',
+  sourceIds: ['source-id-1', 'source-id-2'],
+  customization: {
+    language: NotebookLMLanguage.ARABIC, // or 'ar'
+    orientation: 2, // Portrait
+    levelOfDetail: 3, // Detailed
+  },
+})
+
+// Download infographic (saves as PNG or JSON)
+const result = await sdk.artifacts.download(infographic.artifactId, './downloads')
+console.log(`Infographic saved to: ${result.filePath}`)
+```
+
+#### Mind Maps
+
+Create interactive mind maps from your sources.
+
+```typescript
+import { ArtifactType, ArtifactState } from 'notebooklm-kit'
+
+// Create mind map (requires sourceIds)
+const mindMap = await sdk.artifacts.create('notebook-id', ArtifactType.MIND_MAP, {
+  title: 'Concept Map',
+  instructions: 'Focus on key concepts and their relationships',
+  sourceIds: ['source-id-1', 'source-id-2'], // Required: Must specify sources
+})
+
+// Wait for mind map to be ready
+let mindMapStatus = await sdk.artifacts.get(mindMap.artifactId)
+while (mindMapStatus.state === ArtifactState.CREATING) {
+  await new Promise(r => setTimeout(r, 2000))
+  mindMapStatus = await sdk.artifacts.get(mindMap.artifactId)
+}
+
+// Download mind map (saves as JSON)
+if (mindMapStatus.state === ArtifactState.READY) {
+  const result = await sdk.artifacts.download(mindMap.artifactId, './downloads')
+  console.log(`Mind map saved to: ${result.filePath}`)
+}
+```
+
+**Note:** Mind maps require you to explicitly specify `sourceIds`. You cannot omit `sourceIds` to use all sources automatically.
+
+#### Study Guides
+
+Generate comprehensive study guides.
+
+```typescript
+import { ArtifactType } from 'notebooklm-kit'
+
+// Create study guide (uses all sources)
+const studyGuide = await sdk.artifacts.create('notebook-id', ArtifactType.STUDY_GUIDE, {
+  title: 'Exam Study Guide',
+  instructions: 'Focus on key concepts, formulas, and important dates',
+  // sourceIds omitted = uses all sources
+})
+
+// Create study guide from specific sources
+const studyGuideFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.STUDY_GUIDE, {
+  title: 'Chapters 1-3 Study Guide',
+  sourceIds: ['source-id-1', 'source-id-2'],
+})
+```
+
+#### Reports
+
+Generate comprehensive reports and documents.
 
 ```typescript
 import { ArtifactType } from 'notebooklm-kit'
@@ -906,35 +711,33 @@ import { ArtifactType } from 'notebooklm-kit'
 const report = await sdk.artifacts.create('notebook-id', ArtifactType.DOCUMENT, {
   title: 'Research Report',
   instructions: 'Comprehensive report covering all key findings',
-  // sourceIds omitted = uses all sources in notebook
+  // sourceIds omitted = uses all sources
 })
 
 // Create report from specific sources
 const reportFromSelected = await sdk.artifacts.create('notebook-id', ArtifactType.DOCUMENT, {
   title: 'Chapter 1-3 Report',
   instructions: 'Report covering chapters 1-3',
-  sourceIds: ['source-id-1', 'source-id-2', 'source-id-3'], // Only these sources
+  sourceIds: ['source-id-1', 'source-id-2'],
 })
 ```
 
-### Manage Artifacts
+#### Manage Artifacts
 
 ```typescript
 // Get artifact details
 const artifact = await sdk.artifacts.get('artifact-id')
 
-// Rename artifact (works for all types including slide decks and audio)
+// Rename artifact
 await sdk.artifacts.rename('artifact-id', 'New Title')
 
-// Delete artifact (works for all types)
+// Delete artifact
 await sdk.artifacts.delete('artifact-id')
 
-// For audio artifacts, use notebook ID for get, delete, and download
-await sdk.artifacts.get('notebook-id', 'notebook-id') // Get audio status
-await sdk.artifacts.delete('notebook-id', 'notebook-id') // Delete audio
-await sdk.artifacts.download('notebook-id', './downloads', 'notebook-id') // Download audio
-
-// Note: Video artifacts use the same delete RPC as audio (V5N4be) - handled automatically
+// For audio artifacts, use notebook ID
+await sdk.artifacts.get('notebook-id', 'notebook-id')
+await sdk.artifacts.delete('notebook-id', 'notebook-id')
+await sdk.artifacts.download('notebook-id', './downloads', 'notebook-id')
 
 // Download artifact (works for all types)
 // - Slide decks: Saves as PDF
@@ -942,105 +745,54 @@ await sdk.artifacts.download('notebook-id', './downloads', 'notebook-id') // Dow
 // - Flashcards: Saves as CSV
 // - Audio: Saves as MP3
 // - Video: Saves as MP4
+// - Mind maps: Saves as JSON
+// - Reports: Saves as JSON
+// - Infographics: Saves as PNG or JSON
 const result = await sdk.artifacts.download('artifact-id', './downloads')
 console.log(`File saved to: ${result.filePath}`)
 ```
 
-## Auto-Refresh
+## Language Support
 
-Keep your session alive automatically. The SDK automatically refreshes your credentials periodically to prevent session expiration during long-running operations.
+NotebookLM supports **80+ languages** for audio, video, quizzes, flashcards, slide decks, and infographics.
 
-### How It Works
-
-When you create a `NotebookLMClient`, auto-refresh is enabled by default:
-
-1. **Initial refresh:** Credentials are refreshed immediately when the client is initialized
-2. **Background refresh:** Subsequent refreshes happen automatically at the configured interval
-3. **Default interval:** 10 minutes (600,000 ms)
-4. **Automatic cleanup:** Call `sdk.dispose()` to stop auto-refresh when done
-
-### Basic Auto-Refresh (Default)
+### Using Languages
 
 ```typescript
-// Auto-refresh is enabled by default with 10-minute interval
-const sdk = new NotebookLMClient({
-  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
-  cookies: process.env.NOTEBOOKLM_COOKIES!,
-  // No need to specify autoRefresh - it's enabled by default
-})
+import { NotebookLMLanguage, getLanguageInfo, isLanguageSupported } from 'notebooklm-kit'
 
-// Credentials are refreshed:
-// - Immediately on initialization
-// - Every 10 minutes automatically
-```
+// Use enum for type safety
+const language = NotebookLMLanguage.HINDI // 'hi'
+const language2 = NotebookLMLanguage.FRENCH // 'fr'
 
-### Configure Refresh Interval
+// Or use ISO 639-1 codes directly
+const language3 = 'es' // Spanish
 
-```typescript
-// Custom 5-minute interval
-const sdk = new NotebookLMClient({
-  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
-  cookies: process.env.NOTEBOOKLM_COOKIES!,
-  autoRefresh: {
-    enabled: true,
-    interval: 5 * 60 * 1000, // 5 minutes (300,000 ms)
-  },
-})
-
-// Custom 15-minute interval
-const sdk = new NotebookLMClient({
-  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
-  cookies: process.env.NOTEBOOKLM_COOKIES!,
-  autoRefresh: {
-    enabled: true,
-    interval: 15 * 60 * 1000, // 15 minutes (900,000 ms)
-  },
-})
-```
-
-### Refresh Interval Guidelines
-
-- **Recommended:** 5-10 minutes (300,000 - 600,000 ms)
-- **Minimum:** 1 minute (60,000 ms) - not recommended, may be too frequent
-- **Maximum:** 30 minutes (1,800,000 ms) - sessions may expire before refresh
-- **Default:** 10 minutes (600,000 ms) - optimal balance
-
-### Disable Auto-Refresh
-
-```typescript
-const sdk = new NotebookLMClient({
-  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
-  cookies: process.env.NOTEBOOKLM_COOKIES!,
-  autoRefresh: false, // Disable auto-refresh
-})
-```
-
-### Manual Refresh
-
-```typescript
-// Manually refresh credentials
-await sdk.refreshCredentials()
-
-// Get refresh manager
-const refreshManager = sdk.getRefreshManager()
-if (refreshManager) {
-  await refreshManager.refresh()
+// Check if language is supported
+if (isLanguageSupported('ta')) {
+  console.log('Tamil is supported!')
 }
+
+// Get language information
+const info = getLanguageInfo(NotebookLMLanguage.HINDI)
+console.log(info.name) // 'Hindi'
+console.log(info.nativeName) // 'हिन्दी'
 ```
 
-### Disable Auto-Refresh
+### Supported Languages Include
 
-```typescript
-const sdk = new NotebookLMClient({
-  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
-  cookies: process.env.NOTEBOOKLM_COOKIES!,
-  autoRefresh: false, // Disable auto-refresh
-})
-```
+- **Major Languages:** English, Spanish, French, German, Italian, Portuguese, Russian, Japanese, Korean, Chinese
+- **Indian Languages:** Hindi, Bengali, Tamil, Telugu, Gujarati, Kannada, Malayalam, Marathi, Punjabi, Urdu
+- **Middle Eastern:** Arabic, Hebrew, Persian, Turkish
+- **Southeast Asian:** Thai, Vietnamese, Indonesian, Malay, Tagalog
+- **European:** Polish, Dutch, Swedish, Danish, Finnish, Norwegian, Czech, Slovak, Hungarian, Romanian
+- **African:** Swahili, Zulu, Afrikaans, Yoruba, Igbo, Hausa
+
+See the `NotebookLMLanguage` enum for the complete list of 80+ supported languages.
 
 ## Quota Management
 
-The SDK automatically enforces NotebookLM's usage limits to prevent API errors. You can check your usage and customize quota behavior.
+The SDK automatically enforces NotebookLM's usage limits to prevent API errors.
 
 ### View Limits
 
@@ -1072,22 +824,10 @@ const usage = sdk.getUsage()
 console.log(`Chats: ${usage.daily.chats}/${NOTEBOOKLM_LIMITS.CHATS_PER_DAY}`)
 console.log(`Audio: ${usage.daily.audioOverviews}/${NOTEBOOKLM_LIMITS.AUDIO_OVERVIEWS_PER_DAY}`)
 console.log(`Video: ${usage.daily.videoOverviews}/${NOTEBOOKLM_LIMITS.VIDEO_OVERVIEWS_PER_DAY}`)
-console.log(`Reports: ${usage.daily.reports}/${NOTEBOOKLM_LIMITS.REPORTS_PER_DAY}`)
-console.log(`Flashcards: ${usage.daily.flashcards}/${NOTEBOOKLM_LIMITS.FLASHCARDS_PER_DAY}`)
-console.log(`Quizzes: ${usage.daily.quizzes}/${NOTEBOOKLM_LIMITS.QUIZZES_PER_DAY}`)
-console.log(`Notebooks: ${usage.notebooks.total}/${NOTEBOOKLM_LIMITS.MAX_NOTEBOOKS}`)
-```
 
-### Check Remaining Quota
-
-```typescript
-// Get remaining quota for a resource
+// Get remaining quota
 const remainingChats = sdk.getRemaining('chats')
-const remainingAudio = sdk.getRemaining('audioOverviews')
-const remainingVideo = sdk.getRemaining('videoOverviews')
-
 console.log(`${remainingChats} chats remaining today`)
-console.log(`${remainingAudio} audio overviews remaining today`)
 ```
 
 ### Customize Quota Behavior
@@ -1095,33 +835,10 @@ console.log(`${remainingAudio} audio overviews remaining today`)
 ```typescript
 // Disable quota enforcement (not recommended)
 const sdk = new NotebookLMClient({
-  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
-  cookies: process.env.NOTEBOOKLM_COOKIES!,
-  enforceQuotas: false, // Disable client-side quota checks
+  authToken: '...',
+  cookies: '...',
+  enforceQuotas: false,
 })
-
-// Get quota manager for advanced usage
-const quotaManager = sdk.getQuotaManager()
-
-// Reset usage (for testing)
-quotaManager.resetUsage()
-```
-
-### Quota Error Handling
-
-```typescript
-import { RateLimitError } from 'notebooklm-kit'
-
-try {
-  await sdk.generation.chat('notebook-id', 'Hello')
-} catch (error) {
-  if (error instanceof RateLimitError) {
-    console.error('Rate limit exceeded:', error.message)
-    console.error(`Used: ${error.used}/${error.limit}`)
-    console.error('Resource:', error.resource)
-    console.error('Resets at:', error.resetTime)
-  }
-}
 ```
 
 ## Error Handling
@@ -1146,259 +863,22 @@ try {
     console.error('Network error:', error.message)
   } else if (error instanceof NotebookLMError) {
     console.error('API error:', error.message)
-  } else {
-    console.error('Unknown error:', error)
   }
 }
 ```
 
-## Language Support
+## Documentation
 
-NotebookLM supports **80+ languages** for audio overviews, video overviews, and artifacts (quizzes, flashcards, slide decks, infographics). Use the `NotebookLMLanguage` enum for type safety, or pass ISO 639-1 language codes directly.
+For detailed operation guides, see:
 
-### Supported Languages
-
-The SDK includes a comprehensive `NotebookLMLanguage` enum with 80+ supported languages:
-
-```typescript
-import { NotebookLMLanguage, getLanguageInfo, isLanguageSupported } from 'notebooklm-kit'
-
-// Use enum for type safety
-const language = NotebookLMLanguage.HINDI // 'hi'
-const language2 = NotebookLMLanguage.FRENCH // 'fr'
-const language3 = NotebookLMLanguage.JAPANESE // 'ja'
-
-// Or use ISO 639-1 codes directly
-const language4 = 'es' // Spanish
-const language5 = 'de' // German
-
-// Check if language is supported
-if (isLanguageSupported('ta')) {
-  console.log('Tamil is supported!')
-}
-
-// Get language information
-const info = getLanguageInfo(NotebookLMLanguage.HINDI)
-console.log(info.name) // 'Hindi'
-console.log(info.nativeName) // 'हिन्दी'
-```
-
-### Common Languages
-
-```typescript
-import { COMMON_LANGUAGES, NotebookLMLanguage } from 'notebooklm-kit'
-
-// Quick access to common languages
-const languages = {
-  english: COMMON_LANGUAGES.ENGLISH,      // 'en'
-  spanish: COMMON_LANGUAGES.SPANISH,      // 'es'
-  french: COMMON_LANGUAGES.FRENCH,        // 'fr'
-  german: COMMON_LANGUAGES.GERMAN,        // 'de'
-  hindi: COMMON_LANGUAGES.HINDI,          // 'hi'
-  chinese: COMMON_LANGUAGES.CHINESE,      // 'zh'
-  japanese: COMMON_LANGUAGES.JAPANESE,    // 'ja'
-  korean: COMMON_LANGUAGES.KOREAN,        // 'ko'
-  arabic: COMMON_LANGUAGES.ARABIC,         // 'ar'
-  // ... and more
-}
-```
-
-### Language Support by Artifact Type
-
-- **Audio Overviews**: 80+ languages supported
-- **Video Overviews**: 80+ languages supported
-- **Quizzes**: 80+ languages supported
-- **Flashcards**: 80+ languages supported
-- **Slide Decks**: 80+ languages supported
-- **Infographics**: 80+ languages supported
-
-### Example: Multi-Language Artifacts
-
-```typescript
-import { ArtifactType, NotebookLMLanguage } from 'notebooklm-kit'
-
-// Create artifacts in different languages
-const englishQuiz = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
-  customization: { language: NotebookLMLanguage.ENGLISH }
-})
-
-const hindiAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
-  customization: { language: NotebookLMLanguage.HINDI }
-})
-
-const spanishVideo = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
-  customization: { language: NotebookLMLanguage.SPANISH }
-})
-
-const frenchFlashcards = await sdk.artifacts.create('notebook-id', ArtifactType.FLASHCARDS, {
-  customization: { language: NotebookLMLanguage.FRENCH }
-})
-```
-
-### Complete Language List
-
-The `NotebookLMLanguage` enum includes languages from:
-- **Major World Languages**: English, Spanish, French, German, Italian, Portuguese, Russian, Japanese, Korean, Chinese
-- **Indian Languages**: Hindi, Bengali, Tamil, Telugu, Gujarati, Kannada, Malayalam, Marathi, Punjabi, Urdu, and more
-- **Middle Eastern Languages**: Arabic, Hebrew, Persian, Turkish, and more
-- **Southeast Asian Languages**: Thai, Vietnamese, Indonesian, Malay, Tagalog, and more
-- **European Languages**: Polish, Dutch, Swedish, Danish, Finnish, Norwegian, Czech, Slovak, Hungarian, Romanian, and more
-- **African Languages**: Swahili, Zulu, Afrikaans, Yoruba, Igbo, Hausa, and more
-
-See the `NotebookLMLanguage` enum in the SDK for the complete list of 80+ supported languages.
-
-## Advanced Usage
-
-### Direct RPC Calls
-
-For advanced use cases, you can make direct RPC calls:
-
-```typescript
-import { RPCMethods } from 'notebooklm-kit'
-
-// Direct RPC call
-const response = await sdk.rpc(
-  RPCMethods.RPC_LIST_RECENTLY_VIEWED_PROJECTS,
-  []
-)
-
-// Get RPC client for more control
-const rpcClient = sdk.getRPCClient()
-```
-
-### Batch Operations
-
-```typescript
-// Batch add sources
-const sourceIds = await sdk.sources.addBatch('notebook-id', {
-  sources: [
-    { type: 'url', url: 'https://example.com/1' },
-    { type: 'url', url: 'https://example.com/2' },
-    { type: 'text', title: 'Notes', content: '...' },
-  ],
-})
-```
-
-### Type Safety
-
-All methods are fully typed with TypeScript:
-
-```typescript
-import type {
-  Notebook,
-  Source,
-  Note,
-  Artifact,
-  AudioOverview,
-  VideoOverview,
-} from 'notebooklm-kit'
-
-const notebook: Notebook = await sdk.notebooks.get('id')
-const sources: Source[] = await sdk.sources.list('id')
-const notes: Note[] = await sdk.notes.list('id')
-const artifacts: Artifact[] = await sdk.artifacts.list('id')
-```
-
-## Client Structure
-
-The NotebookLM client organizes all features into logical services:
-
-```typescript
-const sdk = new NotebookLMClient({ ... })
-
-// Notebook operations
-sdk.notebooks.list()
-sdk.notebooks.create({ title: 'Research', emoji: '📚' })
-sdk.notebooks.get('notebook-id')
-sdk.notebooks.update('notebook-id', { title: 'New Title' })
-sdk.notebooks.delete('notebook-id')
-
-// Source operations
-sdk.sources.addFromURL('notebook-id', { url: 'https://example.com' })
-sdk.sources.addFromText('notebook-id', { title: 'Notes', content: '...' })
-sdk.sources.addFromFile('notebook-id', { content: buffer, fileName: 'doc.pdf' })
-sdk.sources.addYouTube('notebook-id', { urlOrId: 'video-id' })
-sdk.sources.addGoogleDrive('notebook-id', { fileId: 'file-id' })
-sdk.sources.searchWebAndWait('notebook-id', { query: 'AI research' })
-sdk.sources.addBatch('notebook-id', { sources: [...] })
-
-// Note operations
-sdk.notes.list('notebook-id')
-sdk.notes.create('notebook-id', { title: 'Note', content: '...' })
-sdk.notes.update('notebook-id', 'note-id', { content: 'Updated' })
-sdk.notes.delete('notebook-id', 'note-id')
-
-// Generation operations
-sdk.generation.chat('notebook-id', 'What are the key findings?')
-sdk.generation.generateNotebookGuide('notebook-id')
-sdk.generation.generateOutline('notebook-id')
-sdk.generation.generateReportSuggestions('notebook-id')
-
-// Artifact operations
-sdk.artifacts.list('notebook-id')
-sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, { instructions: '...' })
-sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, { instructions: '...' })
-sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, { instructions: '...' })
-sdk.artifacts.download('artifact-id', './downloads')
-sdk.artifacts.delete('artifact-id')
-
-// Utility methods
-sdk.getUsage()                    // Check quota usage
-sdk.getRemaining('chats')          // Check remaining quota
-sdk.refreshCredentials()           // Manually refresh session
-sdk.dispose()                      // Clean up resources
-```
-
-## API Reference
-
-### Core Methods
-
-| Method | Description |
-|--------|-------------|
-| `sdk.notebooks.list()` | List all notebooks |
-| `sdk.notebooks.get(id)` | Get notebook by ID |
-| `sdk.notebooks.create(options)` | Create new notebook |
-| `sdk.notebooks.update(id, options)` | Update notebook |
-| `sdk.notebooks.delete(id)` | Delete notebook |
-| `sdk.sources.addFromURL(id, options)` | Add source from URL |
-| `sdk.sources.addFromText(id, options)` | Add source from text |
-| `sdk.sources.addFromFile(id, options)` | Add source from file |
-| `sdk.sources.addYouTube(id, options)` | Add YouTube video |
-| `sdk.sources.addGoogleDrive(id, options)` | Add Google Drive file |
-| `sdk.sources.searchWeb(id, options)` | Search web/Drive |
-| `sdk.sources.searchWebAndWait(id, options)` | Search and wait for results |
-| `sdk.sources.addDiscovered(id, options)` | Add discovered sources |
-| `sdk.sources.addBatch(id, options)` | Batch add sources |
-| `sdk.sources.pollProcessing(id)` | Check source processing status |
-| `sdk.sources.delete(id, sourceId)` | Delete source |
-| `sdk.notes.list(id)` | List notes |
-| `sdk.notes.create(id, options)` | Create note |
-| `sdk.notes.update(id, noteId, options)` | Update note |
-| `sdk.notes.delete(id, noteId)` | Delete note |
-| `sdk.generation.chat(id, prompt, sourceIds?)` | Chat with notebook |
-| `sdk.generation.generateDocumentGuides(id)` | Generate document guides |
-| `sdk.generation.generateNotebookGuide(id)` | Generate notebook guide |
-| `sdk.generation.generateOutline(id)` | Generate outline |
-| `sdk.generation.generateReportSuggestions(id)` | Generate report suggestions |
-| `sdk.generation.generateMagicView(id, sourceIds)` | Generate magic view |
-| `sdk.artifacts.list(id)` | List artifacts |
-| `sdk.artifacts.get(id, notebookId?)` | Get artifact |
-| `sdk.artifacts.create(id, ArtifactType.AUDIO, options)` | Create audio overview |
-| `sdk.artifacts.create(id, ArtifactType.VIDEO, options)` | Create video overview |
-| `sdk.artifacts.create(id, ArtifactType.QUIZ, options)` | Create quiz |
-| `sdk.artifacts.create(id, ArtifactType.FLASHCARDS, options)` | Create flashcards |
-| `sdk.artifacts.create(id, ArtifactType.STUDY_GUIDE, options)` | Create study guide |
-| `sdk.artifacts.create(id, ArtifactType.MIND_MAP, options)` | Create mind map |
-| `sdk.artifacts.create(id, ArtifactType.INFOGRAPHIC, options)` | Create infographic |
-| `sdk.artifacts.create(id, ArtifactType.SLIDE_DECK, options)` | Create slide deck |
-| `sdk.artifacts.create(id, ArtifactType.DOCUMENT, options)` | Create report/document |
-| `sdk.artifacts.download(id, folderPath, notebookId?)` | Download artifact |
-| `sdk.artifacts.rename(id, title)` | Rename artifact |
-| `sdk.artifacts.delete(id, notebookId?)` | Delete artifact |
-| `sdk.getUsage()` | Get usage statistics |
-| `sdk.getRemaining(resource)` | Get remaining quota |
-| `sdk.refreshCredentials()` | Manually refresh credentials |
-| `sdk.dispose()` | Clean up and stop auto-refresh |
+- [Quiz Operations](./rpc/QUIZ_OPERATIONS.md)
+- [Flashcard Operations](./rpc/FLASHCARD_OPERATIONS.md)
+- [Slide Deck Operations](./rpc/SLIDE_DECK_OPERATIONS.md)
+- [Audio Operations](./rpc/AUDIO_OPERATIONS.md)
+- [Video Operations](./rpc/VIDEO_OPERATIONS.md)
+- [Mind Map Operations](./rpc/MIND_MAP_OPERATIONS.md)
+- [Report Operations](./rpc/REPORT_OPERATIONS.md)
+- [Infographic Operations](./rpc/INFOGRAPHIC_OPERATIONS.md)
 
 ## Requirements
 
