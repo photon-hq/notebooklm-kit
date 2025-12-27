@@ -792,8 +792,8 @@ export class ArtifactsService {
     if (notebookId && artifactId === notebookId) {
       // Audio artifacts use a different RPC method
       data = await this.downloadAudio(artifactId);
-    } else if (artifact.type === ArtifactType.QUIZ) {
-      // Quiz artifacts use v9rmvd RPC for download
+    } else if (artifact.type === ArtifactType.QUIZ || artifact.type === ArtifactType.FLASHCARDS) {
+      // Quiz and Flashcard artifacts use v9rmvd RPC for download
       const response = await this.rpc.call(
         RPC.RPC_GET_QUIZ_DATA,
         [artifactId]
@@ -937,11 +937,13 @@ export class ArtifactsService {
       
       const sourceIdsFlat = formattedSourceIds.map(arr => arr[0]); // Flatten from [[[id]]] to [[id]]
       
-      (args[2] as any[])[8] = [
+      // CRITICAL: Audio customization is at INDEX 6, not 8!
+      // Working structure from manual request: [null, [null, null, null, [[id1], [id2]], "en", null, length]]
+      (args[2] as any[])[6] = [
         null,
         [
           null,
-          rpcFormat, // Format (1=Deep dive, 2=Brief, 3=Critique, 4=Debate)
+          null,
           null,
           sourceIdsFlat, // [[id1], [id2]] format - pass sourceIds here too
           audioCustom?.language || 'en', // Language
@@ -1328,8 +1330,21 @@ export class ArtifactsService {
   
   private parseArtifactResponse(response: any): Artifact {
     try {
-      if (Array.isArray(response) && response.length > 0) {
-        const artifact = this.parseArtifactData(response[0]);
+      let data = response;
+      
+      // Handle string response (JSON)
+      if (typeof response === 'string') {
+        data = JSON.parse(response);
+      }
+      
+      // Navigate through nested arrays: [[artifact_data]]
+      if (Array.isArray(data) && data.length > 0) {
+        // If first element is an array, unwrap it
+        if (Array.isArray(data[0])) {
+          data = data[0];
+        }
+        
+        const artifact = this.parseArtifactData(data);
         if (artifact) {
           return artifact;
         }
@@ -1350,26 +1365,50 @@ export class ArtifactsService {
       artifactId: '',
     };
     
+    // Response structure: [artifactId, title?, type, sources?, state, ...]
     // Parse artifact ID (first element)
     if (data[0] && typeof data[0] === 'string') {
       artifact.artifactId = data[0];
     }
     
-    // Parse artifact type (second element)
-    if (data.length > 1 && typeof data[1] === 'number') {
-      artifact.type = data[1] as ArtifactType;
+    // Parse title (second element, if string)
+    if (data.length > 1 && typeof data[1] === 'string') {
+      artifact.title = data[1];
     }
     
-    // Parse artifact state (third element)
-    if (data.length > 2 && typeof data[2] === 'number') {
-      artifact.state = data[2] as ArtifactState;
+    // Parse artifact type - could be at index 2 or another position
+    let typeIndex = -1;
+    for (let i = 1; i < Math.min(data.length, 5); i++) {
+      if (typeof data[i] === 'number' && data[i] >= 1 && data[i] <= 10) {
+        typeIndex = i;
+        break;
+      }
     }
     
-    // Parse sources (fourth element)
-    if (data.length > 3 && Array.isArray(data[3])) {
-      artifact.sourceIds = data[3]
-        .filter((s: any) => typeof s === 'string')
-        .map((s: string) => s);
+    if (typeIndex >= 0) {
+      artifact.type = data[typeIndex] as ArtifactType;
+    }
+    
+    // Parse state - usually after type or at index 4
+    let stateIndex = typeIndex >= 0 ? typeIndex + 2 : 4;
+    if (data.length > stateIndex && typeof data[stateIndex] === 'number') {
+      artifact.state = data[stateIndex] as ArtifactState;
+    } else {
+      // Default to CREATING for new artifacts
+      artifact.state = ArtifactState.CREATING;
+    }
+    
+    // Parse sources - look for nested array structure
+    for (let i = 0; i < data.length; i++) {
+      if (Array.isArray(data[i]) && data[i].length > 0) {
+        // Check if this looks like sources: [[[sourceId1]], [[sourceId2]]]
+        if (Array.isArray(data[i][0]) && Array.isArray(data[i][0][0])) {
+          artifact.sourceIds = data[i]
+            .map((s: any) => Array.isArray(s) && Array.isArray(s[0]) ? s[0][0] : null)
+            .filter((s: any) => typeof s === 'string');
+          break;
+        }
+      }
     }
     
     // Only return if we have an ID
@@ -1559,15 +1598,15 @@ export class ArtifactsService {
       }
     }
     
-    // Parse CSV into flashcards array
+    // Parse CSV into flashcards array with proper quote handling
     if (csv) {
       const lines = csv.split('\n').filter(line => line.trim());
       for (const line of lines) {
-        const parts = line.split(',').map(p => p.trim());
-        if (parts.length >= 2) {
+        const parsed = this.parseCSVLine(line);
+        if (parsed.length >= 2) {
           flashcards.push({
-            question: parts[0],
-            answer: parts.slice(1).join(','), // Handle answers with commas
+            question: parsed[0],
+            answer: parsed.slice(1).join(','), // Handle answers with commas
           });
         }
       }
@@ -1577,6 +1616,42 @@ export class ArtifactsService {
       csv,
       flashcards: flashcards.length > 0 ? flashcards : undefined,
     };
+  }
+  
+  /**
+   * Parse a CSV line handling quoted fields properly
+   */
+  private parseCSVLine(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+      
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          // Escaped quote
+          current += '"';
+          i++; // Skip next quote
+        } else {
+          // Toggle quote state
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        // Field separator
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    
+    // Push last field
+    result.push(current.trim());
+    
+    return result;
   }
   
   /**

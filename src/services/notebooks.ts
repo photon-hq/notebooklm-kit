@@ -386,21 +386,45 @@ export class NotebooksService {
         parsedResponse = JSON.parse(response);
       }
       
-      // Handle nested array structure: [[title, null, projectId, ...]]
+      // Handle nested array structure: [[title, sources[], projectId, ...]]
       if (Array.isArray(parsedResponse) && parsedResponse.length > 0) {
         let data = parsedResponse;
         
-        // If first element is an array, it's nested: [[title, null, projectId, ...]]
+        // If first element is an array, it's nested: [[title, sources[], projectId, ...]]
         if (Array.isArray(parsedResponse[0])) {
           data = parsedResponse[0];
         }
         
-        // Extract title (index 0) and emoji (index 1, usually null, so we use default)
+        // Extract title (index 0)
+        const title = data[0] || '';
+        const emoji = data[1] || '📄';
+        
+        // Extract source IDs from index 1 (sources array)
+        // Structure: [[["source-id"], "filename", metadata...], ...]
+        const sources: any[] = [];
+        if (Array.isArray(data[1])) {
+          for (const sourceData of data[1]) {
+            if (Array.isArray(sourceData) && sourceData.length > 0) {
+              // Source ID is in first nested array: [[sourceId]]
+              if (Array.isArray(sourceData[0]) && sourceData[0].length > 0) {
+                const sourceId = sourceData[0][0];
+                const filename = sourceData[1] || 'Untitled';
+                if (typeof sourceId === 'string') {
+                  sources.push({
+                    sourceId,
+                    title: filename,
+                  });
+                }
+              }
+            }
+          }
+        }
+        
         return {
           projectId: notebookId,
-          title: data[0] || '',
-          emoji: data[1] || '📄',
-          sources: [], // Parse sources if included
+          title,
+          emoji,
+          sources: sources.length > 0 ? sources : undefined,
         };
       }
       

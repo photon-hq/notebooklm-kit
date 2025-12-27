@@ -13,6 +13,7 @@ export interface RPCClientConfig {
   authToken: string;
   cookies: string;
   debug?: boolean;
+  authUser?: string;
   headers?: Record<string, string>;
   urlParams?: Record<string, string>;
   maxRetries?: number;
@@ -52,6 +53,7 @@ export class RPCClient {
         'bl': 'boq_labs-tailwind-frontend_20250129.00_p0',
         'f.sid': '-7121977511756781186',
         'hl': 'en',
+        'authuser': config.authUser || '0', // Default: 0, configurable for multi-account support
         ...config.urlParams,
       },
       debug: config.debug,

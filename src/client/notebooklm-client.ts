@@ -204,6 +204,7 @@ export class NotebookLMClient {
       authToken: config.authToken,
       cookies: config.cookies,
       debug: config.debug,
+      authUser: config.authUser,
       headers: config.headers,
       urlParams: config.urlParams,
       maxRetries: config.maxRetries,

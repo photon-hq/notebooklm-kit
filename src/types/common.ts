@@ -15,6 +15,12 @@ export interface NotebookLMConfig {
   /** Enable debug logging */
   debug?: boolean;
   
+  /** Google account user index (0, 1, 2, etc.) - for multi-account support 
+   * Default: '0' 
+   * Use '1' or '2' if you have multiple Google accounts signed in
+   */
+  authUser?: string;
+  
   /** Custom HTTP headers */
   headers?: Record<string, string>;
   
