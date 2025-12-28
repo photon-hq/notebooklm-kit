@@ -131,5 +131,12 @@ export class RPCClient {
   getConfig(): RPCClientConfig {
     return { ...this.config };
   }
+  
+  /**
+   * Get the current cookies
+   */
+  getCookies(): string {
+    return this.config.cookies;
+  }
 }
 

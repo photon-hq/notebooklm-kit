@@ -248,7 +248,10 @@ export interface QuizQuestion {
   question: string;
   options: string[];
   correctAnswer: number; // Index of correct option
-  explanation?: string;
+  explanation?: string; // Deprecated: use reasoning instead
+  hint?: string; // Hint for the question
+  reasoning?: string; // Explanation/rationale for the correct answer
+  optionReasons?: string[]; // Rationales for all options (in order), both correct and incorrect
 }
 
 /**

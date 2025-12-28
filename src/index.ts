@@ -13,6 +13,11 @@ export { SourcesService } from './services/sources.js';
 export { NotesService } from './services/notes.js';
 export { ArtifactsService } from './services/artifacts.js';
 export { GenerationService } from './services/generation.js';
+export { fetchQuizData } from './services/quiz.js';
+export { fetchFlashcardData } from './services/flashcards.js';
+export type { ParsedFlashcardData } from './services/flashcards.js';
+export { fetchInfographic } from './services/infographics.js';
+export type { InfographicImageData, FetchInfographicOptions } from './services/infographics.js';
 
 // Types
 export type {

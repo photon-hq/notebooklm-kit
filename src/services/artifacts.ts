@@ -256,12 +256,35 @@ export class ArtifactsService {
       return this.parseAudioResponse(response, artifactId);
     }
     
-    const response = await this.rpc.call(
-      RPC.RPC_GET_ARTIFACT,
-      [artifactId]
-    );
-    
-    return this.parseArtifactResponse(response);
+    // For regular artifacts, try RPC_GET_ARTIFACT first
+    // NOTE: RPC_GET_ARTIFACT (BnLyuf) returns 400 for quiz/flashcard artifacts
+    // If it fails and we have notebookId, fall back to using list() to find the artifact
+    try {
+      const response = await this.rpc.call(
+        RPC.RPC_GET_ARTIFACT,
+        [artifactId],
+        notebookId // Pass notebookId to set source-path correctly
+      );
+      
+      return this.parseArtifactResponse(response);
+    } catch (error: any) {
+      // If RPC_GET_ARTIFACT fails (likely 400 for quiz/flashcards) and we have notebookId,
+      // fall back to using list() to find the artifact metadata
+      if (notebookId && (error?.message?.includes('400') || error?.statusCode === 400)) {
+        const artifacts = await this.list(notebookId);
+        const artifact = artifacts.find(a => a.artifactId === artifactId);
+        if (artifact) {
+          return artifact;
+        }
+        // If not found in list, throw the original error
+        throw new NotebookLMError(
+          `Artifact ${artifactId} not found. RPC_GET_ARTIFACT failed and artifact not found in list.`,
+          error
+        );
+      }
+      // Re-throw if we don't have notebookId or it's a different error
+      throw error;
+    }
   }
   
   /**
@@ -780,35 +803,69 @@ export class ArtifactsService {
   async download(
     artifactId: string, 
     folderPath: string,
-    notebookId?: string
+    notebookId?: string,
+    artifactType?: ArtifactType
   ): Promise<{ filePath: string; data: QuizData | FlashcardData | AudioArtifact | VideoArtifact | any }> {
-    // Get the artifact first to determine its type
-    const artifact = notebookId && artifactId === notebookId 
-      ? await this.get(artifactId, notebookId)
-      : await this.get(artifactId);
+    // Determine artifact type and get metadata
+    let artifact: Artifact;
     
-    // Download the data
-    let data: QuizData | FlashcardData | AudioArtifact | VideoArtifact | any;
+    if (notebookId && artifactId === notebookId) {
+      // Audio artifacts - get() works for them
+      artifact = await this.get(artifactId, notebookId);
+    } else if (artifactType === ArtifactType.QUIZ || artifactType === ArtifactType.FLASHCARDS) {
+      // For quiz/flashcard, get metadata from list() if notebookId is available
+      // RPC_GET_ARTIFACT (BnLyuf) returns 400 for quiz/flashcards, so we don't use it
+      if (notebookId) {
+        const artifacts = await this.list(notebookId);
+        const found = artifacts.find(a => a.artifactId === artifactId);
+        if (found) {
+          artifact = found;
+        } else {
+          // Fallback: create minimal artifact object
+          artifact = {
+            artifactId,
+            type: artifactType,
+            state: ArtifactState.READY,
+          };
+        }
+      } else {
+        // No notebookId provided, use the provided type
+        artifact = {
+          artifactId,
+          type: artifactType,
+          state: ArtifactState.READY,
+        };
+      }
+    } else {
+      // For other artifacts, get() works fine
+      artifact = await this.get(artifactId, notebookId);
+    }
+    
+    // Download the data - return raw response without parsing
+    let data: any;
     if (notebookId && artifactId === notebookId) {
       // Audio artifacts use a different RPC method
       data = await this.downloadAudio(artifactId);
     } else if (artifact.type === ArtifactType.QUIZ || artifact.type === ArtifactType.FLASHCARDS) {
-      // Quiz and Flashcard artifacts use v9rmvd RPC for download
+      // Quiz and Flashcard artifacts use v9rmvd (RPC_GET_QUIZ_DATA) for download
+      // RPC_GET_ARTIFACT (BnLyuf) doesn't work for quiz/flashcards
       const response = await this.rpc.call(
         RPC.RPC_GET_QUIZ_DATA,
-        [artifactId]
+        [artifactId],
+        notebookId // Pass notebookId to set correct source-path
       );
-      data = this.parseDownloadResponse(response, artifact.type);
+      data = response; // Raw response, no parsing
     } else {
-      // Get full artifact data for other types
+      // Other artifacts use RPC_GET_ARTIFACT (BnLyuf) for download
       const response = await this.rpc.call(
         RPC.RPC_GET_ARTIFACT,
-        [artifactId]
+        [artifactId],
+        notebookId // Pass notebookId to set correct source-path
       );
-      data = this.parseDownloadResponse(response, artifact.type);
+      data = response; // Raw response
     }
     
-    // Save to file based on artifact type
+    // Save to file based on artifact type (will format appropriately)
     const filePath = await this.saveArtifactToFile(artifact, data, folderPath);
     
     return { filePath, data };
@@ -819,14 +876,14 @@ export class ArtifactsService {
   // ========================================================================
   
   /**
-   * Maps ArtifactType enum to API type numbers
+   * Maps ArtifactType enum to API type numbers (for creation)
    */
   private getApiTypeNumber(artifactType: ArtifactType): number {
     switch (artifactType) {
       case ArtifactType.QUIZ:
         return 4;
       case ArtifactType.FLASHCARDS:
-        return 4; // Flashcards use same API type as Quiz
+        return 4; // Flashcards use same API type as Quiz for creation
       case ArtifactType.INFOGRAPHIC:
         return 7;
       case ArtifactType.SLIDE_DECK:
@@ -837,6 +894,147 @@ export class ArtifactsService {
         return 1;
       default:
         return artifactType;
+    }
+  }
+  
+  /**
+   * Maps API response type numbers to ArtifactType enum (for parsing list/get responses)
+   * Note: Both Quiz and Flashcards use type 4 in API responses, so we need to differentiate
+   * them by looking at the customization data structure or other fields.
+   */
+  private mapApiTypeToArtifactType(apiType: number, artifactData: any[]): ArtifactType {
+    // Both Quiz and Flashcards use type 4 in the API response
+    // We need to differentiate them by looking at the customization structure or content patterns
+    if (apiType === 4) {
+      // First, try to find customization data structure
+      // Quiz customization has 8 elements in the inner array (7 nulls + difficulty array at index 7)
+      // Flashcard customization has 7 elements in the inner array (6 nulls + difficulty array at index 6)
+      const possibleIndices = [9, 10, 8, 11, 12];
+      
+      for (const index of possibleIndices) {
+        if (Array.isArray(artifactData) && artifactData.length > index && artifactData[index]) {
+          const customization = artifactData[index];
+          
+          // Check if it's the customization array structure: [null, [innerArray]]
+          if (Array.isArray(customization) && customization.length > 1 && Array.isArray(customization[1])) {
+            const innerArray = customization[1];
+            
+            // Quiz has 8 elements with difficulty array at index 7
+            if (innerArray.length === 8 && innerArray[7] && Array.isArray(innerArray[7])) {
+              return ArtifactType.QUIZ;
+            }
+            
+            // Flashcards have 7 elements with difficulty array at index 6
+            if (innerArray.length === 7 && innerArray[6] && Array.isArray(innerArray[6])) {
+              return ArtifactType.FLASHCARDS;
+            }
+          }
+        }
+      }
+      
+      // Additional fallback: search through the entire array for customization-like structures
+      if (Array.isArray(artifactData)) {
+        for (let i = 0; i < artifactData.length; i++) {
+          const item = artifactData[i];
+          if (Array.isArray(item) && item.length > 1 && Array.isArray(item[1])) {
+            const innerArray = item[1];
+            // Quiz pattern: 8 elements, difficulty array at index 7
+            if (innerArray.length === 8 && innerArray[7] && Array.isArray(innerArray[7])) {
+              return ArtifactType.QUIZ;
+            }
+            // Flashcard pattern: 7 elements, difficulty array at index 6
+            if (innerArray.length === 7 && innerArray[6] && Array.isArray(innerArray[6])) {
+              return ArtifactType.FLASHCARDS;
+            }
+          }
+        }
+      }
+      
+      // Second fallback: search for content patterns in strings (including JSON stringified data)
+      // This helps detect flashcards vs quiz even in list responses that might have JSON strings
+      const searchForContentPattern = (obj: any, depth: number = 0): 'quiz' | 'flashcards' | null => {
+        if (depth > 10) return null; // Prevent deep recursion, but allow deeper search
+        
+        if (typeof obj === 'string') {
+          // Check for flashcard patterns (more specific, check first)
+          // Look for "flashcards" in various encodings/contexts
+          const lowerStr = obj.toLowerCase();
+          if (lowerStr.includes('flashcards') || 
+              obj.includes('"flashcards"') || 
+              obj.includes('&quot;flashcards&quot;') ||
+              (obj.includes('data-app-data') && obj.includes('flashcards'))) {
+            return 'flashcards';
+          }
+          // Check for quiz patterns
+          // Use word boundaries or context to avoid false positives like "question" containing "quiz"
+          if ((obj.includes('"quiz"') && !obj.includes('"flashcards"')) || 
+              (obj.includes('&quot;quiz&quot;') && !obj.includes('&quot;flashcards&quot;')) ||
+              (obj.includes('data-app-data') && obj.includes('"quiz"') && !obj.includes('flashcards'))) {
+            return 'quiz';
+          }
+        } else if (Array.isArray(obj)) {
+          for (const item of obj) {
+            const result = searchForContentPattern(item, depth + 1);
+            if (result) return result;
+          }
+        } else if (obj && typeof obj === 'object') {
+          for (const key in obj) {
+            const result = searchForContentPattern(obj[key], depth + 1);
+            if (result) return result;
+          }
+        }
+        
+        return null;
+      };
+      
+      // Search the data structure
+      let contentPattern = searchForContentPattern(artifactData);
+      
+      // Also try searching the stringified version (in case data is in JSON string form)
+      if (!contentPattern) {
+        try {
+          const stringified = JSON.stringify(artifactData);
+          contentPattern = searchForContentPattern(stringified);
+        } catch {
+          // If stringify fails, continue
+        }
+      }
+      
+      if (contentPattern === 'flashcards') {
+        return ArtifactType.FLASHCARDS;
+      }
+      if (contentPattern === 'quiz') {
+        return ArtifactType.QUIZ;
+      }
+      
+      // If we still can't differentiate, default to QUIZ (to preserve existing behavior)
+      // This should be rare if the customization data or content patterns are present
+      return ArtifactType.QUIZ;
+    }
+    
+    // For other types, map based on known patterns
+    switch (apiType) {
+      case 1:
+        return ArtifactType.DOCUMENT;
+      case 2:
+        return ArtifactType.PRESENTATION;
+      case 3:
+        return ArtifactType.OUTLINE;
+      case 5:
+        return ArtifactType.QUIZ; // Quiz enum value is 5
+      case 6:
+        return ArtifactType.FLASHCARDS; // Flashcard enum value is 6
+      case 7:
+        return ArtifactType.INFOGRAPHIC;
+      case 8:
+        return ArtifactType.SLIDE_DECK;
+      case 10:
+        return ArtifactType.AUDIO;
+      case 11:
+        return ArtifactType.VIDEO;
+      default:
+        // If no match, return the number as-is (it might still work for comparison)
+        return apiType as ArtifactType;
     }
   }
   
@@ -1304,18 +1502,47 @@ export class ArtifactsService {
     try {
       const artifacts: Artifact[] = [];
       
-      if (Array.isArray(response)) {
-        let artifactArray: any[] = [];
+      // Handle string response (JSON string that needs parsing)
+      let data = response;
+      if (typeof response === 'string') {
+        try {
+          data = JSON.parse(response);
+        } catch {
+          // If parsing fails, try to handle as raw string
+          data = response;
+        }
+      }
+      
+      if (Array.isArray(data)) {
+        // Response might be nested: [[[...]]] or [[...]]
+        // Keep unwrapping until we find an array where first element looks like an artifact
+        let unwrappedData: any = data;
         
-        // Response might be wrapped
-        if (response[0] && Array.isArray(response[0])) {
-          artifactArray = response[0];
-        } else {
-          artifactArray = response;
+        // Keep unwrapping while we have nested arrays
+        while (Array.isArray(unwrappedData) && unwrappedData.length > 0 && Array.isArray(unwrappedData[0])) {
+          // Check if data[0][0] looks like an artifact (starts with string ID)
+          // If the first element of the first nested array is a string (artifact ID), stop unwrapping
+          const firstItem = unwrappedData[0];
+          if (Array.isArray(firstItem) && firstItem.length > 0 && typeof firstItem[0] === 'string' && firstItem[0].length > 10) {
+            // This looks like an artifact array, stop unwrapping
+            break;
+          }
+          unwrappedData = unwrappedData[0];
         }
         
+        // Now unwrappedData should be an array of artifacts: [[artifact1], [artifact2], ...] or [artifact1, artifact2, ...]
+        const artifactArray: any[] = Array.isArray(unwrappedData) ? unwrappedData : [];
+        
         for (const item of artifactArray) {
-          const artifact = this.parseArtifactData(item);
+          // Handle both cases: item is already an array [artifact_data] or item is nested [[artifact_data]]
+          let artifactData = item;
+          
+          // If item is nested array, unwrap once more
+          if (Array.isArray(item) && item.length > 0 && Array.isArray(item[0])) {
+            artifactData = item[0];
+          }
+          
+          const artifact = this.parseArtifactData(artifactData);
           if (artifact) {
             artifacts.push(artifact);
           }
@@ -1386,13 +1613,30 @@ export class ArtifactsService {
     }
     
     if (typeIndex >= 0) {
-      artifact.type = data[typeIndex] as ArtifactType;
+      const apiType = data[typeIndex] as number;
+      // Map API response type number to ArtifactType enum
+      artifact.type = this.mapApiTypeToArtifactType(apiType, data);
     }
     
-    // Parse state - usually after type or at index 4
-    let stateIndex = typeIndex >= 0 ? typeIndex + 2 : 4;
+    // Parse state - structure is [id, title, type, sources, state, ...]
+    // State is at index 4 (after type at index 2, sources at index 3)
+    // But we need to check what the actual state value means
+    // State 1 = CREATING, State 2 = READY, State 3 might be something else (not necessarily FAILED)
+    let stateIndex = 4;
     if (data.length > stateIndex && typeof data[stateIndex] === 'number') {
-      artifact.state = data[stateIndex] as ArtifactState;
+      const stateValue = data[stateIndex] as number;
+      // Map state values: 1=CREATING, 2=READY, 3 might be READY in some contexts or FAILED
+      // Based on user feedback, state 3 seems to mean READY, not FAILED
+      if (stateValue === 1) {
+        artifact.state = ArtifactState.CREATING;
+      } else if (stateValue === 2 || stateValue === 3) {
+        // Both 2 and 3 seem to indicate READY state
+        artifact.state = ArtifactState.READY;
+      } else if (stateValue === 0) {
+        artifact.state = ArtifactState.UNKNOWN;
+      } else {
+        artifact.state = ArtifactState.FAILED;
+      }
     } else {
       // Default to CREATING for new artifacts
       artifact.state = ArtifactState.CREATING;
@@ -1721,13 +1965,35 @@ export class ArtifactsService {
       case ArtifactType.QUIZ:
         fileExtension = '.json';
         fileName = `quiz_${baseFileName}${fileExtension}`;
+        // Raw response - stringify as JSON
         fileContent = JSON.stringify(data, null, 2);
         break;
         
       case ArtifactType.FLASHCARDS:
         fileExtension = '.csv';
         fileName = `flashcards_${baseFileName}${fileExtension}`;
-        fileContent = (data as FlashcardData).csv || '';
+        // Raw response - extract CSV string (may be nested in response structure)
+        if (typeof data === 'string') {
+          fileContent = data;
+        } else if (data && typeof data === 'object') {
+          // Try common response patterns to find CSV string
+          if (typeof (data as any).csv === 'string') {
+            fileContent = (data as any).csv;
+          } else if (typeof (data as any).data === 'string') {
+            fileContent = (data as any).data;
+          } else if (typeof (data as any).content === 'string') {
+            fileContent = (data as any).content;
+          } else if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'string') {
+            fileContent = data[0];
+          } else if (Array.isArray(data) && data.length > 0 && typeof (data[0] as any)?.csv === 'string') {
+            fileContent = (data[0] as any).csv;
+          } else {
+            // Fallback: stringify if we can't find CSV
+            fileContent = JSON.stringify(data, null, 2);
+          }
+        } else {
+          fileContent = String(data || '');
+        }
         break;
         
       case ArtifactType.MIND_MAP:
