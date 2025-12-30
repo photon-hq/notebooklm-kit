@@ -153,7 +153,7 @@ await sdk.refreshCredentials()
 
 ## Notebooks
 
-Examples: | | | | | |
+Examples: [notebook-list.ts](examples/notebook-list.ts) | [notebook-get.ts](examples/notebook-get.ts) | [notebook-create.ts](examples/notebook-create.ts) | [notebook-update.ts](examples/notebook-update.ts) | [notebook-delete.ts](examples/notebook-delete.ts) | [notebook-share.ts](examples/notebook-share.ts)
 
 ### List Notebooks
 

@@ -37,7 +37,7 @@ export interface SharingSettings {
  * Options for creating a notebook
  */
 export interface CreateNotebookOptions {
-  title: string; /** Notebook title */
+  title?: string; /** Notebook title (optional, auto-generated if empty) */
   description?: string; /** Initial description (optional) */
 }
 
