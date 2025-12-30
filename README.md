@@ -2348,35 +2348,38 @@ const note = await sdk.notes.create('notebook-id', {
 - `notebookId: string` - The notebook ID (required)
 - `noteId: string` - The note ID (required)
 - `options: UpdateNoteOptions`
-  - `title?: string` - New title (optional)
-  - `content?: string` - New content (optional)
-  - `tags?: string[]` - New tags (optional)
+  - `title?: string` - New title (optional, defaults to empty string)
+  - `content?: string` - New content (optional, defaults to empty string)
+  - `tags?: string[]` - New tags (optional, defaults to empty array)
 
 **Returns:** `Promise<Note>`
 
 **Description:**
-Updates a note's title, content, or tags. Supports partial updates - only provided fields are updated.
+Updates a note's title, content, and tags. All fields can be updated together or individually. If a field is not provided, it defaults to an empty value.
 
 <details>
 <summary><strong>Notes</strong></summary>
 
-- At least one field (`title`, `content`, or `tags`) must be provided
-- Only provided fields are updated - other fields remain unchanged
-- Tags replace existing tags (not merged)
-- Returns updated note object
+- Both `title` and `content` are always sent (defaults to empty string if not provided)
+- Tags default to empty array if not provided
+- All fields are updated together in a single operation
+- Returns updated note object with the provided title
 
 </details>
 
 **Usage:**
 ```typescript
-// Update title only
+// Update title and content
 const updated = await sdk.notes.update('notebook-id', 'note-id', {
   title: 'Updated Meeting Notes',
+  content: 'Updated content with new information...',
 })
 
-// Update content only
+// Update all fields including tags
 const updated = await sdk.notes.update('notebook-id', 'note-id', {
-  content: 'Updated content with new information...',
+  title: 'Final Meeting Notes',
+  content: 'Final content...',
+  tags: ['meeting', 'final'],
 })
 
 // Update both title and content

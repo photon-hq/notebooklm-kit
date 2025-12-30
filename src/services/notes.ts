@@ -55,9 +55,18 @@ export class NotesService {
   async create(notebookId: string, options: CreateNoteOptions): Promise<Note> {
     const { title, content = '', noteType = [1], tags = [] } = options;
     
+    // Format: [notebookId, content, [noteType], null, title]
+    const request = [
+      notebookId,
+      content,
+      noteType,
+      null,
+      title
+    ];
+    
     const response = await this.rpc.call(
       RPC.RPC_CREATE_NOTE,
-      [notebookId, content, noteType, title],
+      request,
       notebookId
     );
     
@@ -80,19 +89,26 @@ export class NotesService {
    * ```
    */
   async update(notebookId: string, noteId: string, options: UpdateNoteOptions): Promise<Note> {
-    const updates = {
-      content: options.content,
-      title: options.title,
-      tags: options.tags || [],
-    };
+    // Format: [notebookId, noteId, [[[content, title, tags, 0]]]]
+    // Note: content and title must always be provided (can be empty string)
+    // The 0 at the end is always 0
+    const content = options.content ?? '';
+    const title = options.title ?? '';
+    const tags = options.tags || [];
+    
+    const request = [
+      notebookId,
+      noteId,
+      [[[content, title, tags, 0]]]
+    ];
     
     const response = await this.rpc.call(
       RPC.RPC_MUTATE_NOTE,
-      [notebookId, noteId, [updates]],
+      request,
       notebookId
     );
     
-    return this.parseNoteResponse(response, options.title || '');
+    return this.parseNoteResponse(response, title || '');
   }
   
   /**
@@ -109,9 +125,16 @@ export class NotesService {
   async delete(notebookId: string, noteIds: string | string[]): Promise<void> {
     const ids = Array.isArray(noteIds) ? noteIds : [noteIds];
     
+    // Format: [notebookId, null, [noteIds]]
+    const request = [
+      notebookId,
+      null,
+      ids
+    ];
+    
     await this.rpc.call(
       RPC.RPC_DELETE_NOTES,
-      [ids],
+      request,
       notebookId
     );
   }
@@ -175,4 +198,3 @@ export class NotesService {
     }
   }
 }
-
