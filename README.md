@@ -35,12 +35,12 @@ npm install notebooklm-kit
 
 | Feature | Description | Method | Example |
 |---------|-------------|--------|---------|
-| List Notebooks | List all your notebooks (recently viewed) | [`sdk.notebooks.list()`](#list-notebooks) | |
-| Get Notebook | Get full details of a specific notebook | [`sdk.notebooks.get(notebookId)`](#get-notebook) | |
-| Create Notebook | Create a new notebook (auto-generates title if empty) | [`sdk.notebooks.create(options)`](#create-notebook) | |
-| Update Notebook | Update notebook title or description | [`sdk.notebooks.update(notebookId, options)`](#update-notebook) | |
-| Delete Notebook | Delete one or more notebooks | [`sdk.notebooks.delete(notebookIds)`](#delete-notebook) | |
-| Share Notebook | Share notebook with users or enable link sharing | [`sdk.notebooks.share(notebookId, options)`](#share-notebook) | |
+| List Notebooks | List all your notebooks (recently viewed) | [`sdk.notebooks.list()`](#list-notebooks) | [notebook-list.ts](examples/notebook-list.ts) |
+| Get Notebook | Get full details of a specific notebook | [`sdk.notebooks.get(notebookId)`](#get-notebook) | [notebook-get.ts](examples/notebook-get.ts) |
+| Create Notebook | Create a new notebook (auto-generates title if empty) | [`sdk.notebooks.create(options)`](#create-notebook) | [notebook-create.ts](examples/notebook-create.ts) |
+| Update Notebook | Update notebook title or description | [`sdk.notebooks.update(notebookId, options)`](#update-notebook) | [notebook-update.ts](examples/notebook-update.ts) |
+| Delete Notebook | Delete one or more notebooks | [`sdk.notebooks.delete(notebookIds)`](#delete-notebook) | [notebook-delete.ts](examples/notebook-delete.ts) |
+| Share Notebook | Share notebook with users or enable link sharing | [`sdk.notebooks.share(notebookId, options)`](#share-notebook) | [notebook-share.ts](examples/notebook-share.ts) |
 
 ### `sdk.sources` - Source Management
 
@@ -159,6 +159,8 @@ Examples: [notebook-list.ts](examples/notebook-list.ts) | [notebook-get.ts](exam
 
 **Method:** `sdk.notebooks.list()`
 
+**Example:** [notebook-list.ts](examples/notebook-list.ts)
+
 **Returns:** `Promise<Notebook[]>`
 
 **Description:**
@@ -195,6 +197,8 @@ notebooks.forEach(nb => {
 ### Get Notebook
 
 **Method:** `sdk.notebooks.get(notebookId)`
+
+**Example:** [notebook-get.ts](examples/notebook-get.ts)
 
 **Parameters:**
 - `notebookId: string` - The notebook ID (required)
@@ -244,6 +248,8 @@ if (notebook.sharing?.isShared) {
 ### Create Notebook
 
 **Method:** `sdk.notebooks.create(options)`
+
+**Example:** [notebook-create.ts](examples/notebook-create.ts)
 
 **Parameters:**
 - `options: CreateNotebookOptions`
@@ -306,6 +312,8 @@ const notebook = await sdk.notebooks.create({
 
 **Method:** `sdk.notebooks.update(notebookId, options)`
 
+**Example:** [notebook-update.ts](examples/notebook-update.ts)
+
 **Parameters:**
 - `notebookId: string` - The notebook ID (required, automatically trimmed)
 - `options: UpdateNotebookOptions`
@@ -366,6 +374,8 @@ const updated = await sdk.notebooks.update('notebook-id', {
 
 **Method:** `sdk.notebooks.delete(notebookIds)`
 
+**Example:** [notebook-delete.ts](examples/notebook-delete.ts)
+
 **Parameters:**
 - `notebookIds: string | string[]` - Single notebook ID or array of IDs (required)
 
@@ -413,6 +423,8 @@ console.log(`Deleted ${result.count} notebooks: ${result.deleted.join(', ')}`)
 ### Share Notebook
 
 **Method:** `sdk.notebooks.share(notebookId, options)`
+
+**Example:** [notebook-share.ts](examples/notebook-share.ts)
 
 **Parameters:**
 - `notebookId: string` - The notebook ID (required, automatically trimmed)
