@@ -146,6 +146,12 @@ export const RPC_START_SECTION = 'pGC7gf';
 /** Generate free-form streamed response (chat) */
 export const RPC_GENERATE_FREE_FORM_STREAMED = 'BD';
 
+/** Set chat configuration (custom prompt, learning guide, default, response length) */
+export const RPC_SET_CHAT_CONFIG = 's0tc2d';
+
+/** Delete chat history */
+export const RPC_DELETE_CHAT_HISTORY = 'J7Gthc';
+
 /** Generate report suggestions */
 export const RPC_GENERATE_REPORT_SUGGESTIONS = 'GHsKob';
 

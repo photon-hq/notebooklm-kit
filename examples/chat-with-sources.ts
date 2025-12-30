@@ -31,7 +31,7 @@ async function main() {
     const response = await sdk.generation.chat(
       notebookId,
       message,
-      sourceIds.length > 0 ? sourceIds : undefined
+      sourceIds.length > 0 ? { sourceIds } : undefined
     );
     
     console.log(response);

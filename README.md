@@ -20,7 +20,7 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 | **[`sdk.notebooks`](#sdknotebooks---notebook-management)** | Notebook management | `list()`, `create()`, `get()`, `update()`, `delete()`, `share()` |
 | **[`sdk.sources`](#sdksources---source-management)** | Add & manage sources | `list()`, `get()`, `add.url()`, `add.text()`, `add.youtube()`, `add.web.searchAndWait()`, `update()`, `delete()`, `status()` |
 | **[`sdk.artifacts`](#sdkartifacts---artifact-management)** | Generate study materials | `create()`, `list()`, `get()`, `download()`, `delete()`, `rename()`, `share()` |
-| **[`sdk.generation`](#sdkgeneration---generation--chat)** | Chat & content generation | `chat()`, `generateDocumentGuides()`, `generateOutline()` |
+| **[`sdk.generation`](#sdkgeneration---generation--chat)** | Chat & content generation | `chat()`, `setChatConfig()`, `generateDocumentGuides()`, `deleteChatHistory()` |
 | **[`sdk.notes`](#sdknotes---notes-management)** | Manage notes | `create()`, `list()`, `update()`, `delete()` |
 
 ## Installation
@@ -77,15 +77,12 @@ npm install notebooklm-kit
 
 | Feature | Description | Method | Example |
 |---------|-------------|--------|---------|
-| Chat | Chat with notebook content | `sdk.generation.chat(notebookId, message, sourceIds?)` | [chat-basic.ts](examples/chat-basic.ts) |
-| Generate Document Guides | Generate document guides for sources | `sdk.generation.generateDocumentGuides(notebookId)` | |
-| Generate Notebook Guide | Generate a notebook guide | `sdk.generation.generateNotebookGuide(notebookId)` | |
-| Generate Outline | Generate an outline for the notebook | `sdk.generation.generateOutline(notebookId)` | |
-| Generate Report Suggestions | Generate report suggestions | `sdk.generation.generateReportSuggestions(notebookId)` | |
-| Generate Magic View | Generate magic view | `sdk.generation.generateMagicView(notebookId, sourceIds)` | |
-| Start Draft | Start a draft | `sdk.generation.startDraft(notebookId)` | |
-| Start Section | Start a section | `sdk.generation.startSection(notebookId)` | |
-| Generate Section | Generate a section | `sdk.generation.generateSection(notebookId)` | |
+| Chat | Chat with notebook content (with source selection & conversation history) | `sdk.generation.chat(notebookId, prompt, options?)` | [chat-basic.ts](examples/chat-basic.ts) |
+| Chat with Sources | Chat with specific sources | `sdk.generation.chat(notebookId, prompt, { sourceIds })` | [chat-with-sources.ts](examples/chat-with-sources.ts) |
+| Chat Conversation | Chat with conversation history | `sdk.generation.chat(notebookId, prompt, { conversationHistory })` | [chat-conversation.ts](examples/chat-conversation.ts) |
+| Set Chat Config | Configure chat (custom prompt, learning guide, response length) | `sdk.generation.setChatConfig(notebookId, config)` | [generation-set-chat-config.ts](examples/generation-set-chat-config.ts) |
+| Generate Document Guides | Generate document guides for all or specific sources | `sdk.generation.generateDocumentGuides(notebookId, sourceId?)` | [generation-document-guides.ts](examples/generation-document-guides.ts) |
+| Delete Chat History | Delete a conversation history | `sdk.generation.deleteChatHistory(notebookId, conversationId)` | [generation-delete-chat-history.ts](examples/generation-delete-chat-history.ts) |
 
 ### `sdk.notes` - Notes Management
 
@@ -2072,25 +2069,29 @@ const result = await sdk.artifacts.share('notebook-id', {
 
 ## Generation & Chat
 
-Examples: [chat-basic.ts](examples/chat-basic.ts) | [chat-with-sources.ts](examples/chat-with-sources.ts)
+Examples: [chat-basic.ts](examples/chat-basic.ts) | [chat-with-sources.ts](examples/chat-with-sources.ts) | [chat-conversation.ts](examples/chat-conversation.ts) | [generation-set-chat-config.ts](examples/generation-set-chat-config.ts) | [generation-document-guides.ts](examples/generation-document-guides.ts) | [generation-delete-chat-history.ts](examples/generation-delete-chat-history.ts)
 
 ### Chat
 
-**Method:** `sdk.generation.chat(notebookId, message, sourceIds?)`
+**Method:** `sdk.generation.chat(notebookId, prompt, options?)`
 
 **Examples:** 
 - [chat-basic.ts](examples/chat-basic.ts) - Basic chat with all sources
 - [chat-with-sources.ts](examples/chat-with-sources.ts) - Chat with specific sources
+- [chat-conversation.ts](examples/chat-conversation.ts) - Chat with conversation history
 
 **Parameters:**
 - `notebookId: string` - The notebook ID (required)
-- `message: string` - Chat message/prompt (required)
-- `sourceIds?: string[]` - Optional specific source IDs to query (uses all sources if omitted)
+- `prompt: string` - Chat message/prompt (required)
+- `options?: object` - Optional chat options:
+  - `sourceIds?: string[]` - Specific source IDs to query (uses all sources if omitted)
+  - `conversationHistory?: Array<{ message: string; role: 'user' | 'assistant' }>` - Conversation history for follow-up messages
+  - `conversationId?: string` - Conversation ID for continuing a conversation (auto-generated if not provided)
 
 **Returns:** `Promise<string>` - AI response text
 
 **Description:**
-Chat with your notebook content using AI. Ask questions, get summaries, or have conversations about the content in your notebook. You can chat with all sources or specify particular sources to focus on.
+Chat with your notebook content using AI. Ask questions, get summaries, or have conversations about the content in your notebook. Supports source selection and conversation history for multi-turn conversations.
 
 <details>
 <summary><strong>Notes</strong></summary>
@@ -2100,6 +2101,8 @@ Chat with your notebook content using AI. Ask questions, get summaries, or have 
 - Response is parsed and returned as plain text
 - If `sourceIds` is provided, only those sources are used for context
 - If `sourceIds` is omitted, all sources in the notebook are used
+- Conversation ID is auto-generated if not provided
+- Use `conversationHistory` for follow-up messages to maintain context
 
 </details>
 
@@ -2116,177 +2119,110 @@ console.log(response)
 const response = await sdk.generation.chat(
   'notebook-id',
   'Summarize the methodology section',
-  ['source-id-1', 'source-id-2']
+  { sourceIds: ['source-id-1', 'source-id-2'] }
 )
 console.log(response)
 
-// Ask follow-up questions
+// Follow-up message with conversation history
 const response1 = await sdk.generation.chat('notebook-id', 'What is machine learning?')
-const response2 = await sdk.generation.chat('notebook-id', 'Can you explain it in simpler terms?')
+const response2 = await sdk.generation.chat('notebook-id', 'Tell me more', {
+  conversationHistory: [
+    { message: 'What is machine learning?', role: 'user' },
+    { message: response1, role: 'assistant' }
+  ]
+})
+```
+
+---
+
+### Set Chat Configuration
+
+**Method:** `sdk.generation.setChatConfig(notebookId, config)`
+
+**Example:** [generation-set-chat-config.ts](examples/generation-set-chat-config.ts)
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `config: object` - Chat configuration:
+  - `type: 'default' | 'custom' | 'learning-guide'` - Configuration type (required)
+  - `customText?: string` - Custom prompt text (required if type is 'custom')
+  - `responseLength: 'default' | 'shorter' | 'longer'` - Response length (required)
+
+**Returns:** `Promise<any>` - Configuration result
+
+**Description:**
+Configure chat behavior before sending messages. Set the chat mode (default, custom prompt, or learning guide) and response length. This is optional - you can use chat without setting configuration.
+
+**Usage:**
+```typescript
+// Set default configuration
+await sdk.generation.setChatConfig('notebook-id', {
+  type: 'default',
+  responseLength: 'default'
+})
+
+// Set custom configuration with custom prompt
+await sdk.generation.setChatConfig('notebook-id', {
+  type: 'custom',
+  customText: 'respond as phd student',
+  responseLength: 'longer'
+})
+
+// Set learning guide configuration
+await sdk.generation.setChatConfig('notebook-id', {
+  type: 'learning-guide',
+  responseLength: 'shorter'
+})
 ```
 
 ---
 
 ### Generate Document Guides
 
-**Method:** `sdk.generation.generateDocumentGuides(notebookId)`
+**Method:** `sdk.generation.generateDocumentGuides(notebookId, sourceId?)`
+
+**Example:** [generation-document-guides.ts](examples/generation-document-guides.ts)
 
 **Parameters:**
 - `notebookId: string` - The notebook ID (required)
+- `sourceId?: string` - Optional specific source ID to generate guides for (if not provided, generates for all sources)
 
-**Returns:** `Promise<any>` - Document guides
+**Returns:** `Promise<any>` - Document guides (array of guide objects with `content` field)
 
 **Description:**
-Generates document guides for sources in the notebook. These guides provide structured information about each source.
+Generates document guides for sources in the notebook. These guides provide structured information about each source. Can generate guides for all sources or a specific source.
 
 **Usage:**
 ```typescript
+// Generate guides for all sources
 const guides = await sdk.generation.generateDocumentGuides('notebook-id')
+console.log(guides)
+
+// Generate guides for a specific source
+const guides = await sdk.generation.generateDocumentGuides('notebook-id', 'source-id')
 console.log(guides)
 ```
 
 ---
 
-### Generate Notebook Guide
+### Delete Chat History
 
-**Method:** `sdk.generation.generateNotebookGuide(notebookId)`
+**Method:** `sdk.generation.deleteChatHistory(notebookId, conversationId)`
 
-**Parameters:**
-- `notebookId: string` - The notebook ID (required)
-
-**Returns:** `Promise<any>` - Generated guide text
-
-**Description:**
-Generates a comprehensive guide for the entire notebook, summarizing all content and providing an overview.
-
-**Usage:**
-```typescript
-const guide = await sdk.generation.generateNotebookGuide('notebook-id')
-console.log(guide)
-```
-
----
-
-### Generate Outline
-
-**Method:** `sdk.generation.generateOutline(notebookId)`
+**Example:** [generation-delete-chat-history.ts](examples/generation-delete-chat-history.ts)
 
 **Parameters:**
 - `notebookId: string` - The notebook ID (required)
+- `conversationId: string` - The conversation ID to delete (required)
 
-**Returns:** `Promise<any>` - Generated outline
+**Returns:** `Promise<any>` - Deletion result
 
 **Description:**
-Generates an outline structure for the notebook content, organizing information hierarchically.
+Delete a conversation history from the notebook. Use this to remove old conversations or clean up chat history.
 
 **Usage:**
 ```typescript
-const outline = await sdk.generation.generateOutline('notebook-id')
-console.log(outline)
-```
-
----
-
-### Generate Report Suggestions
-
-**Method:** `sdk.generation.generateReportSuggestions(notebookId)`
-
-**Parameters:**
-- `notebookId: string` - The notebook ID (required)
-
-**Returns:** `Promise<any>` - Report suggestions
-
-**Description:**
-Generates suggestions for report topics or structures based on the notebook content.
-
-**Usage:**
-```typescript
-const suggestions = await sdk.generation.generateReportSuggestions('notebook-id')
-console.log(suggestions)
-```
-
----
-
-### Generate Magic View
-
-**Method:** `sdk.generation.generateMagicView(notebookId, sourceIds)`
-
-**Parameters:**
-- `notebookId: string` - The notebook ID (required)
-- `sourceIds: string[]` - Source IDs to include (required)
-
-**Returns:** `Promise<any>` - Magic view data
-
-**Description:**
-Generates a "magic view" visualization or summary from specific sources.
-
-**Usage:**
-```typescript
-const magicView = await sdk.generation.generateMagicView('notebook-id', [
-  'source-id-1',
-  'source-id-2',
-])
-console.log(magicView)
-```
-
----
-
-### Start Draft
-
-**Method:** `sdk.generation.startDraft(notebookId)`
-
-**Parameters:**
-- `notebookId: string` - The notebook ID (required)
-
-**Returns:** `Promise<any>` - Draft data
-
-**Description:**
-Starts a draft generation process for the notebook.
-
-**Usage:**
-```typescript
-const draft = await sdk.generation.startDraft('notebook-id')
-console.log(draft)
-```
-
----
-
-### Start Section
-
-**Method:** `sdk.generation.startSection(notebookId)`
-
-**Parameters:**
-- `notebookId: string` - The notebook ID (required)
-
-**Returns:** `Promise<any>` - Section data
-
-**Description:**
-Starts a new section generation for the notebook.
-
-**Usage:**
-```typescript
-const section = await sdk.generation.startSection('notebook-id')
-console.log(section)
-```
-
----
-
-### Generate Section
-
-**Method:** `sdk.generation.generateSection(notebookId)`
-
-**Parameters:**
-- `notebookId: string` - The notebook ID (required)
-
-**Returns:** `Promise<any>` - Generated section
-
-**Description:**
-Generates a new section for the notebook content.
-
-**Usage:**
-```typescript
-const section = await sdk.generation.generateSection('notebook-id')
-console.log(section)
+await sdk.generation.deleteChatHistory('notebook-id', 'conversation-id')
 ```
 
 ---
