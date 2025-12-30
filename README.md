@@ -18,7 +18,7 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 | Service | Purpose | Methods |
 |---------|---------|---------|
 | **[`sdk.notebooks`](#sdknotebooks---notebook-management)** | Notebook management | `list()`, `create()`, `get()`, `update()`, `delete()`, `share()` |
-| **[`sdk.sources`](#sdksources---source-management)** | Add & manage sources | `addFromURL()`, `addFromText()`, `addFromFile()`, `addYouTube()`, `searchWebAndWait()` |
+| **[`sdk.sources`](#sdksources---source-management)** | Add & manage sources | `list()`, `get()`, `add.url()`, `add.text()`, `add.youtube()`, `add.web.searchAndWait()`, `update()`, `delete()`, `status()` |
 | **[`sdk.artifacts`](#sdkartifacts---artifact-management)** | Generate study materials | `create()`, `list()`, `get()`, `download()`, `delete()`, `rename()`, `share()` |
 | **[`sdk.generation`](#sdkgeneration---generation--chat)** | Chat & content generation | `chat()`, `generateDocumentGuides()`, `generateOutline()` |
 | **[`sdk.notes`](#sdknotes---notes-management)** | Manage notes | `create()`, `list()`, `update()`, `delete()` |
@@ -46,25 +46,22 @@ npm install notebooklm-kit
 
 | Feature | Description | Method | Example |
 |---------|-------------|--------|---------|
-| Add from URL | Add a source from a web page URL | `sdk.sources.addFromURL(notebookId, options)` | |
-| Add from Text | Add a source from text content | `sdk.sources.addFromText(notebookId, options)` | |
-| Add from File | Add a source from a file (PDF, image, etc.) | `sdk.sources.addFromFile(notebookId, options)` | |
-| Add YouTube | Add a YouTube video as a source | `sdk.sources.addYouTube(notebookId, options)` | |
-| Add Google Drive | Add a Google Drive file as a source | `sdk.sources.addGoogleDrive(notebookId, options)` | |
-| Search Web | Search the web for sources | `sdk.sources.searchWeb(notebookId, options)` | |
-| Search Web and Wait | Search web and wait for results | `sdk.sources.searchWebAndWait(notebookId, options)` | |
-| Get Search Results | Get search results from a session | `sdk.sources.getSearchResults(notebookId, sessionId?)` | |
-| Add Discovered | Add discovered sources from search | `sdk.sources.addDiscovered(notebookId, options)` | |
-| Batch Add | Add multiple sources at once | `sdk.sources.addBatch(notebookId, options)` | |
-| Delete Source | Delete a source from a notebook | `sdk.sources.delete(notebookId, sourceId)` | |
-| Update Source | Update source metadata | `sdk.sources.update(notebookId, sourceId, updates)` | |
-| Refresh Source | Re-fetch and reprocess source content | `sdk.sources.refresh(notebookId, sourceId)` | |
-| Poll Processing | Check source processing status | `sdk.sources.pollProcessing(notebookId)` | |
-| Select Source | Select a source (deprecated) | `sdk.sources.selectSource(sourceId)` | |
-| Load Content | Load source content (deprecated) | `sdk.sources.loadContent(sourceId)` | |
-| Check Freshness | Check if source needs refresh (deprecated) | `sdk.sources.checkFreshness(sourceId)` | |
-| Add Deep Research | Add deep research source (deprecated) | `sdk.sources.addDeepResearch(notebookId, query)` | |
-| Act On | Perform action on sources (deprecated) | `sdk.sources.actOn(notebookId, action, sourceIds)` | |
+| List Sources | List all sources in a notebook | [`sdk.sources.list()`](#list-sources) | [source-list.ts](examples/source-list.ts) |
+| Get Source | Get one or all sources | [`sdk.sources.get()`](#get-source) | [source-get.ts](examples/source-get.ts) |
+| Add URL | Add a source from a web page URL | [`sdk.sources.add.url()`](#add-url-source) | [source-add-url.ts](examples/source-add-url.ts) |
+| Add Text | Add a source from text content | [`sdk.sources.add.text()`](#add-text-source) | [source-add-text.ts](examples/source-add-text.ts) |
+| Add File | Add a source from a file (PDF, image, etc.) | [`sdk.sources.add.file()`](#add-file-source) | |
+| Add YouTube | Add a YouTube video as a source | [`sdk.sources.add.youtube()`](#add-youtube-source) | [source-add-youtube.ts](examples/source-add-youtube.ts) |
+| Add Google Drive | Add a Google Drive file as a source | [`sdk.sources.add.drive()`](#add-google-drive-source) | |
+| Batch Add | Add multiple sources at once | [`sdk.sources.add.batch()`](#batch-add-sources) | [source-add-batch.ts](examples/source-add-batch.ts) |
+| Web Search (Simple) | Search web and wait for results | [`sdk.sources.add.web.searchAndWait()`](#web-search-simple) | [source-web-search.ts](examples/source-web-search.ts) |
+| Web Search (Advanced) | Multi-step web search workflow | [`sdk.sources.add.web.search()`](#web-search-advanced) | [source-web-search-advanced.ts](examples/source-web-search-advanced.ts) |
+| Get Search Results | Get search results from a session | [`sdk.sources.add.web.getResults()`](#get-search-results) | |
+| Add Discovered | Add discovered sources from search | [`sdk.sources.add.web.addDiscovered()`](#add-discovered-sources) | |
+| Update Source | Update source metadata | [`sdk.sources.update()`](#update-source) | |
+| Delete Source | Delete a source from a notebook | [`sdk.sources.delete()`](#delete-source) | [source-delete.ts](examples/source-delete.ts) |
+| Refresh Source | Re-fetch and reprocess source content | [`sdk.sources.refresh()`](#refresh-source) | |
+| Check Status | Check source processing status | [`sdk.sources.status()`](#check-processing-status) | [source-status.ts](examples/source-status.ts) |
 
 ### `sdk.artifacts` - Artifact Management
 
@@ -666,6 +663,652 @@ console.log(`Ready: ${status.readyCount}/${status.totalCount}`)
 ```
 
 </details>
+
+## Sources
+
+Examples: [source-list.ts](examples/source-list.ts) | [source-get.ts](examples/source-get.ts) | [source-add-url.ts](examples/source-add-url.ts) | [source-add-text.ts](examples/source-add-text.ts) | [source-add-youtube.ts](examples/source-add-youtube.ts) | [source-add-batch.ts](examples/source-add-batch.ts) | [source-web-search.ts](examples/source-web-search.ts) | [source-web-search-advanced.ts](examples/source-web-search-advanced.ts) | [source-status.ts](examples/source-status.ts) | [source-delete.ts](examples/source-delete.ts)
+
+### List Sources
+
+**Method:** `sdk.sources.list(notebookId)`
+
+**Example:** [source-list.ts](examples/source-list.ts)
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+
+**Returns:** `Promise<Source[]>`
+
+**Description:**
+Retrieves a list of all sources (URLs, text, files, YouTube videos, Google Drive files, etc.) associated with a notebook. Sources are extracted from the notebook response efficiently without requiring a separate RPC call.
+
+**Return Fields:**
+- `sourceId: string` - Unique identifier for the source
+- `title?: string` - Source title/name
+- `type?: SourceType` - Source type (URL, TEXT, PDF, YOUTUBE_VIDEO, GOOGLE_DRIVE, IMAGE, etc.)
+- `url?: string` - Source URL (for URL/YouTube sources)
+- `createdAt?: string` - Creation timestamp (ISO format)
+- `updatedAt?: string` - Last modified timestamp (ISO format)
+- `status?: SourceStatus` - Processing status (`PROCESSING`, `READY`, `FAILED`)
+- `metadata?: Record<string, any>` - Additional metadata (file size, MIME type, etc.)
+
+**Source Types:**
+- `URL` - Web page URL
+- `TEXT` - Text content
+- `PDF` - PDF file
+- `YOUTUBE_VIDEO` - YouTube video
+- `GOOGLE_DRIVE` - Google Drive file
+- `IMAGE` - Image file
+- `VIDEO_FILE` - Video file upload
+- `PDF_FROM_DRIVE` - PDF from Google Drive
+- `TEXT_NOTE` - Text note
+- `MIND_MAP_NOTE` - Mind map note
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Sources are extracted from the notebook response (same RPC as `notebooks.get()`)
+- Processing status is inferred from source metadata
+- Returns empty array if notebook has no sources
+- File size and MIME type are included in metadata when available
+
+</details>
+
+**Usage:**
+```typescript
+// List all sources
+const sources = await sdk.sources.list('notebook-id')
+console.log(`Found ${sources.length} sources`)
+
+// Filter by type
+const pdfs = sources.filter(s => s.type === SourceType.PDF)
+const urls = sources.filter(s => s.type === SourceType.URL)
+
+// Check processing status
+const ready = sources.filter(s => s.status === SourceStatus.READY)
+const processing = sources.filter(s => s.status === SourceStatus.PROCESSING)
+```
+
+---
+
+### Get Source
+
+**Method:** `sdk.sources.get(notebookId, sourceId?)`
+
+**Example:** [source-get.ts](examples/source-get.ts)
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `sourceId?: string` - Optional source ID to get a single source
+
+**Returns:** `Promise<Source | Source[]>` - Single source if `sourceId` provided, array of all sources if omitted
+
+**Description:**
+Get one or all sources from a notebook. If `sourceId` is provided, returns a single source. If omitted, returns all sources (same as `list()`).
+
+**Return Fields:**
+Same as `list()` - see [List Sources](#list-sources) for field descriptions.
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Returns array if `sourceId` is omitted (same as `list()`)
+- Returns single source object if `sourceId` is provided
+- Throws error if source not found when `sourceId` is provided
+- Efficiently reuses notebook data (no separate RPC call)
+
+</details>
+
+**Usage:**
+```typescript
+// Get all sources
+const allSources = await sdk.sources.get('notebook-id')
+
+// Get specific source
+const source = await sdk.sources.get('notebook-id', 'source-id')
+console.log(source.title)
+```
+
+---
+
+### Add URL Source
+
+**Method:** `sdk.sources.add.url(notebookId, options)`
+
+**Example:** [source-add-url.ts](examples/source-add-url.ts)
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `options: AddSourceFromURLOptions`
+  - `url: string` - URL to add (required)
+  - `title?: string` - Optional custom title
+
+**Returns:** `Promise<string>` - Source ID
+
+**Description:**
+Adds a web page URL as a source. Returns immediately after source is queued. Use `status()` to check if source is ready.
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Returns immediately after source is queued (does not wait for processing)
+- Quota is checked before adding
+- Use `status()` to check if source is ready
+- URL must be a valid HTTP/HTTPS URL
+
+</details>
+
+**Usage:**
+```typescript
+const sourceId = await sdk.sources.add.url('notebook-id', {
+  url: 'https://ai.google.dev/',
+  title: 'Google AI Developer',
+})
+
+// Check if ready
+const status = await sdk.sources.status('notebook-id')
+if (!status.processing.includes(sourceId)) {
+  console.log('Source is ready!')
+}
+```
+
+---
+
+### Add Text Source
+
+**Method:** `sdk.sources.add.text(notebookId, options)`
+
+**Example:** [source-add-text.ts](examples/source-add-text.ts)
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `options: AddSourceFromTextOptions`
+  - `content: string` - Text content (required)
+  - `title: string` - Source title (required)
+
+**Returns:** `Promise<string>` - Source ID
+
+**Description:**
+Adds text content as a source. Useful for adding notes, research summaries, or any text-based content.
+
+**Usage:**
+```typescript
+const sourceId = await sdk.sources.add.text('notebook-id', {
+  title: 'Research Notes',
+  content: 'Key findings from research...',
+})
+```
+
+---
+
+### Add File Source
+
+**Method:** `sdk.sources.add.file(notebookId, options)`
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `options: AddSourceFromFileOptions`
+  - `content: Buffer | string` - File content as Buffer or base64 string (required)
+  - `fileName: string` - File name (required)
+  - `mimeType?: string` - MIME type (optional, auto-detected if not provided)
+
+**Returns:** `Promise<string>` - Source ID
+
+**Description:**
+Adds a file (PDF, image, video, etc.) as a source. Supports files as Buffer or base64 string.
+
+**Supported File Types:**
+- PDF files
+- Image files (PNG, JPG, etc.)
+- Video files
+- Other document types
+
+**Usage:**
+```typescript
+import fs from 'fs'
+
+// From file buffer
+const fileBuffer = fs.readFileSync('document.pdf')
+const sourceId = await sdk.sources.add.file('notebook-id', {
+  content: fileBuffer,
+  fileName: 'document.pdf',
+  mimeType: 'application/pdf',
+})
+
+// From base64 string
+const base64Content = fileBuffer.toString('base64')
+const sourceId = await sdk.sources.add.file('notebook-id', {
+  content: base64Content,
+  fileName: 'document.pdf',
+})
+```
+
+---
+
+### Add YouTube Source
+
+**Method:** `sdk.sources.add.youtube(notebookId, options)`
+
+**Example:** [source-add-youtube.ts](examples/source-add-youtube.ts)
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `options: AddYouTubeSourceOptions`
+  - `urlOrId: string` - YouTube URL or video ID (required)
+  - `title?: string` - Optional custom title
+
+**Returns:** `Promise<string>` - Source ID
+
+**Description:**
+Adds a YouTube video as a source. Accepts either full YouTube URL or just the video ID.
+
+**Usage:**
+```typescript
+// From YouTube URL
+const sourceId = await sdk.sources.add.youtube('notebook-id', {
+  urlOrId: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+})
+
+// From video ID
+const sourceId = await sdk.sources.add.youtube('notebook-id', {
+  urlOrId: 'dQw4w9WgXcQ',
+})
+```
+
+---
+
+### Add Google Drive Source
+
+**Method:** `sdk.sources.add.drive(notebookId, options)`
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `options: AddGoogleDriveSourceOptions`
+  - `fileId: string` - Google Drive file ID (required)
+  - `title?: string` - Optional custom title
+  - `mimeType?: string` - MIME type (optional, inferred if not provided)
+
+**Returns:** `Promise<string>` - Source ID
+
+**Description:**
+Adds a Google Drive file as a source. Requires the file ID from Google Drive.
+
+<details>
+<summary><strong>Deprecated</strong></summary>
+
+This method is deprecated. Use `add.batch()` with `type: 'gdrive'` instead.
+
+</details>
+
+**Usage:**
+```typescript
+const sourceId = await sdk.sources.add.drive('notebook-id', {
+  fileId: '1a2b3c4d5e6f7g8h9i0j',
+  mimeType: 'application/vnd.google-apps.document',
+  title: 'My Document',
+})
+```
+
+---
+
+### Batch Add Sources
+
+**Method:** `sdk.sources.add.batch(notebookId, options)`
+
+**Example:** [source-add-batch.ts](examples/source-add-batch.ts)
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `options: BatchAddSourcesOptions`
+  - `sources: Array<...>` - Array of source inputs (required)
+  - `waitForProcessing?: boolean` - Whether to wait for all sources to be processed (default: false)
+  - `timeout?: number` - Timeout in ms if `waitForProcessing` is true (default: 300000 = 5 minutes)
+  - `pollInterval?: number` - Poll interval in ms (default: 2000 = 2 seconds)
+  - `onProgress?: (ready: number, total: number) => void` - Progress callback
+
+**Returns:** `Promise<string[]>` - Array of source IDs
+
+**Description:**
+Adds multiple sources at once. Supports mixed source types (URLs, text, files, YouTube, Google Drive) in a single call.
+
+**Source Types:**
+- `{ type: 'url', url: string, title?: string }` - URL source
+- `{ type: 'text', title: string, content: string }` - Text source
+- `{ type: 'file', content: Buffer | string, fileName: string, mimeType?: string }` - File source
+- `{ type: 'youtube', urlOrId: string, title?: string }` - YouTube source
+- `{ type: 'gdrive', fileId: string, title?: string, mimeType?: string }` - Google Drive source
+
+**Usage:**
+```typescript
+const sourceIds = await sdk.sources.add.batch('notebook-id', {
+  sources: [
+    { type: 'url', url: 'https://example.com', title: 'Example' },
+    { type: 'text', title: 'Notes', content: 'Content here...' },
+    { type: 'youtube', urlOrId: 'dQw4w9WgXcQ' },
+  ],
+  waitForProcessing: true, // Optional: wait for all to be ready
+  timeout: 300000, // 5 minutes
+  onProgress: (ready, total) => {
+    console.log(`Progress: ${ready}/${total}`)
+  },
+})
+```
+
+---
+
+### Web Search (Simple)
+
+**Method:** `sdk.sources.add.web.searchAndWait(notebookId, options)`
+
+**Example:** [source-web-search.ts](examples/source-web-search.ts)
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `options: SearchWebAndWaitOptions`
+  - `query: string` - Search query (required)
+  - `sourceType?: SearchSourceType` - Source type: `WEB` (default) or `GOOGLE_DRIVE`
+  - `mode?: ResearchMode` - Research mode: `FAST` (default) or `DEEP` (web only)
+  - `timeout?: number` - Max wait time in ms (default: 60000 = 60 seconds)
+  - `pollInterval?: number` - Poll interval in ms (default: 2000 = 2 seconds)
+  - `onProgress?: (status) => void` - Progress callback
+
+**Returns:** `Promise<WebSearchResult>` - Results with `sessionId`, `web` sources, and `drive` sources
+
+**Description:**
+**RECOMMENDED FOR SIMPLE WORKFLOWS** - One call that searches and waits for results automatically. Returns all discovered sources once available (or timeout). Perfect for automated workflows where you don't need to see intermediate steps.
+
+**Research Modes:**
+- `ResearchMode.FAST` - Quick search (~10-30 seconds, default)
+- `ResearchMode.DEEP` - Comprehensive research (~60-120 seconds, web only)
+
+**Source Types:**
+- `SearchSourceType.WEB` - Search web (default)
+- `SearchSourceType.GOOGLE_DRIVE` - Search Google Drive (FAST mode only)
+
+**Return Fields:**
+- `sessionId: string` - Required for adding sources (use with `addDiscovered()`)
+- `web: DiscoveredWebSource[]` - Discovered web sources
+- `drive: DiscoveredDriveSource[]` - Discovered Google Drive sources
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Automatically polls for results until available or timeout
+- Returns results once count stabilizes (assumes search complete)
+- Progress callback shows result count as search progresses
+- Use returned `sessionId` with `addDiscovered()` to add selected sources
+
+</details>
+
+**Usage:**
+```typescript
+import { ResearchMode, SearchSourceType } from 'notebooklm-kit'
+
+// Simple search and wait
+const result = await sdk.sources.add.web.searchAndWait('notebook-id', {
+  query: 'machine learning research papers 2024',
+  mode: ResearchMode.DEEP, // Comprehensive search
+  sourceType: SearchSourceType.WEB,
+  timeout: 120000, // Wait up to 2 minutes
+  onProgress: (status) => {
+    console.log(`Found ${status.resultCount} results so far...`)
+  },
+})
+
+console.log(`Found ${result.web.length} web sources`)
+console.log(`Session ID: ${result.sessionId}`)
+
+// Add selected sources
+const addedIds = await sdk.sources.add.web.addDiscovered('notebook-id', {
+  sessionId: result.sessionId,
+  webSources: result.web.slice(0, 5), // Top 5
+})
+```
+
+---
+
+### Web Search (Advanced)
+
+**Method:** `sdk.sources.add.web.search(notebookId, options)` → `sdk.sources.add.web.getResults(notebookId, sessionId)` → `sdk.sources.add.web.addDiscovered(notebookId, options)`
+
+**Example:** [source-web-search-advanced.ts](examples/source-web-search-advanced.ts)
+
+**Description:**
+**MULTI-STEP WORKFLOW** - For cases where you want to see results and make decisions at each step. Returns intermediate results so you can validate, filter, or select before adding sources.
+
+**Workflow Steps:**
+1. **`search()`** - Start search, returns `sessionId` immediately
+2. **`getResults(sessionId)`** - Get discovered sources (can call multiple times to poll)
+3. **`addDiscovered(sessionId, selectedSources)`** - Add your selected sources
+
+**Step 1: Start Search**
+
+**Method:** `sdk.sources.add.web.search(notebookId, options)`
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `options: SearchWebSourcesOptions`
+  - `query: string` - Search query (required)
+  - `sourceType?: SearchSourceType` - `WEB` (default) or `GOOGLE_DRIVE`
+  - `mode?: ResearchMode` - `FAST` (default) or `DEEP` (web only)
+
+**Returns:** `Promise<string>` - Session ID (required for steps 2 and 3)
+
+**Step 2: Get Results**
+
+**Method:** `sdk.sources.add.web.getResults(notebookId, sessionId?)`
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `sessionId?: string` - Session ID from step 1 (optional - if omitted, returns all results)
+
+**Returns:** `Promise<{ web: DiscoveredWebSource[], drive: DiscoveredDriveSource[] }>`
+
+**Step 3: Add Discovered Sources**
+
+**Method:** `sdk.sources.add.web.addDiscovered(notebookId, options)`
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `options: AddDiscoveredSourcesOptions`
+  - `sessionId: string` - Session ID from step 1 (required)
+  - `webSources?: DiscoveredWebSource[]` - Web sources to add
+  - `driveSources?: DiscoveredDriveSource[]` - Drive sources to add
+
+**Returns:** `Promise<string[]>` - Array of added source IDs
+
+**Usage:**
+```typescript
+// Step 1: Start search
+const sessionId = await sdk.sources.add.web.search('notebook-id', {
+  query: 'quantum computing',
+  mode: ResearchMode.FAST,
+})
+
+// Step 2: Poll for results (you control when/how often)
+let results
+do {
+  await new Promise(r => setTimeout(r, 2000)) // Wait 2 seconds
+  results = await sdk.sources.add.web.getResults('notebook-id', sessionId)
+  console.log(`Found ${results.web.length} sources...`)
+} while (results.web.length === 0)
+
+// Step 3: Filter and add selected sources
+const relevant = results.web.filter(s => s.url.includes('arxiv.org'))
+const addedIds = await sdk.sources.add.web.addDiscovered('notebook-id', {
+  sessionId,
+  webSources: relevant,
+})
+```
+
+---
+
+### Get Search Results
+
+**Method:** `sdk.sources.add.web.getResults(notebookId, sessionId?)`
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `sessionId?: string` - Optional session ID to filter results
+
+**Returns:** `Promise<{ web: DiscoveredWebSource[], drive: DiscoveredDriveSource[] }>`
+
+**Description:**
+Returns discovered sources from search sessions. If `sessionId` is provided, filters results to that specific session. If omitted, returns all results (may include results from other searches).
+
+**Usage:**
+```typescript
+// Get results for specific session
+const results = await sdk.sources.add.web.getResults('notebook-id', sessionId)
+
+// Get all results (no filtering)
+const allResults = await sdk.sources.add.web.getResults('notebook-id')
+```
+
+---
+
+### Add Discovered Sources
+
+**Method:** `sdk.sources.add.web.addDiscovered(notebookId, options)`
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `options: AddDiscoveredSourcesOptions`
+  - `sessionId: string` - Session ID from search (required)
+  - `webSources?: DiscoveredWebSource[]` - Web sources to add
+  - `driveSources?: DiscoveredDriveSource[]` - Drive sources to add
+
+**Returns:** `Promise<string[]>` - Array of added source IDs
+
+**Description:**
+Adds selected discovered sources from search results. You decide which sources to add (from `getResults()` or `searchAndWait()`).
+
+**Usage:**
+```typescript
+// After searchAndWait()
+const result = await sdk.sources.add.web.searchAndWait(...)
+const addedIds = await sdk.sources.add.web.addDiscovered('notebook-id', {
+  sessionId: result.sessionId,
+  webSources: result.web.slice(0, 5), // Top 5
+})
+
+// After manual search workflow
+const addedIds = await sdk.sources.add.web.addDiscovered('notebook-id', {
+  sessionId: sessionId,
+  webSources: filteredSources,
+  driveSources: selectedDriveSources,
+})
+```
+
+---
+
+### Update Source
+
+**Method:** `sdk.sources.update(notebookId, sourceId, updates)`
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `sourceId: string` - The source ID (required)
+- `updates: Partial<Source>` - Fields to update
+  - `title?: string` - New title
+
+**Returns:** `Promise<void>`
+
+**Description:**
+Updates source metadata. Currently supports updating the title.
+
+**Usage:**
+```typescript
+await sdk.sources.update('notebook-id', 'source-id', {
+  title: 'Updated Source Title',
+})
+```
+
+---
+
+### Delete Source
+
+**Method:** `sdk.sources.delete(notebookId, sourceId)`
+
+**Example:** [source-delete.ts](examples/source-delete.ts)
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `sourceId: string` - The source ID (required)
+
+**Returns:** `Promise<void>`
+
+**Description:**
+Deletes a source from a notebook.
+
+**Usage:**
+```typescript
+await sdk.sources.delete('notebook-id', 'source-id')
+```
+
+---
+
+### Refresh Source
+
+**Method:** `sdk.sources.refresh(notebookId, sourceId)`
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `sourceId: string` - The source ID (required)
+
+**Returns:** `Promise<void>`
+
+**Description:**
+Re-fetches and reprocesses source content. Useful when the source content has been updated externally.
+
+<details>
+<summary><strong>Deprecated</strong></summary>
+
+This method is deprecated and may not work correctly. The RPC structure is not fully validated.
+
+</details>
+
+**Usage:**
+```typescript
+await sdk.sources.refresh('notebook-id', 'source-id')
+
+// Check when refresh is complete
+const status = await sdk.sources.status('notebook-id')
+```
+
+---
+
+### Check Processing Status
+
+**Method:** `sdk.sources.status(notebookId)`
+
+**Example:** [source-status.ts](examples/source-status.ts)
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+
+**Returns:** `Promise<SourceProcessingStatus>`
+
+**Description:**
+Checks the processing status of all sources in a notebook. Returns information about which sources are still processing and whether all sources are ready.
+
+**Return Fields:**
+- `allReady: boolean` - Whether all sources are ready
+- `processing: string[]` - Array of source IDs still processing
+
+**Usage:**
+```typescript
+const status = await sdk.sources.status('notebook-id')
+
+if (status.allReady) {
+  console.log('All sources are ready!')
+} else {
+  console.log(`Still processing: ${status.processing.length} sources`)
+  console.log('Processing IDs:', status.processing)
+}
+```
+
+---
 
 ## Artifacts
 

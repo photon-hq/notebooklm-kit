@@ -37,7 +37,7 @@ import { NotebookLMError } from '../types/common.js';
  * Web search sub-service for sources
  * Handles web search operations (search, wait, get results, add discovered)
  */
-class WebSearchService {
+export class WebSearchService {
   constructor(
     private rpc: RPCClient,
     private quota?: import('../utils/quota.js').QuotaManager
@@ -552,7 +552,7 @@ class WebSearchService {
  * Add sources sub-service
  * Handles adding sources of various types (URL, text, file, YouTube, Google Drive, batch)
  */
-class AddSourcesService {
+export class AddSourcesService {
   public readonly web: WebSearchService;
 
   constructor(
