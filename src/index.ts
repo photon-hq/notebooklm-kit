@@ -16,6 +16,20 @@ export { GenerationService } from './services/generation.js';
 export { fetchQuizData } from './services/quiz.js';
 export { fetchFlashcardData } from './services/flashcards.js';
 export type { ParsedFlashcardData } from './services/flashcards.js';
+export { downloadAudioFile } from './services/audio.js';
+export { downloadVideoFile } from './services/video.js';
+export { downloadSlidesFile } from './services/slides.js';
+export { 
+  createReport, 
+  reportToDocs, 
+  reportToSheets,
+  getReportContent,
+  formatReportAsMarkdown,
+  formatReportAsText,
+  formatReportAsHTML,
+  formatReportAsJSON,
+} from './services/reports.js';
+export type { CreateReportOptions, ReportContent } from './services/reports.js';
 export { fetchInfographic } from './services/infographics.js';
 export type { InfographicImageData, FetchInfographicOptions } from './services/infographics.js';
 
@@ -39,6 +53,9 @@ export type {
   CreateNotebookOptions,
   UpdateNotebookOptions,
   SharingSettings,
+  ShareNotebookOptions,
+  ShareNotebookResult,
+  DeleteNotebookResult,
 } from './types/notebook.js';
 
 export type {
@@ -108,6 +125,13 @@ export type {
 export {
   VideoStatus,
 } from './types/video.js';
+
+// Video service types
+export type {
+  GetVideoUrlOptions,
+} from './services/video.js';
+
+export { VideoService } from './services/video.js';
 
 export type {
   Artifact,

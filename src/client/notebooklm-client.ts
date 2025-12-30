@@ -276,7 +276,7 @@ export class NotebookLMClient {
    * import { RPCMethods } from 'notebooklm-kit';
    * 
    * const response = await sdk.rpc(
-   *   RPCMethods.RPC_LIST_RECENTLY_VIEWED_PROJECTS,
+   *   RPCMethods.RPC_LIST_PROJECTS,
    *   []
    * );
    * ```

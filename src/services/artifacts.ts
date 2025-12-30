@@ -1012,14 +1012,122 @@ export class ArtifactsService {
       return ArtifactType.QUIZ;
     }
     
+    // Both Video and Outline use type 3 in the API response
+    // We need to differentiate them by looking for video-specific patterns
+    if (apiType === 3) {
+      // Check for video-specific patterns:
+      // 1. Look for video URLs (lh3.googleusercontent.com/notebooklm/...)
+      // 2. Look for video-related strings
+      // 3. Check customization structure (videos might have different customization)
+      
+      const searchForVideoPattern = (obj: any, depth: number = 0): boolean => {
+        if (depth > 10) return false;
+        
+        if (typeof obj === 'string') {
+          // Check for video URL patterns
+          if (obj.includes('lh3.googleusercontent.com/notebooklm/') ||
+              obj.includes('lh3.google.com/rd-notebooklm/') ||
+              obj.includes('googlevideo.com/videoplayback') ||
+              obj.includes('=m22') ||
+              obj.includes('video') ||
+              obj.includes('videoplayback')) {
+            return true;
+          }
+        } else if (Array.isArray(obj)) {
+          for (const item of obj) {
+            if (searchForVideoPattern(item, depth + 1)) {
+              return true;
+            }
+          }
+        } else if (obj && typeof obj === 'object') {
+          for (const key in obj) {
+            if (searchForVideoPattern(obj[key], depth + 1)) {
+              return true;
+            }
+          }
+        }
+        
+        return false;
+      };
+      
+      // Search the data structure for video patterns
+      let isVideo = searchForVideoPattern(artifactData);
+      
+      // Also try searching the stringified version
+      if (!isVideo) {
+        try {
+          const stringified = JSON.stringify(artifactData);
+          isVideo = searchForVideoPattern(stringified);
+        } catch {
+          // If stringify fails, continue
+        }
+      }
+      
+      if (isVideo) {
+        return ArtifactType.VIDEO;
+      }
+      
+      // Default to OUTLINE if no video patterns found
+      return ArtifactType.OUTLINE;
+    }
+    
     // For other types, map based on known patterns
     switch (apiType) {
       case 1:
+        // Type 1 can be DOCUMENT or AUDIO - check for audio patterns
+        // Audio artifacts might have audio-specific URLs or patterns
+        const searchForAudioPattern = (obj: any, depth: number = 0): boolean => {
+          if (depth > 10) return false;
+          
+          if (typeof obj === 'string') {
+            // Check for audio URL patterns (similar to video detection)
+            // Audio URLs from mm30.txt have pattern: =m140-dv
+            // Video URLs have pattern: =m22-dv
+            if (obj.includes('lh3.googleusercontent.com/notebooklm/') ||
+                obj.includes('lh3.google.com/rd-notebooklm/') ||
+                obj.includes('=m140') || // Audio format marker from mm30.txt (m140-dv)
+                obj.includes('=m140-dv') || // Full audio format marker
+                (obj.includes('lh3.googleusercontent.com/notebooklm/') && !obj.includes('=m22')) || // Audio URL without video marker
+                obj.toLowerCase().includes('audio') ||
+                obj.toLowerCase().includes('podcast')) {
+              return true;
+            }
+          } else if (Array.isArray(obj)) {
+            for (const item of obj) {
+              if (searchForAudioPattern(item, depth + 1)) {
+                return true;
+              }
+            }
+          } else if (obj && typeof obj === 'object') {
+            for (const key in obj) {
+              if (searchForAudioPattern(obj[key], depth + 1)) {
+                return true;
+              }
+            }
+          }
+          return false;
+        };
+        
+        // Search for audio patterns
+        let isAudio = searchForAudioPattern(artifactData);
+        
+        // Also try searching the stringified version
+        if (!isAudio) {
+          try {
+            const stringified = JSON.stringify(artifactData);
+            isAudio = searchForAudioPattern(stringified);
+          } catch {
+            // If stringify fails, continue
+          }
+        }
+        
+        if (isAudio) {
+          return ArtifactType.AUDIO;
+        }
+        
         return ArtifactType.DOCUMENT;
       case 2:
         return ArtifactType.PRESENTATION;
-      case 3:
-        return ArtifactType.OUTLINE;
       case 5:
         return ArtifactType.QUIZ; // Quiz enum value is 5
       case 6:
@@ -1651,6 +1759,58 @@ export class ArtifactsService {
             .map((s: any) => Array.isArray(s) && Array.isArray(s[0]) ? s[0][0] : null)
             .filter((s: any) => typeof s === 'string');
           break;
+        }
+      }
+    }
+    
+    // For audio artifacts, check if we can extract audioId
+    // Audio artifacts might have the audioId as the artifactId itself, or in a specific field
+    if (artifact.type === ArtifactType.AUDIO) {
+      // Audio artifacts created via audio.create() have the audioId as the artifactId
+      // But we should also check if there's an audioId field in the response
+      // For now, audioId is typically the same as artifactId for audio artifacts
+      // We can add more parsing logic here if needed
+    }
+    
+    // For video artifacts, parse video URL from the response
+    // Based on mm27.txt and terminal output: Video URL is at index 9: [null, "https://lh3.googleusercontent.com/notebooklm/..."]
+    // Structure: [artifactId, title, type, sources, state, null, null, null, null, [null, "https://..."]]
+    // The URL from mm27.txt: https://lh3.googleusercontent.com/notebooklm/AG60hOqh3DPoDN105kofGV60HiUp8Lsy38xhkjyB4HL0zTkueJwQGcedSusIGOqKzAkhmbTYk6Br_o-OivKfSiSd4F7Fe3ZFmXUgCgjptokzh9DjKXUQw3DK4LNV0zsxraClXNoVOkRdmswNWW4ZHUZUkFBz07S5f4o=m22-dv?authuser=0
+    if (artifact.type === ArtifactType.VIDEO) {
+      // First, check index 9 specifically (most common location based on mm27.txt)
+      if (data.length > 9 && Array.isArray(data[9]) && data[9].length > 1) {
+        if (data[9][0] === null && typeof data[9][1] === 'string' && data[9][1].startsWith('http')) {
+          const videoUrl = data[9][1];
+          // Match patterns from mm27.txt: lh3.googleusercontent.com/notebooklm/ or googlevideo.com
+          if (videoUrl.includes('lh3.googleusercontent.com/notebooklm/') || 
+              videoUrl.includes('lh3.google.com/rd-notebooklm/') ||
+              videoUrl.includes('googlevideo.com/videoplayback')) {
+            artifact.videoData = videoUrl;
+          }
+        }
+      }
+      
+      // Fallback: search through indices 6-15 for video URL patterns
+      if (!artifact.videoData) {
+        for (let i = 6; i < Math.min(data.length, 16); i++) {
+          if (Array.isArray(data[i]) && data[i].length > 1) {
+            // Look for [null, "https://..."] pattern
+            if (data[i][0] === null && typeof data[i][1] === 'string' && data[i][1].startsWith('http')) {
+              const videoUrl = data[i][1];
+              if (videoUrl.includes('lh3.googleusercontent.com/notebooklm/') || 
+                  videoUrl.includes('lh3.google.com/rd-notebooklm/') ||
+                  videoUrl.includes('googlevideo.com/videoplayback')) {
+                artifact.videoData = videoUrl;
+                break;
+              }
+            }
+          } else if (typeof data[i] === 'string' && data[i].startsWith('http') && 
+                     (data[i].includes('lh3.googleusercontent.com/notebooklm/') || 
+                      data[i].includes('lh3.google.com/rd-notebooklm/') ||
+                      data[i].includes('googlevideo.com/videoplayback'))) {
+            artifact.videoData = data[i];
+            break;
+          }
         }
       }
     }

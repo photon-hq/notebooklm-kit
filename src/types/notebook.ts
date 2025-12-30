@@ -8,85 +8,82 @@ import type { Source } from './source.js';
  * NotebookLM Project (Notebook)
  */
 export interface Notebook {
-  /** Unique project ID */
-  projectId: string;
-  
-  /** Project title */
-  title: string;
-  
-  /** Project emoji */
-  emoji?: string;
-  
-  /** Project sources */
-  sources?: Source[];
-  
-  /** Project metadata */
-  metadata?: Record<string, any>;
-  
-  /** Creation timestamp */
-  createdAt?: string;
-  
-  /** Last modified timestamp */
-  updatedAt?: string;
-  
-  /** Project description */
-  description?: string;
-  
-  /** Project owner */
-  owner?: string;
-  
-  /** Sharing settings */
-  sharing?: SharingSettings;
+  projectId: string; /** Unique project ID */
+  title: string; /** Project title */
+  emoji?: string; /** Project emoji */
+  sources?: Source[]; /** Project sources */
+  metadata?: Record<string, any>; /** Project metadata */
+  createdAt?: string; /** Creation timestamp */
+  updatedAt?: string; /** Last modified timestamp */
+  description?: string; /** Project description */
+  owner?: string; /** Project owner */
+  sharing?: SharingSettings; /** Sharing settings */
+  sourceCount?: number; /** Number of sources in the notebook */
+  lastAccessed?: string; /** Last accessed timestamp */
 }
 
 /**
  * Sharing settings for a project
  */
 export interface SharingSettings {
-  /** Is project shared */
-  isShared?: boolean;
-  
-  /** Share URL */
-  shareUrl?: string;
-  
-  /** Share ID */
-  shareId?: string;
-  
-  /** Public access */
-  publicAccess?: boolean;
-  
-  /** Allowed users */
-  allowedUsers?: string[];
+  isShared?: boolean; /** Is project shared */
+  shareUrl?: string; /** Share URL */
+  shareId?: string; /** Share ID */
+  publicAccess?: boolean; /** Public access */
+  allowedUsers?: string[]; /** Allowed users */
 }
 
 /**
  * Options for creating a notebook
  */
 export interface CreateNotebookOptions {
-  /** Notebook title */
-  title: string;
-  
-  /** Notebook emoji (optional) */
-  emoji?: string;
-  
-  /** Initial description (optional) */
-  description?: string;
+  title: string; /** Notebook title */
+  description?: string; /** Initial description (optional) */
 }
 
 /**
  * Options for updating a notebook
  */
 export interface UpdateNotebookOptions {
-  /** New title */
-  title?: string;
-  
-  /** New emoji */
-  emoji?: string;
-  
-  /** New description */
-  description?: string;
-  
-  /** Other metadata updates */
-  metadata?: Record<string, any>;
+  title?: string; /** New title */
+  description?: string; /** New description */
+  metadata?: Record<string, any>; /** Other metadata updates */
 }
 
+/**
+ * Options for sharing a notebook
+ */
+export interface ShareNotebookOptions {
+  users?: Array<{ /** Users to share with (supports multiple users) */
+    email: string; /** User email */
+    role: 2 | 3 | 4; /** User role: 2=editor, 3=viewer, 4=remove */
+  }>;
+  anyoneWithLink?: boolean; /** Enable public link access (anyone with link) */
+  notify?: boolean; /** Notify users when adding/removing/updating permissions (default: true, only used when users are provided) */
+  accessType?: 1 | 2; /** Access type: 2=restricted, 1=anyone with link */
+}
+
+/**
+ * Result of sharing a notebook
+ */
+export interface ShareNotebookResult {
+  shareUrl: string; /** Share URL (always present) */
+  success: boolean; /** Whether the share operation succeeded */
+  notebookId: string; /** The notebook ID that was shared */
+  accessType: 1 | 2; /** Access type: 1=anyone with link, 2=restricted */
+  linkEnabled: boolean; /** Whether "anyone with link" is enabled */
+  isShared: boolean; /** Whether the notebook is shared */
+  publicAccess: boolean; /** Whether public access is enabled */
+  users?: Array<{ /** Users with access (only present if users were shared) */
+    email: string; /** User email */
+    role: 2 | 3; /** User role: 2=editor, 3=viewer */
+  }>;
+}
+
+/**
+ * Result of deleting notebook(s)
+ */
+export interface DeleteNotebookResult {
+  deleted: string[]; /** Array of deleted notebook IDs */
+  count: number; /** Number of notebooks deleted */
+}

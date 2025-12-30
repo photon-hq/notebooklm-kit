@@ -7,8 +7,11 @@
 // NotebookLM Service - Project/Notebook Operations
 // ============================================================================
 
-/** List recently viewed projects/notebooks */
-export const RPC_LIST_RECENTLY_VIEWED_PROJECTS = 'wXbhsf';
+/** List my notebooks (recently viewed) - primary listing RPC */
+export const RPC_LIST_MY_NOTEBOOKS = 'wXbhsf';
+
+/** List projects/notebooks with filters (legacy, may not return actual data) */
+export const RPC_LIST_PROJECTS = 'hT54vc';
 
 /** Create a new project/notebook */
 export const RPC_CREATE_PROJECT = 'CCqFvf';
@@ -23,10 +26,8 @@ export const RPC_POLL_SOURCE_PROCESSING = 'rLM1Ne';
 export const RPC_DELETE_PROJECTS = 'WWINqb';
 
 /** Update project metadata */
-export const RPC_MUTATE_PROJECT = 's0tc2d';
+export const RPC_UPDATE_PROJECT = 's0tc2d';
 
-/** Remove project from recently viewed list */
-export const RPC_REMOVE_RECENTLY_VIEWED = 'fejl7e';
 
 // ============================================================================
 // NotebookLM Service - Source Operations
@@ -104,12 +105,21 @@ export const RPC_GET_AUDIO_OVERVIEW = 'VUsiyb';
 /** Delete audio overview */
 export const RPC_DELETE_AUDIO_OVERVIEW = 'V5N4be';
 
+/** Get audio download URL (download audio file) */
+export const RPC_GET_AUDIO_DOWNLOAD = 'Fxmvse';
+
 // ============================================================================
 // NotebookLM Service - Video Operations
 // ============================================================================
 
 /** Create video overview */
 export const RPC_CREATE_VIDEO_OVERVIEW = 'R7cb6c';
+
+/** Create report (also uses R7cb6c) */
+export const RPC_CREATE_REPORT = 'R7cb6c';
+
+/** Export report to Google Docs or Sheets */
+export const RPC_EXPORT_REPORT = 'Krh3pd';
 
 // ============================================================================
 // NotebookLM Service - Generation Operations
@@ -153,11 +163,6 @@ export const RPC_MUTATE_ACCOUNT = 'hT54vc';
 // NotebookLM Service - Analytics Operations
 // ============================================================================
 
-/** Get project analytics */
-export const RPC_GET_PROJECT_ANALYTICS = 'AUrzMb';
-
-/** Submit user feedback */
-export const RPC_SUBMIT_FEEDBACK = 'uNyJKe';
 
 // ============================================================================
 // NotebookLMSharing Service Operations
@@ -166,8 +171,8 @@ export const RPC_SUBMIT_FEEDBACK = 'uNyJKe';
 /** Share audio overview */
 export const RPC_SHARE_AUDIO = 'RGP97b';
 
-/** Get project sharing details */
-export const RPC_GET_PROJECT_DETAILS = 'JFMDGd';
+/** Get sharing details */
+export const RPC_GET_SHARING_DETAILS = 'JFMDGd';
 
 /** Share project */
 export const RPC_SHARE_PROJECT = 'QDyure';
@@ -226,8 +231,6 @@ export const RPC_LIST_ARTIFACTS = 'gArtLc';
 // LabsTailwindOrchestrationService - Additional Operations
 // ============================================================================
 
-/** List featured projects */
-export const RPC_LIST_FEATURED_PROJECTS = 'nS9Qlc';
 
 /** Report content */
 export const RPC_REPORT_CONTENT = 'rJKx8e';
