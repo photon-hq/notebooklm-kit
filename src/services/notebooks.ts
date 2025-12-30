@@ -125,18 +125,19 @@ export class NotebooksService {
     // Trim notebookId to prevent issues with trailing spaces
     const trimmedNotebookId = notebookId.trim();
     
-    if (!options.users && !options.anyoneWithLink) {
-      throw new APIError('At least one sharing option (users or anyoneWithLink) must be provided', undefined, 400);
-    }
+    // accessType: 1 = anyone with link, 2 = restricted (default)
+    // Default to restricted (2) unless explicitly set to anyone with link (1)
+    const accessType = options.accessType || 2;
     
     // Notify should only be used when there are user permission changes (adding/removing/updating users)
     // When only changing access type (restricted vs anyone with link), notify is not relevant
     const hasUserChanges = options.users && options.users.length > 0;
     const notify = hasUserChanges ? (options.notify !== false ? 1 : 0) : 0;
     
-    // accessType: 1 = public (anyone can view), 2 = restricted (default)
-    // Default to restricted (2) unless explicitly set to public (1)
-    const accessType = options.accessType || 2;
+    // Validate: must have users OR accessType === 1 (anyone with link)
+    if (!options.users && accessType !== 1) {
+      throw new APIError('At least one sharing option (users or accessType=1 for anyone with link) must be provided', undefined, 400);
+    }
     
     let shareData: any[];
     if (options.users && options.users.length > 0) {
@@ -158,7 +159,7 @@ export class NotebooksService {
         users.push([user.email.trim(), null, user.role]);
       }
       shareData = [trimmedNotebookId, users];
-    } else if (options.anyoneWithLink) {
+    } else if (accessType === 1) {
       // Structure: [notebookId, null, [1]] where [1] enables link sharing
       shareData = [trimmedNotebookId, null, [1]];
     } else {
@@ -237,9 +238,7 @@ export class NotebooksService {
         success: false,
         notebookId: trimmedNotebookId,
         accessType,
-        linkEnabled: accessType === 1,
         isShared: false,
-        publicAccess: false,
       };
     }
     
@@ -249,9 +248,7 @@ export class NotebooksService {
       success: true,
       notebookId: trimmedNotebookId,
       accessType,
-      linkEnabled: accessType === 1,
-      isShared: false,
-      publicAccess: accessType === 1,
+      isShared: accessType === 1 || !!(options.users && options.users.length > 0),
     };
     
     try {
@@ -363,9 +360,7 @@ export class NotebooksService {
       return {
         shareUrl,
         accessType,
-        linkEnabled: accessType === 1,
         isShared,
-        publicAccess: accessType === 1,
         users: users.length > 0 ? users : undefined,
       };
     } catch (error) {
@@ -373,9 +368,7 @@ export class NotebooksService {
       return {
         shareUrl: `https://notebooklm.google.com/notebook/${notebookId}`,
         accessType: 2,
-        linkEnabled: false,
         isShared: false,
-        publicAccess: false,
       };
     }
   }

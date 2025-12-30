@@ -58,9 +58,8 @@ export interface ShareNotebookOptions {
     email: string; /** User email */
     role: 2 | 3 | 4; /** User role: 2=editor, 3=viewer, 4=remove */
   }>;
-  anyoneWithLink?: boolean; /** Enable public link access (anyone with link) */
   notify?: boolean; /** Notify users when adding/removing/updating permissions (default: true, only used when users are provided) */
-  accessType?: 1 | 2; /** Access type: 2=restricted, 1=anyone with link */
+  accessType?: 1 | 2; /** Access type: 1=anyone with link, 2=restricted (default: 2) */
 }
 
 /**
@@ -71,9 +70,7 @@ export interface ShareNotebookResult {
   success: boolean; /** Whether the share operation succeeded */
   notebookId: string; /** The notebook ID that was shared */
   accessType: 1 | 2; /** Access type: 1=anyone with link, 2=restricted */
-  linkEnabled: boolean; /** Whether "anyone with link" is enabled */
-  isShared: boolean; /** Whether the notebook is shared */
-  publicAccess: boolean; /** Whether public access is enabled */
+  isShared: boolean; /** Whether the notebook is shared (true if shared with users or link enabled) */
   users?: Array<{ /** Users with access (only present if users were shared) */
     email: string; /** User email */
     role: 2 | 3; /** User role: 2=editor, 3=viewer */

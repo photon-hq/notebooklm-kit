@@ -430,9 +430,8 @@ console.log(`Deleted ${result.count} notebooks: ${result.deleted.join(', ')}`)
 - `notebookId: string` - The notebook ID (required, automatically trimmed)
 - `options: ShareNotebookOptions`
   - `users?: Array<{email: string, role: 2|3|4}>` - Users to share with (optional)
-  - `anyoneWithLink?: boolean` - Enable public link access (optional)
   - `notify?: boolean` - Notify users (default: true, only used when users are provided)
-  - `accessType?: 1|2` - Access type (optional, default: 2=restricted)
+  - `accessType?: 1|2` - Access type: 1=anyone with link, 2=restricted (optional, default: 2)
 
 **Returns:** `Promise<ShareNotebookResult>`
 
@@ -458,10 +457,8 @@ Shares notebook with users or enables link sharing. Supports multiple users with
 - `shareUrl: string` - Share URL (always present, even if not shared)
 - `success: boolean` - Whether the share operation succeeded
 - `notebookId: string` - The notebook ID that was shared
-- `accessType: 1|2` - Access type that was set
-- `linkEnabled: boolean` - Whether "anyone with link" is enabled
-- `isShared: boolean` - Whether the notebook is shared
-- `publicAccess: boolean` - Whether public access is enabled
+- `accessType: 1|2` - Access type: 1=anyone with link, 2=restricted
+- `isShared: boolean` - Whether the notebook is shared (true if shared with users or link enabled)
 - `users?: Array<{email: string, role: 2|3}>` - Users with access (only present if users were shared)
 
 **Notify Behavior:**
@@ -492,7 +489,7 @@ Shares notebook with users or enables link sharing. Supports multiple users with
 
 **Usage:**
 ```typescript
-// Share with users (notify enabled by default)
+// Share with users (restricted access, notify enabled by default)
 const result = await sdk.notebooks.share('notebook-id', {
   users: [
     { email: 'user1@example.com', role: 2 }, // editor
@@ -513,8 +510,7 @@ const result = await sdk.notebooks.share('notebook-id', {
 
 // Enable link sharing (anyone with link)
 const result = await sdk.notebooks.share('notebook-id', {
-  anyoneWithLink: true,
-  accessType: 1, // anyone with link
+  accessType: 1, // 1=anyone with link, 2=restricted
 })
 
 // Remove user (role: 4)

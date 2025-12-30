@@ -33,14 +33,13 @@ async function main() {
     } else {
       // Enable link sharing (anyone with link)
       const result = await sdk.notebooks.share(NOTEBOOK_ID, {
-        anyoneWithLink: true,
-        accessType: 1, // 1=anyone with link
+        accessType: 1, // 1=anyone with link, 2=restricted
       });
 
       console.log(`Share URL: ${result.shareUrl}`);
       console.log(`Success: ${result.success}`);
-      console.log(`Link Enabled: ${result.linkEnabled}`);
-      console.log(`Public Access: ${result.publicAccess}`);
+      console.log(`Access Type: ${result.accessType === 1 ? 'Anyone with link' : 'Restricted'}`);
+      console.log(`Is Shared: ${result.isShared}`);
     }
   } catch (error) {
     handleError(error, 'Failed to share notebook');
