@@ -77,7 +77,7 @@ npm install notebooklm-kit
 
 | Feature | Description | Method | Example |
 |---------|-------------|--------|---------|
-| Chat | Chat with notebook content | `sdk.generation.chat(notebookId, message, sourceIds?)` | |
+| Chat | Chat with notebook content | `sdk.generation.chat(notebookId, message, sourceIds?)` | [chat-basic.ts](examples/chat-basic.ts) |
 | Generate Document Guides | Generate document guides for sources | `sdk.generation.generateDocumentGuides(notebookId)` | |
 | Generate Notebook Guide | Generate a notebook guide | `sdk.generation.generateNotebookGuide(notebookId)` | |
 | Generate Outline | Generate an outline for the notebook | `sdk.generation.generateOutline(notebookId)` | |
@@ -91,10 +91,10 @@ npm install notebooklm-kit
 
 | Feature | Description | Method | Example |
 |---------|-------------|--------|---------|
-| List Notes | List all notes in a notebook | `sdk.notes.list(notebookId)` | |
-| Create Note | Create a new note | `sdk.notes.create(notebookId, options)` | |
-| Update Note | Update a note | `sdk.notes.update(notebookId, noteId, options)` | |
-| Delete Note | Delete a note | `sdk.notes.delete(notebookId, noteIds)` | |
+| List Notes | List all notes in a notebook | `sdk.notes.list(notebookId)` | [note-list.ts](examples/note-list.ts) |
+| Create Note | Create a new note | `sdk.notes.create(notebookId, options)` | [note-create.ts](examples/note-create.ts) |
+| Update Note | Update a note | `sdk.notes.update(notebookId, noteId, options)` | [note-update.ts](examples/note-update.ts) |
+| Delete Note | Delete a note | `sdk.notes.delete(notebookId, noteIds)` | [note-delete.ts](examples/note-delete.ts) |
 
 ## Authentication
 
@@ -2049,160 +2049,426 @@ const result = await sdk.artifacts.share('notebook-id', {
 })
 ```
 
-<details>
-<summary><b>Generation & Chat</b> - Chat & content generation</summary>
+## Generation & Chat
 
-### Methods
+Examples: [chat-basic.ts](examples/chat-basic.ts) | [chat-with-sources.ts](examples/chat-with-sources.ts)
 
-#### `chat(notebookId: string, message: string, sourceIds?: string[])` → `Promise<string>`
-Chat with notebook content.
+### Chat
+
+**Method:** `sdk.generation.chat(notebookId, message, sourceIds?)`
+
+**Examples:** 
+- [chat-basic.ts](examples/chat-basic.ts) - Basic chat with all sources
+- [chat-with-sources.ts](examples/chat-with-sources.ts) - Chat with specific sources
 
 **Parameters:**
-- `notebookId: string` - The notebook ID
-- `message: string` - Chat message
-- `sourceIds?: string[]` - Specific source IDs (optional, uses all if not provided)
+- `notebookId: string` - The notebook ID (required)
+- `message: string` - Chat message/prompt (required)
+- `sourceIds?: string[]` - Optional specific source IDs to query (uses all sources if omitted)
 
-**Returns:**
-- `string` - AI response
+**Returns:** `Promise<string>` - AI response text
 
-**Example:**
+**Description:**
+Chat with your notebook content using AI. Ask questions, get summaries, or have conversations about the content in your notebook. You can chat with all sources or specify particular sources to focus on.
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Quota is checked before chat (if quota manager is enabled)
+- Usage is recorded after successful chat
+- Response is parsed and returned as plain text
+- If `sourceIds` is provided, only those sources are used for context
+- If `sourceIds` is omitted, all sources in the notebook are used
+
+</details>
+
+**Usage:**
 ```typescript
-const response = await sdk.generation.chat('notebook-id', 'What are the main findings?')
+// Chat with all sources
+const response = await sdk.generation.chat(
+  'notebook-id',
+  'What are the main findings from the research?'
+)
+console.log(response)
 
 // Chat with specific sources
 const response = await sdk.generation.chat(
   'notebook-id',
-  'Summarize the methodology',
+  'Summarize the methodology section',
   ['source-id-1', 'source-id-2']
 )
+console.log(response)
+
+// Ask follow-up questions
+const response1 = await sdk.generation.chat('notebook-id', 'What is machine learning?')
+const response2 = await sdk.generation.chat('notebook-id', 'Can you explain it in simpler terms?')
 ```
 
 ---
 
-#### `generateDocumentGuides(notebookId: string)` → `Promise<DocumentGuide[]>`
-Generate document guides for sources.
+### Generate Document Guides
+
+**Method:** `sdk.generation.generateDocumentGuides(notebookId)`
 
 **Parameters:**
-- `notebookId: string` - The notebook ID
+- `notebookId: string` - The notebook ID (required)
 
-**Returns:**
-- `DocumentGuide[]` - Array of document guides
+**Returns:** `Promise<any>` - Document guides
 
-**Example:**
+**Description:**
+Generates document guides for sources in the notebook. These guides provide structured information about each source.
+
+**Usage:**
 ```typescript
 const guides = await sdk.generation.generateDocumentGuides('notebook-id')
+console.log(guides)
 ```
 
 ---
 
-#### `generateNotebookGuide(notebookId: string)` → `Promise<string>`
-Generate a notebook guide.
+### Generate Notebook Guide
+
+**Method:** `sdk.generation.generateNotebookGuide(notebookId)`
 
 **Parameters:**
-- `notebookId: string` - The notebook ID
+- `notebookId: string` - The notebook ID (required)
 
-**Returns:**
-- `string` - Generated guide text
+**Returns:** `Promise<any>` - Generated guide text
 
-**Example:**
+**Description:**
+Generates a comprehensive guide for the entire notebook, summarizing all content and providing an overview.
+
+**Usage:**
 ```typescript
 const guide = await sdk.generation.generateNotebookGuide('notebook-id')
+console.log(guide)
 ```
 
 ---
 
-#### `generateOutline(notebookId: string)` → `Promise<Outline>`
-Generate an outline for the notebook.
+### Generate Outline
+
+**Method:** `sdk.generation.generateOutline(notebookId)`
 
 **Parameters:**
-- `notebookId: string` - The notebook ID
+- `notebookId: string` - The notebook ID (required)
 
-**Returns:**
-- `Outline` - Generated outline
+**Returns:** `Promise<any>` - Generated outline
 
-**Example:**
+**Description:**
+Generates an outline structure for the notebook content, organizing information hierarchically.
+
+**Usage:**
 ```typescript
 const outline = await sdk.generation.generateOutline('notebook-id')
+console.log(outline)
 ```
 
-</details>
+---
+
+### Generate Report Suggestions
+
+**Method:** `sdk.generation.generateReportSuggestions(notebookId)`
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+
+**Returns:** `Promise<any>` - Report suggestions
+
+**Description:**
+Generates suggestions for report topics or structures based on the notebook content.
+
+**Usage:**
+```typescript
+const suggestions = await sdk.generation.generateReportSuggestions('notebook-id')
+console.log(suggestions)
+```
+
+---
+
+### Generate Magic View
+
+**Method:** `sdk.generation.generateMagicView(notebookId, sourceIds)`
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `sourceIds: string[]` - Source IDs to include (required)
+
+**Returns:** `Promise<any>` - Magic view data
+
+**Description:**
+Generates a "magic view" visualization or summary from specific sources.
+
+**Usage:**
+```typescript
+const magicView = await sdk.generation.generateMagicView('notebook-id', [
+  'source-id-1',
+  'source-id-2',
+])
+console.log(magicView)
+```
+
+---
+
+### Start Draft
+
+**Method:** `sdk.generation.startDraft(notebookId)`
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+
+**Returns:** `Promise<any>` - Draft data
+
+**Description:**
+Starts a draft generation process for the notebook.
+
+**Usage:**
+```typescript
+const draft = await sdk.generation.startDraft('notebook-id')
+console.log(draft)
+```
+
+---
+
+### Start Section
+
+**Method:** `sdk.generation.startSection(notebookId)`
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+
+**Returns:** `Promise<any>` - Section data
+
+**Description:**
+Starts a new section generation for the notebook.
+
+**Usage:**
+```typescript
+const section = await sdk.generation.startSection('notebook-id')
+console.log(section)
+```
+
+---
+
+### Generate Section
+
+**Method:** `sdk.generation.generateSection(notebookId)`
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+
+**Returns:** `Promise<any>` - Generated section
+
+**Description:**
+Generates a new section for the notebook content.
+
+**Usage:**
+```typescript
+const section = await sdk.generation.generateSection('notebook-id')
+console.log(section)
+```
+
+---
+
+## Notes
+
+Examples: [note-list.ts](examples/note-list.ts) | [note-create.ts](examples/note-create.ts) | [note-update.ts](examples/note-update.ts) | [note-delete.ts](examples/note-delete.ts)
+
+### List Notes
+
+**Method:** `sdk.notes.list(notebookId)`
+
+**Example:** [note-list.ts](examples/note-list.ts)
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+
+**Returns:** `Promise<Note[]>`
+
+**Description:**
+Lists all notes in a notebook. Returns an array of notes with their titles, content, and metadata.
+
+**Return Fields:**
+- `noteId: string` - Unique note ID (required for update/delete operations)
+- `title: string` - Note title
+- `content: string` - Note content
+- `tags?: string[]` - Note tags (if any)
+- `createdAt?: string` - Creation timestamp (if available)
+- `updatedAt?: string` - Last modified timestamp (if available)
 
 <details>
-<summary><b>Notes</b> - Manage notes</summary>
+<summary><strong>Notes</strong></summary>
 
-### Methods
-
-#### `list(notebookId: string)` → `Promise<Note[]>`
-List all notes in a notebook.
-
-**Parameters:**
-- `notebookId: string` - The notebook ID
-
-**Returns:**
-- `Note[]` - Array of notes
-
-**Example:**
-```typescript
-const notes = await sdk.notes.list('notebook-id')
-```
-
----
-
-#### `create(notebookId: string, options: CreateNoteOptions)` → `Promise<Note>`
-Create a new note.
-
-**Parameters:**
-- `notebookId: string` - The notebook ID
-- `options.title: string` - Note title
-- `options.content: string` - Note content
-
-**Returns:**
-- `Note` - Created note
-
-**Example:**
-```typescript
-const note = await sdk.notes.create('notebook-id', {
-  title: 'Meeting Notes',
-  content: 'Key points from the discussion...',
-})
-```
-
----
-
-#### `update(notebookId: string, noteId: string, options: UpdateNoteOptions)` → `Promise<Note>`
-Update a note.
-
-**Parameters:**
-- `notebookId: string` - The notebook ID
-- `noteId: string` - The note ID
-- `options.title?: string` - New title (optional)
-- `options.content?: string` - New content (optional)
-
-**Returns:**
-- `Note` - Updated note
-
-**Example:**
-```typescript
-const updated = await sdk.notes.update('notebook-id', 'note-id', {
-  content: 'Updated content...',
-})
-```
-
----
-
-#### `delete(notebookId: string, noteId: string)` → `Promise<void>`
-Delete a note.
-
-**Parameters:**
-- `notebookId: string` - The notebook ID
-- `noteId: string` - The note ID
-
-**Example:**
-```typescript
-await sdk.notes.delete('notebook-id', 'note-id')
-```
+- Returns empty array if notebook has no notes
+- Notes are returned in the order they appear in the notebook
+- Content may be truncated in list view (use individual note operations for full content)
+- Tags are optional and may be empty
 
 </details>
+
+**Usage:**
+```typescript
+const notes = await sdk.notes.list('notebook-id')
+console.log(`Found ${notes.length} notes`)
+
+notes.forEach((note, index) => {
+  console.log(`${index + 1}. ${note.title}`)
+  console.log(`   ID: ${note.noteId}`)
+  if (note.tags && note.tags.length > 0) {
+    console.log(`   Tags: ${note.tags.join(', ')}`)
+  }
+})
+```
+
+---
+
+### Create Note
+
+**Method:** `sdk.notes.create(notebookId, options)`
+
+**Example:** [note-create.ts](examples/note-create.ts)
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `options: CreateNoteOptions`
+  - `title: string` - Note title (required)
+  - `content?: string` - Note content (optional, defaults to empty string)
+  - `tags?: string[]` - Note tags (optional)
+  - `noteType?: NoteType[]` - Note type (optional, defaults to `[NoteType.REGULAR]`)
+
+**Returns:** `Promise<Note>`
+
+**Description:**
+Creates a new note in the notebook. Notes are useful for adding your own annotations, reminders, or summaries alongside the notebook content.
+
+**Return Fields:**
+- `noteId: string` - Unique note ID (use this for update/delete operations)
+- `title: string` - Note title (as provided)
+- `content: string` - Note content (may be empty initially)
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Title is required - cannot create a note without a title
+- Content is optional and can be added later via `update()`
+- Tags are optional and can be added during creation or later
+- Note type defaults to `REGULAR` (1) - use `GENERATED` (2) for AI-generated notes
+- Returns immediately with note ID - no waiting required
+
+</details>
+
+**Usage:**
+```typescript
+// Create a simple note
+const note = await sdk.notes.create('notebook-id', {
+  title: 'Meeting Notes',
+  content: 'Key points from today\'s meeting...',
+})
+console.log(`Created note: ${note.noteId}`)
+
+// Create a note with tags
+const note = await sdk.notes.create('notebook-id', {
+  title: 'Research Findings',
+  content: 'Important findings...',
+  tags: ['research', 'findings'],
+})
+
+// Create a note with just a title (add content later)
+const note = await sdk.notes.create('notebook-id', {
+  title: 'Quick Reminder',
+})
+```
+
+---
+
+### Update Note
+
+**Method:** `sdk.notes.update(notebookId, noteId, options)`
+
+**Example:** [note-update.ts](examples/note-update.ts)
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `noteId: string` - The note ID (required)
+- `options: UpdateNoteOptions`
+  - `title?: string` - New title (optional)
+  - `content?: string` - New content (optional)
+  - `tags?: string[]` - New tags (optional)
+
+**Returns:** `Promise<Note>`
+
+**Description:**
+Updates a note's title, content, or tags. Supports partial updates - only provided fields are updated.
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- At least one field (`title`, `content`, or `tags`) must be provided
+- Only provided fields are updated - other fields remain unchanged
+- Tags replace existing tags (not merged)
+- Returns updated note object
+
+</details>
+
+**Usage:**
+```typescript
+// Update title only
+const updated = await sdk.notes.update('notebook-id', 'note-id', {
+  title: 'Updated Meeting Notes',
+})
+
+// Update content only
+const updated = await sdk.notes.update('notebook-id', 'note-id', {
+  content: 'Updated content with new information...',
+})
+
+// Update both title and content
+const updated = await sdk.notes.update('notebook-id', 'note-id', {
+  title: 'Final Meeting Notes',
+  content: 'Final content...',
+  tags: ['meeting', 'final'],
+})
+```
+
+---
+
+### Delete Note
+
+**Method:** `sdk.notes.delete(notebookId, noteIds)`
+
+**Example:** [note-delete.ts](examples/note-delete.ts)
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `noteIds: string | string[]` - Single note ID or array of note IDs (required)
+
+**Returns:** `Promise<void>`
+
+**Description:**
+Deletes one or more notes from the notebook. This action cannot be undone.
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Supports both single note ID and array of note IDs
+- Batch deletion is supported (pass array of IDs)
+- Deletion is permanent and cannot be undone
+- No confirmation required - deletion is immediate
+
+</details>
+
+**Usage:**
+```typescript
+// Delete single note
+await sdk.notes.delete('notebook-id', 'note-id')
+
+// Delete multiple notes
+await sdk.notes.delete('notebook-id', [
+  'note-id-1',
+  'note-id-2',
+  'note-id-3',
+])
+```
 
 ## Language Support
 
