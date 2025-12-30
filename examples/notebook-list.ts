@@ -1,4 +1,4 @@
-import type { Notebook } from '../dist/index.js';
+import type { Notebook } from '../src/types/notebook.js';
 import { createSDK, handleError } from './utils.js';
 
 async function main() {

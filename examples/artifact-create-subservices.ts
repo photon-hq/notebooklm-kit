@@ -1,5 +1,5 @@
 import { createSDK, handleError } from './utils.js';
-import { NotebookLMLanguage } from '../dist/index.js';
+import { NotebookLMLanguage } from '../src/types/languages.js';
 
 /**
  * Example: Creating artifacts using sub-service methods

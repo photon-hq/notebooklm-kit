@@ -18,15 +18,15 @@ async function main() {
     if (sourceId && sourceId !== 'your-source-id') {
       console.log('2. Getting specific source...');
       const source = await sdk.sources.get(notebookId, sourceId);
-      console.log(`   Title: ${source.title || 'Untitled'}`);
-      console.log(`   ID: ${source.sourceId}`);
-      console.log(`   Type: ${source.type}`);
-      console.log(`   Status: ${source.status}`);
-      if (source.url) {
-        console.log(`   URL: ${source.url}`);
+      console.log(`   Title: ${source?.[0]?.title || 'Untitled'}`);
+      console.log(`   ID: ${source?.[0]?.sourceId || 'N/A'}`);
+      console.log(`   Type: ${source?.[0]?.type || 'Unknown'}`);
+      console.log(`   Status: ${source?.[0]?.status || 'Unknown'}`);
+      if (source?.[0]?.url) {
+        console.log(`   URL: ${source?.[0]?.url || 'N/A'}`);
       }
-      if (source.metadata) {
-        console.log(`   Metadata:`, source.metadata);
+      if (source?.[0]?.metadata) {
+        console.log(`   Metadata:`, source?.[0]?.metadata || 'N/A');
       }
     } else {
       console.log('2. Set SOURCE_ID in .env to get a specific source');

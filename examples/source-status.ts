@@ -1,3 +1,4 @@
+import { SourceStatus } from '../src/types/source.js';
 import { createSDK, handleError } from './utils.js';
 
 async function main() {
@@ -28,7 +29,7 @@ async function main() {
     const sources = await sdk.sources.list(notebookId);
     sources.forEach((source, index) => {
       const isProcessing = status.processing.includes(source.sourceId);
-      const statusIcon = isProcessing ? '⏳' : source.status === 'READY' ? '✅' : '❌';
+      const statusIcon = isProcessing ? '⏳' : source.status === SourceStatus.READY ? '✅' : '❌';
       console.log(`${statusIcon} ${index + 1}. ${source.title || 'Untitled'}`);
       console.log(`     Status: ${source.status}`);
       console.log(`     ID: ${source.sourceId}`);

@@ -1,5 +1,5 @@
 import { createSDK, handleError } from './utils.js';
-import { ArtifactType, NotebookLMLanguage } from '../dist/index.js';
+import { ArtifactType, NotebookLMLanguage } from '../src/types/artifact.js';
 
 async function main() {
   const sdk = createSDK();

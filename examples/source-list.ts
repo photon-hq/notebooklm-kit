@@ -1,5 +1,5 @@
 import { createSDK, handleError } from './utils.js';
-import { SourceType } from '../dist/index.js';
+import { SourceType } from '../src/types/source.js';
 
 async function main() {
   const sdk = createSDK();

@@ -41,7 +41,7 @@ async function main() {
 
     // Verify update
     const updatedSource = await sdk.sources.get(notebookId, targetSourceId);
-    console.log(`\nVerified: ${updatedSource.title}`);
+    console.log(`\nVerified: ${updatedSource?.[0]?.title || 'Untitled'}`);
   } catch (error) {
     handleError(error, 'Failed to update source');
   }

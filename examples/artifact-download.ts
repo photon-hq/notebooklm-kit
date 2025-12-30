@@ -1,5 +1,5 @@
-import { createSDK, handleError } from './utils.js';
-import { ArtifactType, ArtifactState } from '../dist/index.js';
+import { createSDK, handleError } from './utils.js';  
+import { ArtifactType, ArtifactState } from '../src/types/artifact.js';
 import { mkdir } from 'fs/promises';
 import { join } from 'path';
 
