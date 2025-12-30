@@ -60,12 +60,14 @@ export interface VideoOverview {
 }
 
 export interface CreateAudioOverviewOptions {
+  title?: string;
   instructions?: string;
   sourceIds?: string[];
   customization?: AudioCustomization;
 }
 
 export interface CreateVideoOverviewOptions {
+  title?: string;
   instructions?: string;
   sourceIds?: string[];
   customization?: VideoCustomization;
@@ -233,6 +235,7 @@ class VideoService {
   
   async create(notebookId: string, options: CreateVideoOverviewOptions = {}): Promise<VideoOverview> {
     const artifact = await this.artifactsService.create(notebookId, ArtifactType.VIDEO, {
+      title: options.title,
       instructions: options.instructions,
       sourceIds: options.sourceIds,
       customization: options.customization,
@@ -253,6 +256,7 @@ class AudioService {
   
   async create(notebookId: string, options: CreateAudioOverviewOptions = {}): Promise<AudioOverview> {
     const artifact = await this.artifactsService.create(notebookId, ArtifactType.AUDIO, {
+      title: options.title,
       instructions: options.instructions,
       sourceIds: options.sourceIds,
       customization: options.customization,
@@ -420,8 +424,8 @@ export class ArtifactsService {
    * 
    * **Input:**
    * - `artifactId` (string, required): The ID of the artifact to rename
-   *   - For most artifacts: use the artifact ID from `create()` or `list()`
-   *   - For audio artifacts: use the notebook ID
+   *   - Use the artifact ID from `create()` or `list()` for all artifact types
+   *   - Audio and video artifacts have their own artifactId (not the notebook ID)
    * - `newTitle` (string, required): The new title/name for the artifact
    * 
    * **Output:** Returns the updated `Artifact` object with the new title.
@@ -430,7 +434,7 @@ export class ArtifactsService {
    * - This only updates the title. To update other fields, use `update()`.
    * - Works for all artifact types (quiz, flashcards, study guide, mind map, infographic, slide deck, report, audio, video)
    * 
-   * @param artifactId - The artifact ID
+   * @param artifactId - The artifact ID (from create() or list())
    * @param newTitle - New title
    * 
    * @example
@@ -439,8 +443,9 @@ export class ArtifactsService {
    * const artifact = await client.artifacts.rename('artifact-id', 'My Updated Quiz');
    * console.log(`Renamed to: ${artifact.title}`);
    * 
-   * // Rename audio artifact
-   * const audio = await client.artifacts.rename('notebook-id', 'My Audio Overview');
+   * // Rename audio artifact (use audioId from create() or list())
+   * const audio = await sdk.artifacts.audio.create('notebook-id');
+   * const renamed = await client.artifacts.rename(audio.audioId, 'My Audio Overview');
    * ```
    */
   async rename(artifactId: string, newTitle: string): Promise<Artifact> {
@@ -464,61 +469,64 @@ export class ArtifactsService {
    * 
    * **Input:**
    * - `artifactId` (string, required): The ID of the artifact to delete
-   *   - For most artifacts: use the artifact ID from `create()` or `list()`
-   *   - For audio artifacts: use the notebook ID (same as `notebookId` parameter)
-   * - `notebookId` (string, optional): Required only for audio artifacts (must match `artifactId`)
+   *   - Use the artifact ID from `create()` or `list()` for all artifact types
+   *   - Audio and video artifacts have their own artifactId (not the notebook ID)
+   * - `notebookId` (string, optional): Optional notebook ID (helpful for audio/video artifacts if get() fails)
    * 
    * **Output:** Returns `void` on success. Throws an error if deletion fails.
    * 
    * **Note:** 
    * - Deletion is permanent and cannot be undone
    * - Works for all artifact types (quiz, flashcards, study guide, mind map, infographic, slide deck, report, audio, video)
-   * - Audio artifacts require passing the notebook ID as both parameters
+   * - Audio and video artifacts use V5N4be RPC with `[[2], artifactId]` structure
+   * - Other artifacts use WxBZtb RPC with `[artifactId]` structure
    * 
-   * @param artifactId - The artifact ID (for audio artifacts, use notebookId)
-   * @param notebookId - Optional notebook ID (required for audio artifacts)
+   * @param artifactId - The artifact ID (from create() or list())
+   * @param notebookId - Optional notebook ID (helpful for audio/video if get() needs it)
    * 
    * @example
    * ```typescript
-   * // Delete any artifact type
+   * // Delete any artifact type (recommended - automatically detects type)
    * await client.artifacts.delete('artifact-id');
    * 
-   * // Delete audio artifact (requires notebook ID)
-   * await client.artifacts.delete('notebook-id', 'notebook-id');
+   * // Delete with notebook ID (helpful if get() fails)
+   * await client.artifacts.delete('artifact-id', 'notebook-id');
    * ```
    */
   async delete(artifactId: string, notebookId?: string): Promise<void> {
     // Audio and Video artifacts use V5N4be RPC with [[2], artifactId] structure
-    // Audio: notebookId === artifactId
-    // Video: need to check artifact type
-    if (notebookId && artifactId === notebookId) {
-      // Audio artifacts
-      await this.rpc.call(
-        RPC.RPC_DELETE_AUDIO_OVERVIEW,
-        [[2], artifactId], // Audio delete uses [[2], artifactId] structure
-        artifactId
-      );
-    } else {
-      // Check if it's a video artifact
+    // Other artifacts use WxBZtb RPC with [artifactId] structure
+    // We need to check the artifact type to determine which RPC to use
+    
+    try {
+      // Try to get the artifact to determine its type
+      const artifact = await this.get(artifactId, notebookId);
+      
+      if (artifact.type === ArtifactType.AUDIO || artifact.type === ArtifactType.VIDEO) {
+        // Audio and Video artifacts use V5N4be with [[2], artifactId] structure
+        await this.rpc.call(
+          RPC.RPC_DELETE_AUDIO_OVERVIEW, // V5N4be - used for both audio and video
+          [[2], artifactId],
+          notebookId || artifactId
+        );
+      } else {
+        // Other artifacts (QUIZ, FLASHCARDS, REPORT, MIND_MAP, INFOGRAPHIC, SLIDE_DECK) use WxBZtb
+        await this.rpc.call(
+          RPC.RPC_DELETE_ARTIFACT,
+          [artifactId]
+        );
+      }
+    } catch (error) {
+      // If we can't get artifact, try both methods
+      // First try V5N4be (for audio/video), then fall back to standard delete
       try {
-        const artifact = await this.get(artifactId, notebookId);
-        if (artifact.type === ArtifactType.VIDEO) {
-          // Video artifacts also use V5N4be with same structure
-          await this.rpc.call(
-            RPC.RPC_DELETE_AUDIO_OVERVIEW, // V5N4be - used for both audio and video
-            [[2], artifactId],
-            artifactId
-          );
-        } else {
-          // Other artifacts (QUIZ, FLASHCARDS, REPORT, MIND_MAP, INFOGRAPHIC, SLIDE_DECK) use WxBZtb
-          await this.rpc.call(
-            RPC.RPC_DELETE_ARTIFACT,
-            [artifactId]
-          );
-        }
-      } catch (error) {
-        // If we can't get artifact, fall back to standard delete
-        // This works for all artifact types except audio/video
+        await this.rpc.call(
+          RPC.RPC_DELETE_AUDIO_OVERVIEW,
+          [[2], artifactId],
+          notebookId || artifactId
+        );
+      } catch (audioVideoError) {
+        // If V5N4be fails, try standard delete (for other artifact types)
         await this.rpc.call(
           RPC.RPC_DELETE_ARTIFACT,
           [artifactId]
@@ -692,9 +700,9 @@ export class ArtifactsService {
    * 
    * **Input:**
    * - `artifactId` (string, required): The ID of the artifact to retrieve
-   *   - For most artifacts: use the artifact ID from `create()` or `list()`
-   *   - For audio artifacts: use the notebook ID
-   * - `notebookId` (string, optional): Required for audio artifacts (must match `artifactId`)
+   *   - Use the artifact ID from `create()` or `list()` for all artifact types
+   *   - Audio and video artifacts have their own artifactId (not the notebook ID)
+   * - `notebookId` (string, optional): Optional notebook ID (helpful for audio/video if get() needs it)
    * - `options` (object, optional): Additional options
    *   - For reports: `exportToDocs?: boolean` or `exportToSheets?: boolean` - Export report to Google Docs/Sheets and return URL
    * 
@@ -739,8 +747,9 @@ export class ArtifactsService {
    * const report = await client.artifacts.get('report-id', 'notebook-id', { exportToDocs: true });
    * console.log('Google Docs URL:', report.exportUrl);
    * 
-   * // Get audio artifact (requires notebook ID)
-   * const audio = await client.artifacts.get('notebook-id', 'notebook-id');
+   * // Get audio artifact (use audioId from create() or list())
+   * const audio = await sdk.artifacts.audio.create('notebook-id');
+   * const audioData = await client.artifacts.get(audio.audioId, 'notebook-id');
    * ```
    */
   async get(artifactId: string, notebookId?: string, options?: { exportToDocs?: boolean; exportToSheets?: boolean }): Promise<Artifact | QuizData | FlashcardData | AudioArtifact | VideoArtifact | any> {
@@ -1204,12 +1213,12 @@ export class ArtifactsService {
    * 
    * **Input:**
    * - `artifactId` (string, required): The ID of the artifact to download
-   *   - For most artifacts: use the artifact ID from `create()` or `list()`
-   *   - For audio artifacts: use the notebook ID
+   *   - Use the artifact ID from `create()` or `list()` for all artifact types
+   *   - Audio and video artifacts have their own artifactId (not the notebook ID)
    * - `folderPath` (string, required): Folder path where the file should be saved
    *   - On Node.js: Absolute or relative file system path (e.g., `./downloads` or `/tmp/artifacts`)
    *   - On Browser: File name only (file will be downloaded via browser download)
-   * - `notebookId` (string, optional): Required for audio artifacts (must match `artifactId`)
+   * - `notebookId` (string, optional): Optional notebook ID (helpful for audio/video if download needs it)
    * 
    * **Output:** Returns the path/name of the saved file and the data structure:
    * ```typescript
@@ -1287,8 +1296,9 @@ export class ArtifactsService {
    * const flashcardResult = await client.artifacts.download('flashcard-id', './downloads');
    * console.log(`Flashcards saved to: ${flashcardResult.filePath}`);
    * 
-   * // Download audio and save as MP3
-   * const audioResult = await client.artifacts.download('notebook-id', './downloads', 'notebook-id');
+   * // Download audio and save as MP3 (use audioId from create() or list())
+   * const audio = await sdk.artifacts.audio.create('notebook-id');
+   * const audioResult = await client.artifacts.download(audio.audioId, './downloads', 'notebook-id');
    * console.log(`Audio saved to: ${audioResult.filePath}`);
    * 
    * // Video and Slides: Download not available (experimental)

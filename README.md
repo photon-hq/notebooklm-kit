@@ -70,7 +70,7 @@ npm install notebooklm-kit
 
 | Feature | Description | Method | Example |
 |---------|-------------|--------|---------|
-| Create Artifact | Create study material (quiz, flashcards, mind map, etc.) | [`sdk.artifacts.create()`](#create-artifact) or `sdk.artifacts.{type}.create()` | [artifact-create.ts](examples/artifact-create.ts) |
+| Create Artifact | Create study material (quiz, flashcards, mind map, etc.) | [`sdk.artifacts.create()`](#create-artifact) or `sdk.artifacts.{type}.create()` | [artifact-create.ts](examples/artifact-create.ts)<br>[artifact-create-subservices.ts](examples/artifact-create-subservices.ts) |
 | List Artifacts | List all artifacts in a notebook (with filtering) | [`sdk.artifacts.list()`](#list-artifacts) | [artifact-list.ts](examples/artifact-list.ts) |
 | Get Artifact | Get artifact details (auto-fetches content when ready) | [`sdk.artifacts.get()`](#get-artifact) | [artifact-get.ts](examples/artifact-get.ts) |
 | Download Artifact | Download artifact data to disk (quiz/flashcard JSON, audio file) | [`sdk.artifacts.download()`](#download-artifact) | [artifact-download.ts](examples/artifact-download.ts) |
@@ -669,13 +669,15 @@ console.log(`Ready: ${status.readyCount}/${status.totalCount}`)
 
 ## Artifacts
 
-Examples: [artifact-create.ts](examples/artifact-create.ts) | [artifact-list.ts](examples/artifact-list.ts) | [artifact-get.ts](examples/artifact-get.ts) | [artifact-download.ts](examples/artifact-download.ts) | [artifact-rename.ts](examples/artifact-rename.ts) | [artifact-delete.ts](examples/artifact-delete.ts) | [artifact-share.ts](examples/artifact-share.ts)
+Examples: [artifact-create.ts](examples/artifact-create.ts) | [artifact-create-subservices.ts](examples/artifact-create-subservices.ts) | [artifact-list.ts](examples/artifact-list.ts) | [artifact-get.ts](examples/artifact-get.ts) | [artifact-download.ts](examples/artifact-download.ts) | [artifact-rename.ts](examples/artifact-rename.ts) | [artifact-delete.ts](examples/artifact-delete.ts) | [artifact-share.ts](examples/artifact-share.ts)
 
 ### Create Artifact
 
 **Method:** `sdk.artifacts.create(notebookId, type, options)` or `sdk.artifacts.{type}.create(notebookId, options)`
 
-**Example:** [artifact-create.ts](examples/artifact-create.ts)
+**Examples:** 
+- [artifact-create.ts](examples/artifact-create.ts) - Using main `create()` method
+- [artifact-create-subservices.ts](examples/artifact-create-subservices.ts) - Using type-safe sub-service methods
 
 **Parameters:**
 - `notebookId: string` - The notebook ID (required)
@@ -1049,8 +1051,8 @@ artifacts.forEach(artifact => {
 **Example:** [artifact-get.ts](examples/artifact-get.ts)
 
 **Parameters:**
-- `artifactId: string` - The artifact ID (required)
-- `notebookId?: string` - Notebook ID (required for audio artifacts, optional for others)
+- `artifactId: string` - The artifact ID from `create()` or `list()` (required)
+- `notebookId?: string` - Optional notebook ID (helpful for audio/video if get() needs it)
 - `options?: { exportToDocs?: boolean; exportToSheets?: boolean }` - Export options (for reports only)
 
 **Returns:** `Promise<Artifact | QuizData | FlashcardData | AudioArtifact | VideoArtifact | any>`
@@ -1154,8 +1156,9 @@ const report = await sdk.artifacts.get('report-id', 'notebook-id', {
 })
 console.log(`Sheets URL: ${report.exportUrl}`)
 
-// Get audio with save helper
-const audio = await sdk.artifacts.get('notebook-id', 'notebook-id') // audio uses notebook ID
+// Get audio with save helper (use audioId from create() or list())
+const audioArtifact = await sdk.artifacts.audio.create('notebook-id')
+const audio = await sdk.artifacts.get(audioArtifact.audioId, 'notebook-id')
 if (audio.audioData && audio.saveToFile) {
   await audio.saveToFile('./audio.mp3')
 }
@@ -1170,9 +1173,9 @@ if (audio.audioData && audio.saveToFile) {
 **Example:** [artifact-download.ts](examples/artifact-download.ts)
 
 **Parameters:**
-- `artifactId: string` - The artifact ID (required)
+- `artifactId: string` - The artifact ID from `create()` or `list()` (required)
 - `folderPath: string` - Output folder path (required)
-- `notebookId?: string` - Notebook ID (required for audio artifacts)
+- `notebookId?: string` - Optional notebook ID (helpful for audio/video if download needs it)
 
 **Returns:** `Promise<{ filePath: string; data: any }>`
 
@@ -1212,8 +1215,9 @@ const result = await sdk.artifacts.download('flashcard-id', './downloads', 'note
 console.log(`Saved to: ${result.filePath}`)
 console.log(`Total cards: ${result.data.totalCards}`)
 
-// Download audio
-const result = await sdk.artifacts.download('notebook-id', './downloads', 'notebook-id')
+// Download audio (use audioId from create() or list())
+const audio = await sdk.artifacts.audio.create('notebook-id')
+const result = await sdk.artifacts.download(audio.audioId, './downloads', 'notebook-id')
 console.log(`Audio saved to: ${result.filePath}`)
 
 // Video/Slides: Use get() instead
@@ -1256,8 +1260,9 @@ Same as `get()` - returns updated artifact with new title
 const updated = await sdk.artifacts.rename('artifact-id', 'My Updated Quiz')
 console.log(`New title: ${updated.title}`)
 
-// Rename audio artifact (uses notebook ID)
-const updated = await sdk.artifacts.rename('notebook-id', 'My Audio Overview')
+// Rename audio artifact (use audioId from create() or list())
+const audio = await sdk.artifacts.audio.create('notebook-id')
+const renamed = await sdk.artifacts.rename(audio.audioId, 'My Audio Overview')
 ```
 
 ---
@@ -1269,35 +1274,38 @@ const updated = await sdk.artifacts.rename('notebook-id', 'My Audio Overview')
 **Example:** [artifact-delete.ts](examples/artifact-delete.ts)
 
 **Parameters:**
-- `artifactId: string` - The artifact ID (required)
-- `notebookId?: string` - Notebook ID (required for audio/video artifacts)
+- `artifactId: string` - The artifact ID from `create()` or `list()` (required)
+- `notebookId?: string` - Optional notebook ID (helpful if `get()` fails for audio/video)
 
 **Returns:** `Promise<void>`
 
 **Description:**
-Permanently deletes an artifact. Works for all artifact types. This action cannot be undone.
+Permanently deletes an artifact. Works for all artifact types. This action cannot be undone. Automatically detects artifact type and uses the correct RPC method.
 
 <details>
 <summary><strong>Notes</strong></summary>
 
 - Deletion is permanent and cannot be undone
-- Works for all artifact types
-- Audio artifacts require passing notebook ID (same as `artifactId`)
-- Video artifacts are detected automatically
-- Other artifacts use standard delete RPC
+- Works for all artifact types (quiz, flashcards, report, mind map, infographic, slide deck, audio, video)
+- Automatically detects artifact type by calling `get()` first
+- Audio and video artifacts use V5N4be RPC with `[[2], artifactId]` structure
+- Other artifacts use WxBZtb RPC with `[artifactId]` structure
+- If `get()` fails, tries both methods (V5N4be first, then standard delete)
+- Audio and video artifacts have their own artifactId (not the notebook ID)
 
 </details>
 
 **Usage:**
 ```typescript
-// Delete any artifact
+// Delete any artifact (recommended - automatically detects type)
 await sdk.artifacts.delete('artifact-id')
 
-// Delete audio artifact (requires notebook ID)
-await sdk.artifacts.delete('notebook-id', 'notebook-id')
+// Delete with notebook ID (helpful if get() fails)
+await sdk.artifacts.delete('artifact-id', 'notebook-id')
 
-// Delete video artifact
-await sdk.artifacts.delete('video-id', 'notebook-id')
+// Note: Audio and video artifacts have their own artifactId from create() or list()
+const audio = await sdk.artifacts.audio.create('notebook-id')
+await sdk.artifacts.delete(audio.audioId) // Use audioId, not notebookId
 ```
 
 ---

@@ -21,12 +21,11 @@ async function main() {
     console.log('\n⚠️  Warning: This action cannot be undone.');
 
     console.log('\n=== Notes ===');
-    console.log('For most artifacts:');
+    console.log('For all artifacts (recommended - automatically detects type):');
     console.log('  await sdk.artifacts.delete(artifactId);');
-    console.log('\nFor audio artifacts (requires notebook ID):');
-    console.log('  await sdk.artifacts.delete(notebookId, notebookId);');
-    console.log('\nFor video artifacts (requires notebook ID):');
-    console.log('  await sdk.artifacts.delete(videoId, notebookId);');
+    console.log('\nWith notebook ID (helpful if get() fails):');
+    console.log('  await sdk.artifacts.delete(artifactId, notebookId);');
+    console.log('\nNote: Audio and video artifacts have their own artifactId from create() or list()');
   } catch (error) {
     handleError(error, 'Failed to delete artifact');
   }
