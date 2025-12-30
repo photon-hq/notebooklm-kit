@@ -30,20 +30,1307 @@ import type {
   SearchWebAndWaitOptions,
   WebSearchResult,
 } from '../types/source.js';
-import { ResearchMode, SearchSourceType } from '../types/source.js';
+import { ResearchMode, SearchSourceType, SourceType, SourceStatus } from '../types/source.js';
 import { NotebookLMError } from '../types/common.js';
+
+/**
+ * Web search sub-service for sources
+ * Handles web search operations (search, wait, get results, add discovered)
+ */
+export class WebSearchService {
+  constructor(
+    private rpc: RPCClient,
+    private quota?: import('../utils/quota.js').QuotaManager
+  ) {}
+
+  /**
+   * Search web sources (STEP 1 of multi-step workflow)
+   * 
+   * **Use this for multi-step workflows where you want to see results before deciding next steps.**
+   * 
+   * **Multi-Step Workflow (for user decision-making):**
+   * 1. `search()` → Returns `sessionId` (start here - this method)
+   *    - Shows you the search has started
+   *    - Returns immediately with sessionId
+   * 2. `getResults(sessionId)` → Returns discovered sources (you can validate/filter)
+   *    - Shows you what was found
+   *    - You can inspect, filter, or select which sources to add
+   * 3. `addDiscovered(sessionId, selectedSources)` → Adds your selected sources
+   *    - You decide which sources from step 2 to actually add
+   * 
+   * **Simple Alternative (RECOMMENDED for automated workflows):**
+   * - Use `searchAndWait()` instead - one call, returns all results for validation
+   * - Then use `addDiscovered()` to add selected sources
+   * 
+   * **Customization Options:**
+   * - `mode: ResearchMode.FAST` - Quick search (default)
+   * - `mode: ResearchMode.DEEP` - Comprehensive research (web only)
+   * - `sourceType: SearchSourceType.WEB` - Search web (default)
+   * - `sourceType: SearchSourceType.GOOGLE_DRIVE` - Search Google Drive (FAST mode only)
+   * 
+   * @param notebookId - The notebook ID
+   * @param options - Search options (query, mode, sourceType)
+   * @returns sessionId - Required for steps 2 and 3
+   * 
+   * @example
+   * ```typescript
+   * // Multi-step: Start search, then check results later
+   * const sessionId = await client.sources.add.web.search('notebook-id', {
+   *   query: 'AI research',
+   *   mode: ResearchMode.DEEP,
+   * });
+   * 
+   * // Later... check what was found
+   * const results = await client.sources.add.web.getResults('notebook-id', sessionId);
+   * console.log(`Found ${results.web.length} sources`);
+   * 
+   * // User decides which ones to add
+   * const selected = results.web.filter(s => s.url.includes('arxiv.org'));
+   * await client.sources.add.web.addDiscovered('notebook-id', {
+   *   sessionId,
+   *   webSources: selected,
+   * });
+   * ```
+   */
+  async search(notebookId: string, options: SearchWebSourcesOptions): Promise<string> {
+    const {
+      query,
+      sourceType = SearchSourceType.WEB,
+      mode = ResearchMode.FAST,
+    } = options;
+    
+    // Validate: Deep research only works for web sources
+    if (mode === ResearchMode.DEEP && sourceType !== SearchSourceType.WEB) {
+      throw new NotebookLMError('Deep research mode is only available for web sources');
+    }
+    
+    // Validate: Drive only supports fast mode
+    if (sourceType === SearchSourceType.GOOGLE_DRIVE && mode !== ResearchMode.FAST) {
+      throw new NotebookLMError('Google Drive search only supports fast research mode');
+    }
+    
+    // RPC structure from curl: [["query", sourceType], null, researchMode, notebookId]
+    const response = await this.rpc.call(
+      RPC.RPC_SEARCH_WEB_SOURCES,
+      [
+        [query, sourceType],
+        null,
+        mode,
+        notebookId,
+      ],
+      notebookId
+    );
+    
+    // Extract session ID from response
+    let data = response;
+    if (typeof response === 'string') {
+      try {
+        data = JSON.parse(response);
+      } catch (e) {
+        // If parsing fails, use response as-is
+      }
+    }
+    
+    // Handle different response formats
+    if (Array.isArray(data)) {
+      if (data.length > 0 && typeof data[0] === 'string') {
+        return data[0];
+      }
+      if (data.length > 0 && Array.isArray(data[0]) && data[0].length > 0) {
+        return data[0][0];
+      }
+    }
+    
+    return data?.sessionId || data?.searchId || (typeof data === 'string' ? data : '');
+  }
+
+  /**
+   * Search web sources and wait for results (SIMPLE - one call, returns results for validation)
+   * 
+   * **RECOMMENDED FOR SIMPLE WORKFLOWS** - One call, returns all results you can validate.
+   * 
+   * **What it does:**
+   * - Starts search, waits for results automatically
+   * - Returns all discovered sources once available (or timeout)
+   * - Returns results + sessionId for validation
+   * - No user decision needed during search - just wait and get results
+   * 
+   * **Simple Workflow:**
+   * 1. `searchAndWait()` → Returns results + sessionId (this method - validates results)
+   * 2. `addDiscovered(sessionId, selectedSources)` → Add your selected sources
+   * 
+   * **Customization Options:**
+   * - `mode: ResearchMode.FAST` - Quick search (default, ~10-30 seconds)
+   * - `mode: ResearchMode.DEEP` - Comprehensive research (web only, ~60-120 seconds)
+   * - `sourceType: SearchSourceType.WEB` - Search web (default)
+   * - `sourceType: SearchSourceType.GOOGLE_DRIVE` - Search Google Drive (FAST mode only)
+   * - `timeout` - Max wait time (default: 60000ms = 60 seconds)
+   * - `pollInterval` - How often to check for results (default: 2000ms = 2 seconds)
+   * - `onProgress` - Callback to track progress
+   * 
+   * **When to use:**
+   * - Automated workflows where you don't need to see intermediate steps
+   * - Simple cases where you just want to search and get results
+   * - When you want to validate all results before deciding which to add
+   * 
+   * **When NOT to use:**
+   * - If you need to see results as they come in (use `search()` + `getResults()` instead)
+   * - If you want to make decisions during the search process
+   * 
+   * @param notebookId - The notebook ID
+   * @param options - Search options with waiting configuration
+   * @returns WebSearchResult with sessionId, web sources, and drive sources
+   * 
+   * @example
+   * ```typescript
+   * // Simple: Search and get all results for validation
+   * const result = await client.sources.add.web.searchAndWait('notebook-id', {
+   *   query: 'quantum computing research',
+   *   mode: ResearchMode.DEEP,  // Comprehensive search
+   *   timeout: 120000,  // Wait up to 2 minutes
+   *   onProgress: (status) => {
+   *     console.log(`Found ${status.resultCount} results so far...`);
+   *   },
+   * });
+   * 
+   * // Validate results
+   * console.log(`Found ${result.web.length} web sources`);
+   * console.log(`Found ${result.drive.length} drive sources`);
+   * 
+   * // User decides which to add (or add all)
+   * const topSources = result.web.slice(0, 10);  // Top 10
+   * await client.sources.add.web.addDiscovered('notebook-id', {
+   *   sessionId: result.sessionId,  // Required!
+   *   webSources: topSources,
+   * });
+   * ```
+   */
+  async searchAndWait(notebookId: string, options: SearchWebAndWaitOptions): Promise<WebSearchResult> {
+    const {
+      query,
+      sourceType = SearchSourceType.WEB,
+      mode = ResearchMode.FAST,
+      timeout = 60000,
+      pollInterval = 2000,
+      onProgress,
+    } = options;
+    
+    // Step 1: Initiate search
+    const sessionId = await this.search(notebookId, { query, sourceType, mode });
+    
+    // Step 2: Poll for results
+    const startTime = Date.now();
+    let lastResultCount = 0;
+    
+    while (Date.now() - startTime < timeout) {
+      const results = await this.getResults(notebookId, sessionId);
+      const totalCount = results.web.length + results.drive.length;
+      
+      // Call progress callback if provided
+      if (onProgress) {
+        onProgress({
+          hasResults: totalCount > 0,
+          resultCount: totalCount,
+        });
+      }
+      
+      // If we have results and count hasn't changed, assume search is complete
+      if (totalCount > 0 && totalCount === lastResultCount) {
+        return { ...results, sessionId };
+      }
+      
+      lastResultCount = totalCount;
+      
+      // Wait before next poll
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+    
+    // Timeout - return whatever results we have
+    const results = await this.getResults(notebookId, sessionId);
+    return { ...results, sessionId };
+  }
+
+  /**
+   * Get search results (STEP 2 of multi-step workflow - returns results for validation)
+   * 
+   * **REQUIRES:** You must have a `sessionId` from `search()` (step 1) to use this method.
+   * 
+   * **What it does:**
+   * - Returns discovered sources from a search session
+   * - Shows you what was found so you can validate/filter/select
+   * - Returns results immediately (doesn't wait - call multiple times to poll)
+   * 
+   * **Multi-Step Workflow:**
+   * 1. `search()` → Returns `sessionId` (step 1)
+   * 2. `getResults(sessionId)` → Returns discovered sources (this method - step 2)
+   *    - **You can validate results here** - see what was found
+   *    - **You can filter/select** - decide which sources to add
+   *    - **You can call multiple times** - to poll for more results
+   * 3. `addDiscovered(sessionId, selectedSources)` → Add your selected sources (step 3)
+   * 
+   * **Simple Alternative:**
+   * - Use `searchAndWait()` to combine steps 1-2 automatically
+   * 
+   * **Usage Patterns:**
+   * - Call once after `search()` to get initial results
+   * - Call multiple times to poll for more results (results accumulate)
+   * - Filter results before passing to `addDiscovered()`
+   * 
+   * @param notebookId - The notebook ID
+   * @param sessionId - Session ID from `search()` to filter results (optional - if omitted, returns all results)
+   * @returns Discovered sources (web and drive) for validation
+   * 
+   * @example
+   * ```typescript
+   * // Step 1: Start search
+   * const sessionId = await client.sources.add.web.search('notebook-id', {
+   *   query: 'AI research',
+   * });
+   * 
+   * // Step 2: Get results (can call multiple times to poll)
+   * let results;
+   * do {
+   *   await new Promise(r => setTimeout(r, 2000));  // Wait 2 seconds
+   *   results = await client.sources.add.web.getResults('notebook-id', sessionId);
+   *   console.log(`Found ${results.web.length} sources so far...`);
+   * } while (results.web.length === 0);
+   * 
+   * // Validate and filter results
+   * const relevant = results.web.filter(s => 
+   *   s.title.includes('machine learning') || 
+   *   s.url.includes('arxiv.org')
+   * );
+   * 
+   * // Step 3: Add selected sources
+   * await client.sources.add.web.addDiscovered('notebook-id', {
+   *   sessionId,
+   *   webSources: relevant,
+   * });
+   * ```
+   */
+  async getResults(notebookId: string, sessionId?: string): Promise<{
+    web: DiscoveredWebSource[];
+    drive: DiscoveredDriveSource[];
+  }> {
+    const response = await this.rpc.call(
+      RPC.RPC_GET_SEARCH_RESULTS,
+      [notebookId],
+      notebookId
+    );
+    
+    let data = response;
+    if (typeof response === 'string') {
+      try {
+        data = JSON.parse(response);
+      } catch (e) {
+        // If parsing fails, use response as-is
+      }
+    }
+    
+    const web: DiscoveredWebSource[] = [];
+    const drive: DiscoveredDriveSource[] = [];
+    
+    // Response structure: [[sessionId, metadata], ...]
+    // metadata[3] contains web sources
+    if (!Array.isArray(data)) {
+      return { web, drive };
+    }
+    
+    for (const session of data) {
+      if (!Array.isArray(session) || session.length < 2) {
+        continue;
+      }
+      
+      const currentSessionId = session[0];
+      
+      // Filter by sessionId if provided
+      if (sessionId) {
+        const normalizedSessionId = String(sessionId).trim();
+        const normalizedCurrentId = String(currentSessionId || '').trim();
+        if (normalizedSessionId && normalizedCurrentId !== normalizedSessionId) {
+          continue;
+        }
+      }
+      
+      const metadata = session[1];
+      if (Array.isArray(metadata) && metadata.length > 3) {
+        const webSources = metadata[3];
+        
+        if (webSources === null || webSources === undefined) {
+          continue;
+        }
+        
+        if (Array.isArray(webSources) && webSources.length > 0) {
+          const flattenSources = (arr: any[]): any[] => {
+            const result: any[] = [];
+            for (const item of arr) {
+              if (Array.isArray(item)) {
+                if (item.length >= 2 && typeof item[0] === 'string' && item[0].startsWith('http')) {
+                  result.push(item);
+                } else {
+                  result.push(...flattenSources(item));
+                }
+              }
+            }
+            return result;
+          };
+          
+          const sourcesToProcess = flattenSources(webSources);
+          
+          for (const source of sourcesToProcess) {
+            if (Array.isArray(source) && source.length >= 2) {
+              const url = source[0];
+              const title = source[1];
+              if (url && typeof url === 'string' && url.startsWith('http')) {
+                web.push({
+                  url: url,
+                  title: (typeof title === 'string' ? title : '') || '',
+                  id: url,
+                });
+              }
+            } else if (typeof source === 'object' && source && 'url' in source) {
+              web.push({
+                url: source.url,
+                title: source.title || '',
+                id: source.id || source.url,
+              });
+            }
+          }
+        }
+      }
+    }
+    
+    return { web, drive };
+  }
+
+  /**
+   * Add discovered sources from search results (final step - adds your selected sources)
+   * 
+   * **REQUIRES:** You must have a `sessionId` from `search()` or `searchAndWait()`.
+   * 
+   * **What it does:**
+   * - Adds the sources you selected from search results
+   * - You decide which sources to add (from `getResults()` or `searchAndWait()`)
+   * - Returns array of added source IDs for validation
+   * 
+   * **Workflow Patterns:**
+   * 
+   * **Simple Pattern:**
+   * ```typescript
+   * const result = await client.sources.add.web.searchAndWait(...);
+   * const addedIds = await client.sources.add.web.addDiscovered('notebook-id', {
+   *   sessionId: result.sessionId,
+   *   webSources: result.web,  // Add all, or filter first
+   * });
+   * ```
+   * 
+   * **Multi-Step Pattern:**
+   * ```typescript
+   * const sessionId = await client.sources.add.web.search(...);
+   * const results = await client.sources.add.web.getResults(..., sessionId);
+   * const selected = results.web.filter(...);  // Your selection logic
+   * const addedIds = await client.sources.add.web.addDiscovered('notebook-id', {
+   *   sessionId,
+   *   webSources: selected,
+   * });
+   * ```
+   * 
+   * **Important:**
+   * - `sessionId` must match the one from your search (from `search()` or `searchAndWait()`)
+   * - You can add web sources, drive sources, or both
+   * - Returns source IDs so you can validate what was added
+   * 
+   * @param notebookId - The notebook ID
+   * @param options - Session ID and sources to add (web and/or drive)
+   * @returns Array of added source IDs (for validation)
+   * 
+   * @example
+   * ```typescript
+   * // After searchAndWait() - add selected sources
+   * const result = await client.sources.add.web.searchAndWait('notebook-id', {
+   *   query: 'research papers',
+   * });
+   * 
+   * // Validate results, then add top 5
+   * const top5 = result.web.slice(0, 5);
+   * const addedIds = await client.sources.add.web.addDiscovered('notebook-id', {
+   *   sessionId: result.sessionId,
+   *   webSources: top5,
+   * });
+   * 
+   * console.log(`Added ${addedIds.length} sources:`, addedIds);
+   * ```
+   */
+  async addDiscovered(notebookId: string, options: AddDiscoveredSourcesOptions): Promise<string[]> {
+    const { sessionId, webSources = [], driveSources = [] } = options;
+    
+    if (webSources.length === 0 && driveSources.length === 0) {
+      throw new NotebookLMError('At least one source (web or drive) must be provided');
+    }
+    
+    // Check quota before adding sources
+    const totalSources = webSources.length + driveSources.length;
+    for (let i = 0; i < totalSources; i++) {
+      this.quota?.checkQuota('addSource', notebookId);
+    }
+    
+    // Build request structure
+    const sourcesToAdd: any[] = [];
+    
+    // Add web sources
+    for (const webSource of webSources) {
+      sourcesToAdd.push([
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        [webSource.url || webSource.id], // URL at index 7
+        null,
+        null,
+        1, // Web source type
+      ]);
+    }
+    
+    // Add drive sources
+    for (const driveSource of driveSources) {
+      const driveArgs: any[] = [driveSource.fileId];
+      if (driveSource.mimeType) {
+        driveArgs.push(driveSource.mimeType);
+      }
+      if (driveSource.title) {
+        driveArgs.push(driveSource.title);
+      }
+      
+      sourcesToAdd.push([
+        null,
+        null,
+        null,
+        driveArgs,
+        5, // Google Drive source type
+      ]);
+    }
+    
+    const response = await this.rpc.call(
+      RPC.RPC_ADD_SOURCES,
+      [sourcesToAdd, notebookId],
+      notebookId
+    );
+    
+    // Extract source IDs from response
+    const sourceIds: string[] = [];
+    const extractIds = (data: any): void => {
+      if (typeof data === 'string' && data.match(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i)) {
+        sourceIds.push(data);
+      } else if (Array.isArray(data)) {
+        for (const item of data) {
+          extractIds(item);
+        }
+      } else if (data && typeof data === 'object') {
+        for (const key in data) {
+          extractIds(data[key]);
+        }
+      }
+    };
+    
+    extractIds(response);
+    
+    // Record usage after successful addition
+    if (sourceIds.length > 0) {
+      for (let i = 0; i < sourceIds.length; i++) {
+        this.quota?.recordUsage('addSource', notebookId);
+      }
+    }
+    
+    return sourceIds;
+  }
+}
+
+/**
+ * Add sources sub-service
+ * Handles adding sources of various types (URL, text, file, YouTube, Google Drive, batch)
+ */
+export class AddSourcesService {
+  public readonly web: WebSearchService;
+
+  constructor(
+    private rpc: RPCClient,
+    private quota?: import('../utils/quota.js').QuotaManager
+  ) {
+    this.web = new WebSearchService(rpc, quota);
+  }
+
+  // Helper method to extract source ID from response
+  private extractSourceId(response: any): string {
+    try {
+      let parsedResponse = response;
+      if (typeof response === 'string' && (response.startsWith('[') || response.startsWith('{'))) {
+        try {
+          parsedResponse = JSON.parse(response);
+        } catch {
+          // If parsing fails, continue with original response
+        }
+      }
+      
+      const findId = (data: any, depth: number = 0): string | null => {
+        if (depth > 5) return null;
+        
+        if (typeof data === 'string' && data.match(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i)) {
+          return data;
+        }
+        
+        if (typeof data === 'string' && (data.startsWith('[') || data.startsWith('{'))) {
+          try {
+            const parsed = JSON.parse(data);
+            const id = findId(parsed, depth + 1);
+            if (id) return id;
+          } catch {
+            // Continue searching
+          }
+        }
+        
+        if (Array.isArray(data)) {
+          for (const item of data) {
+            const id = findId(item, depth + 1);
+            if (id) return id;
+          }
+        }
+        
+        if (data && typeof data === 'object') {
+          for (const key in data) {
+            const id = findId(data[key], depth + 1);
+            if (id) return id;
+          }
+        }
+        
+        return null;
+      };
+      
+      const sourceId = findId(parsedResponse);
+      
+      if (!sourceId) {
+        throw new Error('Could not extract source ID from response');
+      }
+      
+      return sourceId;
+    } catch (error) {
+      throw new NotebookLMError(`Failed to extract source ID: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Add a URL source
+   */
+  async url(notebookId: string, options: AddSourceFromURLOptions): Promise<string> {
+    const { url } = options;
+    
+    if (!url || typeof url !== 'string') {
+      throw new NotebookLMError('URL is required and must be a string');
+    }
+    
+    this.quota?.checkQuota('addSource', notebookId);
+    
+    const response = await this.rpc.call(
+      RPC.RPC_ADD_SOURCES,
+      [
+        [
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            [url],
+            null,
+            null,
+            1,
+          ],
+        ],
+        notebookId,
+      ],
+      notebookId
+    );
+    
+    const sourceId = this.extractSourceId(response);
+    
+    if (sourceId) {
+      this.quota?.recordUsage('addSource', notebookId);
+    }
+    
+    return sourceId;
+  }
+
+  /**
+   * Add a text source
+   */
+  async text(notebookId: string, options: AddSourceFromTextOptions): Promise<string> {
+    const { content, title } = options;
+    
+    if (!content || typeof content !== 'string') {
+      throw new NotebookLMError('Content is required and must be a string');
+    }
+    
+    this.quota?.checkQuota('addSource', notebookId);
+    
+    const response = await this.rpc.call(
+      RPC.RPC_ADD_SOURCES,
+      [
+        [
+          [
+            null,
+            null,
+            [content],
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            1,
+          ],
+        ],
+        notebookId,
+      ],
+      notebookId
+    );
+    
+    const sourceId = this.extractSourceId(response);
+    
+    if (sourceId) {
+      this.quota?.recordUsage('addSource', notebookId);
+    }
+    
+    return sourceId;
+  }
+
+  /**
+   * Add a file source
+   */
+  async file(notebookId: string, options: AddSourceFromFileOptions): Promise<string> {
+    const { fileName, content } = options;
+    
+    if (!fileName || typeof fileName !== 'string') {
+      throw new NotebookLMError('File name is required and must be a string');
+    }
+    
+    if (!content) {
+      throw new NotebookLMError('File content is required');
+    }
+    
+    let base64Content: string;
+    let sizeBytes: number = 0;
+    
+    if (Buffer.isBuffer(content)) {
+      sizeBytes = content.length;
+      base64Content = content.toString('base64');
+    } else if (typeof content === 'string') {
+      base64Content = content;
+      sizeBytes = Math.floor((content.length * 3) / 4);
+    } else {
+      throw new NotebookLMError('Invalid content type for file');
+    }
+    
+    this.quota?.validateFileSize(sizeBytes);
+    this.quota?.checkQuota('addSource', notebookId);
+    
+    const response = await this.rpc.call(
+      RPC.RPC_UPLOAD_FILE_BY_FILENAME,
+      [
+        [
+          [fileName, 13],
+        ],
+        notebookId,
+        [2],
+        [1, null, null, null, null, null, null, null, null, null, [1]],
+      ],
+      notebookId
+    );
+    
+    const sourceId = this.extractSourceId(response);
+    
+    if (sourceId) {
+      this.quota?.recordUsage('addSource', notebookId);
+    }
+    
+    return sourceId;
+  }
+
+  /**
+   * Add a YouTube video source
+   */
+  async youtube(notebookId: string, options: AddYouTubeSourceOptions): Promise<string> {
+    const { urlOrId } = options;
+    
+    this.quota?.checkQuota('addSource', notebookId);
+    
+    const youtubeUrl = this.isYouTubeURL(urlOrId) 
+      ? urlOrId
+      : `https://www.youtube.com/watch?v=${urlOrId}`;
+    
+    const response = await this.rpc.call(
+      RPC.RPC_ADD_SOURCES,
+      [
+        [
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            [youtubeUrl],
+            null,
+            null,
+            1,
+          ],
+        ],
+        notebookId,
+      ],
+      notebookId
+    );
+    
+    const sourceId = this.extractSourceId(response);
+    
+    if (sourceId) {
+      this.quota?.recordUsage('addSource', notebookId);
+    }
+    
+    return sourceId;
+  }
+
+  /**
+   * Add a Google Drive source
+   * 
+   * @deprecated This method is deprecated. Use `batch()` with `type: 'gdrive'` instead.
+   */
+  async drive(notebookId: string, options: AddGoogleDriveSourceOptions): Promise<string> {
+    console.warn(
+      '⚠️  WARNING: sources.add.drive() is deprecated. ' +
+      'Use add.batch() with type: \'gdrive\' instead.'
+    );
+    const { fileId, mimeType } = options;
+    
+    this.quota?.checkQuota('addSource', notebookId);
+    
+    const driveArgs: any[] = [fileId];
+    if (mimeType) {
+      driveArgs.push(mimeType);
+    }
+    if (options.title) {
+      driveArgs.push(options.title);
+    }
+    
+    const response = await this.rpc.call(
+      RPC.RPC_ADD_SOURCES,
+      [
+        [
+          [
+            null,
+            null,
+            null,
+            driveArgs,
+            5,
+          ],
+        ],
+        notebookId,
+      ],
+      notebookId
+    );
+    
+    const sourceId = this.extractSourceId(response);
+    
+    if (sourceId) {
+      this.quota?.recordUsage('addSource', notebookId);
+    }
+    
+    return sourceId;
+  }
+
+  /**
+   * Add multiple sources in a batch
+   */
+  async batch(notebookId: string, options: BatchAddSourcesOptions): Promise<string[]> {
+    const { sources } = options;
+    
+    if (!sources || sources.length === 0) {
+      throw new NotebookLMError('At least one source is required for batch add');
+    }
+    
+    // Check quota for all sources
+    for (let i = 0; i < sources.length; i++) {
+      this.quota?.checkQuota('addSource', notebookId);
+    }
+    
+    const sourcesToAdd: any[] = [];
+    
+    for (const source of sources) {
+      if (source.type === 'url') {
+        sourcesToAdd.push([
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          [source.url],
+          null,
+          null,
+          1,
+        ]);
+      } else if (source.type === 'text') {
+        sourcesToAdd.push([
+          null,
+          null,
+          [source.content],
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          1,
+        ]);
+      } else if (source.type === 'gdrive') {
+        const driveArgs: any[] = [source.fileId];
+        if (source.mimeType) {
+          driveArgs.push(source.mimeType);
+        }
+        if (source.title) {
+          driveArgs.push(source.title);
+        }
+        sourcesToAdd.push([
+          null,
+          null,
+          null,
+          driveArgs,
+          5,
+        ]);
+      } else if (source.type === 'youtube') {
+        const youtubeUrl = this.isYouTubeURL(source.urlOrId) 
+          ? source.urlOrId
+          : `https://www.youtube.com/watch?v=${source.urlOrId}`;
+        sourcesToAdd.push([
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          [youtubeUrl],
+          null,
+          null,
+          1,
+        ]);
+      }
+    }
+    
+    const response = await this.rpc.call(
+      RPC.RPC_ADD_SOURCES,
+      [sourcesToAdd, notebookId],
+      notebookId
+    );
+    
+    // Extract all source IDs
+    const sourceIds: string[] = [];
+    const extractIds = (data: any): void => {
+      if (typeof data === 'string' && data.match(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i)) {
+        sourceIds.push(data);
+      } else if (Array.isArray(data)) {
+        for (const item of data) {
+          extractIds(item);
+        }
+      } else if (data && typeof data === 'object') {
+        for (const key in data) {
+          extractIds(data[key]);
+        }
+      }
+    };
+    
+    extractIds(response);
+    
+    // Record usage after successful addition
+    if (sourceIds.length > 0) {
+      for (let i = 0; i < sourceIds.length; i++) {
+        this.quota?.recordUsage('addSource', notebookId);
+      }
+    }
+    
+    return sourceIds;
+  }
+
+  private isYouTubeURL(url: string): boolean {
+    return url.includes('youtube.com') || url.includes('youtu.be');
+  }
+}
 
 /**
  * Service for source operations
  */
 export class SourcesService {
+  public readonly add: AddSourcesService;
+
   constructor(
     private rpc: RPCClient,
     private quota?: import('../utils/quota.js').QuotaManager
-  ) {}
+  ) {
+    this.add = new AddSourcesService(rpc, quota);
+  }
   
   // ========================================================================
-  // Individual Source Addition Methods
+  // Source Listing Methods
+  // ========================================================================
+  
+  /**
+   * List all sources in a notebook
+   * 
+   * **What it does:** Retrieves a list of all sources (URLs, text, files, YouTube videos, 
+   * Google Drive files, etc.) associated with a notebook.
+   * 
+   * **Input:**
+   * - `notebookId` (string, required): The ID of the notebook to list sources from
+   * 
+   * **Output:** Returns an array of `Source` objects, each containing:
+   * - `sourceId`: Unique identifier for the source
+   * - `title`: Source title/name
+   * - `type`: Source type (URL, TEXT, FILE, YOUTUBE_VIDEO, GOOGLE_DRIVE, etc.)
+   * - `url`: Source URL (for URL/YouTube sources)
+   * - `createdAt`: Creation timestamp
+   * - `updatedAt`: Last modified timestamp
+   * - `status`: Processing status (PROCESSING, READY, FAILED)
+   * - `metadata`: Additional metadata (file size, MIME type, etc.)
+   * 
+   * **Note:** 
+   * - Sources are extracted from the notebook response (same RPC as `notebooks.get()`)
+   * - This method efficiently reuses the notebook data without requiring a separate RPC call
+   * - Processing status is inferred from the source metadata
+   * 
+   * @param notebookId - The notebook ID
+   * 
+   * @example
+   * ```typescript
+   * // List all sources
+   * const sources = await client.sources.list('notebook-id');
+   * console.log(`Found ${sources.length} sources`);
+   * 
+   * // Filter by type
+   * const pdfs = sources.filter(s => s.type === SourceType.FILE);
+   * const urls = sources.filter(s => s.type === SourceType.URL);
+   * 
+   * // Check processing status
+   * const ready = sources.filter(s => s.status === SourceStatus.READY);
+   * const processing = sources.filter(s => s.status === SourceStatus.PROCESSING);
+   * 
+   * // Get source details
+   * sources.forEach(source => {
+   *   console.log(`${source.title} (${source.type}) - ${source.status}`);
+   * });
+   * ```
+   */
+  async list(notebookId: string): Promise<Source[]> {
+    if (!notebookId || typeof notebookId !== 'string') {
+      throw new NotebookLMError('Invalid notebook ID format');
+    }
+    
+    // Call RPC_GET_PROJECT to get notebook data (includes sources)
+    const response = await this.rpc.call(
+      RPC.RPC_GET_PROJECT,
+      [notebookId, null, [2], null, 0],
+      notebookId
+    );
+    
+    return this.parseSourcesFromResponse(response);
+  }
+  
+  /**
+   * Parse sources from notebook response
+   * 
+   * Source structure in response:
+   * [
+   *   ["source-id"],
+   *   "filename.pdf",
+   *   [null, fileSize, [timestamp], ["processed-id", timestamp], type_code, null, 1],
+   *   [null, 2]
+   * ]
+   * 
+   * Type codes:
+   * - 1 = Google Drive
+   * - 2 = Text
+   * - 3 = File/PDF
+   * - 4 = Text note
+   * - 5 = URL
+   * - 8 = Mind map note
+   * - 9 = YouTube
+   * - 10 = Video file
+   * - 13 = Image
+   * - 14 = PDF from Drive
+   */
+  private parseSourcesFromResponse(response: any): Source[] {
+    try {
+      let parsedResponse = response;
+      if (typeof response === 'string') {
+        parsedResponse = JSON.parse(response);
+      }
+      
+      if (!Array.isArray(parsedResponse) || parsedResponse.length === 0) {
+        return [];
+      }
+      
+      let data = parsedResponse;
+      
+      // Handle nested array structure
+      if (Array.isArray(parsedResponse[0])) {
+        data = parsedResponse[0];
+      }
+      
+      // Sources are in data[1]
+      if (!Array.isArray(data[1])) {
+        return [];
+      }
+      
+      const sources: Source[] = [];
+      
+      for (const sourceData of data[1]) {
+        if (!Array.isArray(sourceData) || sourceData.length === 0) {
+          continue;
+        }
+        
+        // Extract source ID from [0][0]
+        let sourceId: string | undefined;
+        if (Array.isArray(sourceData[0]) && sourceData[0].length > 0) {
+          sourceId = sourceData[0][0];
+        } else if (typeof sourceData[0] === 'string') {
+          sourceId = sourceData[0];
+        }
+        
+        if (!sourceId || typeof sourceId !== 'string') {
+          continue;
+        }
+        
+        // Extract title from [1]
+        const title = typeof sourceData[1] === 'string' ? sourceData[1] : 'Untitled';
+        
+        // Extract metadata from [2]
+        const metadata = Array.isArray(sourceData[2]) ? sourceData[2] : [];
+        
+        // Parse type code from metadata[4]
+        const typeCode = metadata[4];
+        const sourceType = this.mapTypeCodeToSourceType(typeCode);
+        
+        // Parse timestamps
+        let createdAt: string | undefined;
+        let updatedAt: string | undefined;
+        
+        // Creation timestamp from metadata[2] = [seconds, nanoseconds]
+        if (Array.isArray(metadata[2]) && metadata[2].length >= 2) {
+          const [seconds, nanoseconds] = metadata[2];
+          if (typeof seconds === 'number') {
+            const timestamp = seconds * 1000 + (nanoseconds || 0) / 1000000;
+            createdAt = new Date(timestamp).toISOString();
+          }
+        }
+        
+        // Updated/processed timestamp from metadata[3] = ["processed-id", timestamp]
+        if (Array.isArray(metadata[3]) && metadata[3].length >= 2) {
+          const timestamp = metadata[3][1];
+          if (Array.isArray(timestamp) && timestamp.length >= 2) {
+            const [seconds, nanoseconds] = timestamp;
+            if (typeof seconds === 'number') {
+              const ts = seconds * 1000 + (nanoseconds || 0) / 1000000;
+              updatedAt = new Date(ts).toISOString();
+            }
+          } else if (typeof timestamp === 'number') {
+            updatedAt = new Date(timestamp).toISOString();
+          }
+        }
+        
+        // If no updatedAt, use createdAt
+        if (!updatedAt && createdAt) {
+          updatedAt = createdAt;
+        }
+        
+        // Parse URL (for URL/YouTube sources) from metadata[6] or title
+        let url: string | undefined;
+        if (sourceType === SourceType.URL || sourceType === SourceType.YOUTUBE_VIDEO) {
+          // Check metadata[6] for URL array
+          if (Array.isArray(metadata[6]) && metadata[6].length > 0) {
+            url = metadata[6][0];
+          } else if (title.startsWith('http://') || title.startsWith('https://')) {
+            url = title;
+          }
+        }
+        
+        // Parse file size from metadata[1]
+        const fileSize = typeof metadata[1] === 'number' ? metadata[1] : undefined;
+        
+        // Determine processing status
+        // If metadata[3] exists (processed info), source is likely ready
+        // If metadata[6] === 1, source is processed
+        let status: SourceStatus = SourceStatus.UNKNOWN;
+        if (metadata[3] && Array.isArray(metadata[3]) && metadata[3].length > 0) {
+          status = SourceStatus.READY;
+        } else if (metadata[6] === 1) {
+          status = SourceStatus.READY;
+        } else if (sourceId && !metadata[3]) {
+          // Has ID but no processed info - might be processing
+          status = SourceStatus.PROCESSING;
+        }
+        
+        // Build metadata object
+        const sourceMetadata: Record<string, any> = {};
+        if (fileSize !== undefined) {
+          sourceMetadata.fileSize = fileSize;
+        }
+        
+        // Extract MIME type or additional info if available
+        if (metadata.length > 7 && Array.isArray(metadata[7])) {
+          // Sometimes additional metadata is in nested arrays
+          if (metadata[7].length > 2 && typeof metadata[7][2] === 'string') {
+            sourceMetadata.mimeType = metadata[7][2];
+          }
+        }
+        
+        sources.push({
+          sourceId,
+          title,
+          type: sourceType,
+          url,
+          createdAt,
+          updatedAt,
+          status,
+          metadata: Object.keys(sourceMetadata).length > 0 ? sourceMetadata : undefined,
+        });
+      }
+      
+      return sources;
+    } catch (error) {
+      throw new NotebookLMError(`Failed to parse sources: ${(error as Error).message}`);
+    }
+  }
+  
+  /**
+   * Map type code from API response to SourceType enum
+   * 
+   * **What this does:**
+   * The NotebookLM API returns sources with numeric type codes in the metadata array.
+   * This function converts those internal API codes to our public SourceType enum.
+   * 
+   * **Where the type code comes from:**
+   * In the API response, each source has this structure:
+   * ```
+   * [
+   *   ["source-id"],                    // [0] = source ID
+   *   "filename.pdf",                   // [1] = title
+   *   [null, 602, [...], [...], 3, ...], // [2] = metadata array
+   *                                     //      [2][4] = type code (the number we map)
+   * ]
+   * ```
+   * 
+   * **Type Code Examples from Real API Responses:**
+   * - `3` = PDF file: `["fnz offer.pdf", [null, 602, [...], [...], 3, ...]`
+   * - `5` = URL: `["AI SDK", [null, 571, [...], [...], 5, ..., ["https://ai-sdk.dev/"]]`
+   * - `9` = YouTube: `["Building an iMessage AI Chatbot", [null, 793, [...], [...], 9, [...]]`
+   * - `4` = Text note: `["A Pussycat's Discourse", [null, 1, [...], [...], 4, ...]`
+   * - `1` = Google Drive: `["offer_letter_photon", [[...], 492, [...], [...], 1, ...]`
+   * - `13` = Image: `["Screenshot 2025-12-28.png", [null, 0, [...], [...], 13, ...]`
+   * 
+   * **Mapping:**
+   * Each API type code maps to a specific SourceType enum value to preserve the distinction
+   * between different file types (PDF, video, image, etc.).
+   * 
+   * @param typeCode - The numeric type code from API response metadata[4]
+   * @returns The corresponding SourceType enum value
+   */
+  private mapTypeCodeToSourceType(typeCode: any): SourceType {
+    if (typeof typeCode !== 'number') {
+      return SourceType.UNKNOWN;
+    }
+    
+    switch (typeCode) {
+      case 1:
+        return SourceType.GOOGLE_DRIVE;    // Google Drive file
+      case 2:
+        return SourceType.TEXT;            // Regular text source
+      case 3:
+        return SourceType.PDF;             // PDF file
+      case 4:
+        return SourceType.TEXT_NOTE;       // Text note
+      case 5:
+        return SourceType.URL;             // Web URL
+      case 8:
+        return SourceType.MIND_MAP_NOTE;  // Mind map note
+      case 9:
+        return SourceType.YOUTUBE_VIDEO;   // YouTube video
+      case 10:
+        return SourceType.VIDEO_FILE;      // Video file (uploaded)
+      case 13:
+        return SourceType.IMAGE;           // Image file
+      case 14:
+        return SourceType.PDF_FROM_DRIVE;  // PDF from Google Drive
+      default:
+        return SourceType.UNKNOWN;         // Unknown/unsupported type
+    }
+  }
+  
+  /**
+   * Get source(s) from a notebook
+   * 
+   * **What it does:** 
+   * - If `sourceId` is provided: Returns a single source by ID
+   * - If `sourceId` is not provided: Returns all sources (same as `list()`)
+   * 
+   * **Input:**
+   * - `notebookId` (string, required): The notebook ID
+   * - `sourceId` (string, optional): The source ID to get. If omitted, returns all sources.
+   * 
+   * **Output:** 
+   * - If `sourceId` provided: Returns a single `Source` object
+   * - If `sourceId` omitted: Returns an array of `Source` objects
+   * 
+   * @param notebookId - The notebook ID
+   * @param sourceId - Optional source ID to get a single source
+   * 
+   * @example
+   * ```typescript
+   * // Get all sources
+   * const allSources = await client.sources.get('notebook-id');
+   * 
+   * // Get a specific source
+   * const source = await client.sources.get('notebook-id', 'source-id');
+   * console.log(source.title);
+   * ```
+   */
+  async get(notebookId: string, sourceId?: string): Promise<Source | Source[]> {
+    if (!notebookId || typeof notebookId !== 'string') {
+      throw new NotebookLMError('Invalid notebook ID format');
+    }
+    
+    // Get all sources
+    const allSources = await this.list(notebookId);
+    
+    // If sourceId provided, return single source
+    if (sourceId) {
+      const source = allSources.find(s => s.sourceId === sourceId);
+      if (!source) {
+        throw new NotebookLMError(`Source not found: ${sourceId}`);
+      }
+      return source;
+    }
+    
+    // Return all sources
+    return allSources;
+  }
+  
+  // ========================================================================
+  // Individual Source Addition Methods (DEPRECATED - Use sources.add.* instead)
   // ========================================================================
   
   /**
@@ -1037,7 +2324,7 @@ export class SourcesService {
       const total = sourceIds.length;
       
       while (Date.now() - startTime < timeout) {
-        const status = await this.pollProcessing(notebookId);
+        const status = await this.status(notebookId);
         
         if (onProgress) {
           const ready = total - status.processing.length;
@@ -1220,7 +2507,35 @@ export class SourcesService {
    * } while (!status.allReady);
    * ```
    */
-  async pollProcessing(notebookId: string): Promise<SourceProcessingStatus> {
+  /**
+   * Get source processing status
+   * 
+   * **What it does:** Checks the processing status of all sources in a notebook.
+   * Returns information about which sources are still processing and whether all sources are ready.
+   * 
+   * **Input:**
+   * - `notebookId` (string, required): The notebook ID
+   * 
+   * **Output:** Returns a `SourceProcessingStatus` object containing:
+   * - `allReady` (boolean): Whether all sources are ready
+   * - `processing` (string[]): Array of source IDs that are still processing
+   * 
+   * @param notebookId - The notebook ID
+   * 
+   * @example
+   * ```typescript
+   * // Check processing status
+   * const status = await client.sources.status('notebook-id');
+   * 
+   * if (status.allReady) {
+   *   console.log('All sources are ready!');
+   * } else {
+   *   console.log(`Still processing: ${status.processing.length} sources`);
+   *   console.log('Processing IDs:', status.processing);
+   * }
+   * ```
+   */
+  async status(notebookId: string): Promise<SourceProcessingStatus> {
     const response = await this.rpc.call(
       RPC.RPC_POLL_SOURCE_PROCESSING,
       [notebookId, null, [2], null, 1],

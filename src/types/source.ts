@@ -4,50 +4,48 @@
 
 /**
  * Source type enum
+ * Maps to NotebookLM API type codes:
+ * - API code 1 → GOOGLE_DRIVE
+ * - API code 2 → TEXT
+ * - API code 3 → PDF
+ * - API code 4 → TEXT_NOTE
+ * - API code 5 → URL
+ * - API code 8 → MIND_MAP_NOTE
+ * - API code 9 → YOUTUBE_VIDEO
+ * - API code 10 → VIDEO_FILE
+ * - API code 13 → IMAGE
+ * - API code 14 → PDF_FROM_DRIVE
  */
 export enum SourceType {
   UNKNOWN = 0,
   URL = 1,
   TEXT = 2,
-  FILE = 3,
+  FILE = 3, // Generic file (deprecated - use specific types like PDF, VIDEO_FILE, IMAGE)
   YOUTUBE_VIDEO = 4,
   GOOGLE_DRIVE = 5,
   GOOGLE_SLIDES = 6,
+  PDF = 7, // PDF file (API code 3)
+  TEXT_NOTE = 8, // Text note (API code 4)
+  VIDEO_FILE = 10, // Video file upload (API code 10)
+  IMAGE = 13, // Image file (API code 13)
+  PDF_FROM_DRIVE = 14, // PDF from Google Drive (API code 14)
+  MIND_MAP_NOTE = 15, // Mind map note (API code 8)
 }
 
 /**
  * Source in a notebook
  */
 export interface Source {
-  /** Unique source ID */
-  sourceId: string;
-  
-  /** Source title/name */
-  title?: string;
-  
-  /** Source type */
-  type?: SourceType;
-  
-  /** Source content (for text sources) */
-  content?: string;
-  
-  /** Source URL (for URL sources) */
-  url?: string;
-  
-  /** Source metadata */
-  metadata?: Record<string, any>;
-  
-  /** Creation timestamp */
-  createdAt?: string;
-  
-  /** Last modified timestamp */
-  updatedAt?: string;
-  
-  /** Processing status */
-  status?: SourceStatus;
-  
-  /** Error message if processing failed */
-  error?: string;
+  sourceId: string; // Unique source ID
+  title?: string; // Source title/name
+  type?: SourceType; // Source type
+  content?: string; // Source content (for text sources)
+  url?: string; // Source URL (for URL sources)
+  metadata?: Record<string, any>; // Source metadata
+  createdAt?: string; // Creation timestamp
+  updatedAt?: string; // Last modified timestamp
+  status?: SourceStatus; // Processing status
+  error?: string; // Error message if processing failed
 }
 
 /**
@@ -64,283 +62,180 @@ export enum SourceStatus {
  * Input for adding a source
  */
 export interface SourceInput {
-  /** Source type */
-  type: SourceType;
-  
-  /** Source title */
-  title?: string;
-  
-  /** Text content (for text sources) */
-  content?: string;
-  
-  /** URL (for URL sources) */
-  url?: string;
-  
-  /** File content (base64 for file sources) */
-  fileContent?: string;
-  
-  /** File name (for file sources) */
-  fileName?: string;
-  
-  /** MIME type (for file sources) */
-  mimeType?: string;
-  
-  /** YouTube video ID (for YouTube sources) */
-  videoId?: string;
+  type: SourceType; // Source type
+  title?: string; // Source title
+  content?: string; // Text content (for text sources)
+  url?: string; // URL (for URL sources)
+  fileContent?: string; // File content (base64 for file sources)
+  fileName?: string; // File name (for file sources)
+  mimeType?: string; // MIME type (for file sources)
+  videoId?: string; // YouTube video ID (for YouTube sources)
 }
 
 /**
  * Options for adding a source from URL
  */
 export interface AddSourceFromURLOptions {
-  /** URL to add */
-  url: string;
-  
-  /** Optional custom title */
-  title?: string;
+  url: string; // URL to add
+  title?: string; // Optional custom title
 }
 
 /**
  * Options for adding a source from text
  */
 export interface AddSourceFromTextOptions {
-  /** Text content */
-  content: string;
-  
-  /** Source title */
-  title: string;
+  content: string; // Text content
+  title: string; // Source title
 }
 
 /**
  * Options for adding a source from file
  */
 export interface AddSourceFromFileOptions {
-  /** File content (as Buffer or base64 string) */
-  content: Buffer | string;
-  
-  /** File name */
-  fileName: string;
-  
-  /** MIME type (optional, will be auto-detected if not provided) */
-  mimeType?: string;
+  content: Buffer | string; // File content (as Buffer or base64 string)
+  fileName: string; // File name
+  mimeType?: string; // MIME type (optional, will be auto-detected if not provided)
 }
 
 /**
  * Source processing status result
  */
 export interface SourceProcessingStatus {
-  /** Whether all sources are ready */
-  allReady: boolean;
-  
-  /** List of source IDs still processing */
-  processing: string[];
+  allReady: boolean; // Whether all sources are ready
+  processing: string[]; // List of source IDs still processing
 }
 
 /**
  * Source content result
  */
 export interface SourceContent {
-  /** Full text content */
-  text: string;
-  
-  /** Additional metadata */
-  metadata?: Record<string, any>;
+  text: string; // Full text content
+  metadata?: Record<string, any>; // Additional metadata
 }
 
 /**
  * Source freshness check result
  */
 export interface SourceFreshness {
-  /** Whether source is fresh/up-to-date */
-  isFresh: boolean;
-  
-  /** Last checked timestamp */
-  lastChecked?: Date;
+  isFresh: boolean; // Whether source is fresh/up-to-date
+  lastChecked?: Date; // Last checked timestamp
 }
 
 /**
  * Research mode for source discovery
  */
 export enum ResearchMode {
-  /** Fast research (quick results) */
-  FAST = 1,
-  
-  /** Deep research (in-depth report, Web only) */
-  DEEP = 2,
+  FAST = 1, // Fast research (quick results)
+  DEEP = 2, // Deep research (in-depth report, Web only)
 }
 
 /**
  * Source type for search
  */
 export enum SearchSourceType {
-  /** Web sources */
-  WEB = 1,
-  
-  /** Google Drive sources */
-  GOOGLE_DRIVE = 5,
+  WEB = 1, // Web sources
+  GOOGLE_DRIVE = 5, // Google Drive sources
 }
 
 /**
  * Discovered web source
  */
 export interface DiscoveredWebSource {
-  /** Source URL */
-  url: string;
-  
-  /** Source title */
-  title: string;
-  
-  /** Source ID (if available) */
-  id?: string;
+  url: string; // Source URL
+  title: string; // Source title
+  id?: string; // Source ID (if available)
 }
 
 /**
  * Discovered Drive source
  */
 export interface DiscoveredDriveSource {
-  /** Google Drive file ID */
-  fileId: string;
-  
-  /** MIME type */
-  mimeType: string;
-  
-  /** File title */
-  title: string;
-  
-  /** Source ID (if available) */
-  id?: string;
+  fileId: string; // Google Drive file ID
+  mimeType: string; // MIME type
+  title: string; // File title
+  id?: string; // Source ID (if available)
 }
 
 /**
  * Discovered source (DEPRECATED - use DiscoveredWebSource or DiscoveredDriveSource instead)
- * 
  * @deprecated This type was used with the removed `discover()` method.
  * Use `DiscoveredWebSource[]` or `DiscoveredDriveSource[]` from `getSearchResults()` or `searchWebAndWait()` instead.
  */
 export interface DiscoveredSource {
-  /** Source ID */
-  id: string;
-  
-  /** Source title */
-  title: string;
-  
-  /** Source type */
-  type?: SourceType;
-  
-  /** Source URL (for web sources) */
-  url?: string;
-  
-  /** Relevance score (if available) */
-  relevance?: number;
-  
-  /** Additional metadata */
-  metadata?: Record<string, any>;
+  id: string; // Source ID
+  title: string; // Source title
+  type?: SourceType; // Source type
+  url?: string; // Source URL (for web sources)
+  relevance?: number; // Relevance score (if available)
+  metadata?: Record<string, any>; // Additional metadata
 }
 
 /**
  * Options for searching web sources
  */
 export interface SearchWebSourcesOptions {
-  /** Search query */
-  query: string;
-  
-  /** Source type (web or drive) */
-  sourceType?: SearchSourceType;
-  
-  /** Research mode (fast or deep) */
-  mode?: ResearchMode;
+  query: string; // Search query
+  sourceType?: SearchSourceType; // Source type (web or drive)
+  mode?: ResearchMode; // Research mode (fast or deep)
 }
 
 /**
  * Options for adding discovered sources
  */
 export interface AddDiscoveredSourcesOptions {
-  /** Search session ID from searchWeb() */
-  sessionId: string;
-  
-  /** Web sources to add */
-  webSources?: DiscoveredWebSource[];
-  
-  /** Drive sources to add */
-  driveSources?: DiscoveredDriveSource[];
+  sessionId: string; // Search session ID from searchWeb()
+  webSources?: DiscoveredWebSource[]; // Web sources to add
+  driveSources?: DiscoveredDriveSource[]; // Drive sources to add
 }
 
 /**
  * Options for adding Google Drive source directly
  */
 export interface AddGoogleDriveSourceOptions {
-  /** Google Drive file ID */
-  fileId: string;
-  
-  /** Optional custom title */
-  title?: string;
-  
-  /** MIME type (optional, will be inferred if not provided) */
-  mimeType?: string;
+  fileId: string; // Google Drive file ID
+  title?: string; // Optional custom title
+  mimeType?: string; // MIME type (optional, will be inferred if not provided)
 }
 
 /**
  * Options for adding YouTube source
  */
 export interface AddYouTubeSourceOptions {
-  /** YouTube URL or video ID */
-  urlOrId: string;
-  
-  /** Optional custom title */
-  title?: string;
+  urlOrId: string; // YouTube URL or video ID
+  title?: string; // Optional custom title
 }
 
 /**
  * Options for batch source addition
  */
 export interface BatchAddSourcesOptions {
-  /** Array of source inputs (mixed types supported) */
-  sources: Array<
+  sources: Array< // Array of source inputs (mixed types supported)
     | { type: 'url'; url: string; title?: string }
     | { type: 'text'; title: string; content: string }
     | { type: 'file'; content: Buffer | string; fileName: string; mimeType?: string }
     | { type: 'youtube'; urlOrId: string; title?: string }
     | { type: 'gdrive'; fileId: string; title?: string; mimeType?: string }
   >;
-  
-  /** Whether to wait for all sources to be processed (default: false) */
-  waitForProcessing?: boolean;
-  
-  /** Timeout in ms if waitForProcessing is true (default: 300000 = 5 minutes) */
-  timeout?: number;
-  
-  /** Poll interval in ms if waitForProcessing is true (default: 2000 = 2 seconds) */
-  pollInterval?: number;
-  
-  /** Progress callback */
-  onProgress?: (ready: number, total: number) => void;
+  waitForProcessing?: boolean; // Whether to wait for all sources to be processed (default: false)
+  timeout?: number; // Timeout in ms if waitForProcessing is true (default: 300000 = 5 minutes)
+  pollInterval?: number; // Poll interval in ms if waitForProcessing is true (default: 2000 = 2 seconds)
+  onProgress?: (ready: number, total: number) => void; // Progress callback
 }
 
 /**
  * Options for web search with waiting
  */
 export interface SearchWebAndWaitOptions extends SearchWebSourcesOptions {
-  /** Max wait time for results in ms (default: 30000 = 30 seconds) */
-  timeout?: number;
-  
-  /** Poll interval in ms (default: 2000 = 2 seconds) */
-  pollInterval?: number;
-  
-  /** Progress callback */
-  onProgress?: (status: { hasResults: boolean; resultCount?: number }) => void;
+  timeout?: number; // Max wait time for results in ms (default: 30000 = 30 seconds)
+  pollInterval?: number; // Poll interval in ms (default: 2000 = 2 seconds)
+  onProgress?: (status: { hasResults: boolean; resultCount?: number }) => void; // Progress callback
 }
 
 /**
  * Result from web search with waiting
  */
 export interface WebSearchResult {
-  /** Search session ID (required for adding sources) */
-  sessionId: string;
-  
-  /** Discovered web sources */
-  web: DiscoveredWebSource[];
-  
-  /** Discovered Google Drive sources */
-  drive: DiscoveredDriveSource[];
+  sessionId: string; // Search session ID (required for adding sources)
+  web: DiscoveredWebSource[]; // Discovered web sources
+  drive: DiscoveredDriveSource[]; // Discovered Google Drive sources
 }
-
