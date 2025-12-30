@@ -23,18 +23,24 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 | **`sdk.generation`** | Chat & content generation | `chat()`, `generateDocumentGuides()`, `generateOutline()` |
 | **`sdk.notes`** | Manage notes | `create()`, `list()`, `update()`, `delete()` |
 
+## Installation
+
+```bash
+npm install notebooklm-kit
+```
+
 ## Features
 
 ### `sdk.notebooks` - Notebook Management
 
 | Feature | Description | Method | Example |
 |---------|-------------|--------|---------|
-| List Notebooks | List all your notebooks (recently viewed) | `sdk.notebooks.list()` | |
-| Get Notebook | Get full details of a specific notebook | `sdk.notebooks.get(notebookId)` | |
-| Create Notebook | Create a new notebook (auto-generates title if empty) | `sdk.notebooks.create(options)` | |
-| Update Notebook | Update notebook title or description | `sdk.notebooks.update(notebookId, options)` | |
-| Delete Notebook | Delete one or more notebooks | `sdk.notebooks.delete(notebookIds)` | |
-| Share Notebook | Share notebook with users or enable link sharing | `sdk.notebooks.share(notebookId, options)` | |
+| List Notebooks | List all your notebooks (recently viewed) | [`sdk.notebooks.list()`](#list-notebooks) | |
+| Get Notebook | Get full details of a specific notebook | [`sdk.notebooks.get(notebookId)`](#get-notebook) | |
+| Create Notebook | Create a new notebook (auto-generates title if empty) | [`sdk.notebooks.create(options)`](#create-notebook) | |
+| Update Notebook | Update notebook title or description | [`sdk.notebooks.update(notebookId, options)`](#update-notebook) | |
+| Delete Notebook | Delete one or more notebooks | [`sdk.notebooks.delete(notebookIds)`](#delete-notebook) | |
+| Share Notebook | Share notebook with users or enable link sharing | [`sdk.notebooks.share(notebookId, options)`](#share-notebook) | |
 
 ### `sdk.sources` - Source Management
 
@@ -95,12 +101,6 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 | Update Note | Update a note | `sdk.notes.update(notebookId, noteId, options)` | |
 | Delete Note | Delete a note | `sdk.notes.delete(notebookId, noteIds)` | |
 
-## Installation
-
-```bash
-npm install notebooklm-kit
-```
-
 ## Authentication
 
 ### Setup `.env` File
@@ -151,57 +151,139 @@ const sdk = new NotebookLMClient({
 await sdk.refreshCredentials()
 ```
 
-## API Reference
+## Notebooks
+
+Examples: | | | | | |
+
+### List Notebooks
+
+**Method:** `sdk.notebooks.list()`
+
+**Returns:** `Promise<Notebook[]>`
+
+**Description:**
+Lists all your notebooks (recently viewed). Returns a lightweight array of notebooks with essential information for display/selection.
+
+**Return Fields:**
+- `projectId: string` - Unique notebook ID (required for other operations)
+- `title: string` - Notebook title
+- `emoji: string` - Visual identifier
+- `sourceCount: number` - Number of sources in the notebook
 
 <details>
-<summary><b>📚 Notebooks</b> - Manage notebooks</summary>
+<summary><strong>Notes</strong></summary>
 
-### Methods
+- Automatically filters out system notebooks (e.g., "OpenStax's Biology")
+- Returns only notebooks you've recently viewed
+- Does not include full notebook details (use `get()` for that)
+- Does not include sources array (use `sources` service for source operations)
+- Does not include sharing info (use `get()` for sharing details)
 
-#### `list()` → `Promise<Notebook[]>`
-List all your notebooks (recently viewed).
+</details>
 
-**Returns:**
-- `Notebook[]` - Array of notebooks with: `projectId`, `title`, `emoji`, `sourceCount`
-
-**Example:**
+**Usage:**
 ```typescript
 const notebooks = await sdk.notebooks.list()
 console.log(`Found ${notebooks.length} notebooks`)
+notebooks.forEach(nb => {
+  console.log(`${nb.emoji} ${nb.title} (${nb.sourceCount} sources)`)
+})
 ```
 
 ---
 
-#### `get(notebookId: string)` → `Promise<Notebook>`
-Get full details of a specific notebook.
+### Get Notebook
+
+**Method:** `sdk.notebooks.get(notebookId)`
 
 **Parameters:**
-- `notebookId: string` - The notebook ID
+- `notebookId: string` - The notebook ID (required)
 
-**Returns:**
-- `Notebook` - Full notebook details with: `projectId`, `title`, `emoji`, `sourceCount`, `lastAccessed`, `sharing`
+**Returns:** `Promise<Notebook>`
 
-**Example:**
+**Description:**
+Retrieves full details of a specific notebook, including analytics and sharing information. Makes parallel RPC calls to get complete notebook data.
+
+**Return Fields:**
+- `projectId: string` - Unique notebook ID
+- `title: string` - Notebook title
+- `emoji: string` - Visual identifier
+- `sourceCount?: number` - Number of sources (analytics)
+- `lastAccessed?: string` - Last accessed timestamp (ISO format, analytics)
+- `sharing?: SharingSettings` - Sharing configuration:
+  - `isShared: boolean` - Whether notebook is shared
+  - `shareUrl?: string` - Share URL if shared
+  - `shareId?: string` - Share ID
+  - `publicAccess?: boolean` - Whether public access is enabled
+  - `allowedUsers?: string[]` - Array of user emails with access
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Validates notebook ID format before making RPC calls
+- Calls both `RPC_GET_PROJECT` and `RPC_GET_SHARING_DETAILS` in parallel for efficiency
+- Sharing data is optional - won't fail if unavailable
+- Does not include sources array (use `sources` service for source operations)
+- `lastAccessed` is extracted from notebook metadata if available
+
+</details>
+
+**Usage:**
 ```typescript
 const notebook = await sdk.notebooks.get('notebook-id')
 console.log(`Title: ${notebook.title}`)
 console.log(`Sources: ${notebook.sourceCount || 0}`)
 console.log(`Last accessed: ${notebook.lastAccessed || 'Never'}`)
+if (notebook.sharing?.isShared) {
+  console.log(`Share URL: ${notebook.sharing.shareUrl}`)
+}
 ```
 
 ---
 
-#### `create(options: CreateNotebookOptions)` → `Promise<Notebook>`
-Create a new notebook. Auto-generates title if empty.
+### Create Notebook
+
+**Method:** `sdk.notebooks.create(options)`
 
 **Parameters:**
-- `options.title: string` - Notebook title (optional, auto-generated if empty)
-- `options.description?: string` - Initial description (optional)
+- `options: CreateNotebookOptions`
+  - `title: string` - Notebook title (optional, auto-generated if empty)
+  - `description?: string` - Initial description (optional)
 
-**Returns:**
-- `Notebook` - Created notebook with: `projectId`, `title`, `emoji`
+**Returns:** `Promise<Notebook>`
 
-**Example:**
+**Description:**
+Creates a new notebook. Automatically generates a title if not provided. Validates title length before creation.
+
+**Return Fields:**
+- `projectId: string` - Unique notebook ID (use this for subsequent operations)
+- `title: string` - Notebook title (as provided or auto-generated)
+- `emoji: string` - Default emoji
+
+**Auto-Generated Title Format:**
+If `title` is empty or not provided, generates: `"Untitled Notebook {current date}"`
+Example: `"Untitled Notebook 12/30/2024"`
+
+<details>
+<summary><strong>Validation</strong></summary>
+
+- Title maximum length: 100 characters
+- Throws `APIError` if title exceeds limit
+- Empty title is allowed (will be auto-generated)
+
+</details>
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Quota is checked before creation (if quota manager is enabled)
+- Usage is recorded after successful creation
+- Returns immediately with notebook ID - no waiting required
+- Does not include `sourceCount`, `lastAccessed`, or `sharing` (not available for new notebooks)
+
+</details>
+
+**Usage:**
 ```typescript
 // With title
 const notebook = await sdk.notebooks.create({
@@ -210,78 +292,195 @@ const notebook = await sdk.notebooks.create({
 
 // Auto-generated title
 const untitled = await sdk.notebooks.create({})
-```
 
----
-
-#### `update(notebookId: string, options: UpdateNotebookOptions)` → `Promise<Notebook>`
-Update notebook title or description.
-
-**Parameters:**
-- `notebookId: string` - The notebook ID
-- `options.title?: string` - New title (optional)
-- `options.description?: string` - New description (optional)
-
-**Returns:**
-- `Notebook` - Updated notebook (same as `get()`)
-
-**Example:**
-```typescript
-const updated = await sdk.notebooks.update('notebook-id', {
-  title: 'Updated Title',
+// With description
+const notebook = await sdk.notebooks.create({
+  title: 'Project Notes',
+  description: 'Initial project description',
 })
 ```
 
 ---
 
-#### `delete(notebookIds: string | string[])` → `Promise<DeleteNotebookResult>`
-Delete one or more notebooks.
+### Update Notebook
+
+**Method:** `sdk.notebooks.update(notebookId, options)`
 
 **Parameters:**
-- `notebookIds: string | string[]` - Single notebook ID or array of IDs
+- `notebookId: string` - The notebook ID (required, automatically trimmed)
+- `options: UpdateNotebookOptions`
+  - `title?: string` - New title (optional)
+  - `description?: string` - New description (optional)
+  - `metadata?: Record<string, any>` - Other metadata updates (optional)
 
-**Returns:**
-- `DeleteNotebookResult` - Object with:
-  - `deleted: string[]` - Array of deleted notebook IDs
-  - `count: number` - Number of notebooks deleted
+**Returns:** `Promise<Notebook>` (same as `get()` - full notebook details)
 
-**Example:**
+**Description:**
+Updates notebook title or description. Returns full notebook details after update (same structure as `get()`).
+
+<details>
+<summary><strong>Validation</strong></summary>
+
+- At least one field (`title` or `description`) must be provided
+- Title maximum length: 100 characters
+- Notebook ID is automatically trimmed (removes trailing spaces)
+- Returns error if notebook doesn't exist
+
+</details>
+
+**Return Fields:**
+Same as `get()` - includes `projectId`, `title`, `emoji`, `sourceCount`, `lastAccessed`, `sharing`
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Notebook ID is trimmed automatically to prevent issues with trailing spaces
+- Only provided fields are updated (partial updates supported)
+- Returns full notebook object after update (not just updated fields)
+- Does not validate notebook existence first (for performance) - returns error if not found
+
+</details>
+
+**Usage:**
 ```typescript
-// Delete single notebook
-const result = await sdk.notebooks.delete('notebook-id')
-console.log(`Deleted ${result.count} notebook(s)`)
+// Update title only
+const updated = await sdk.notebooks.update('notebook-id', {
+  title: 'Updated Title',
+})
 
-// Delete multiple notebooks
-const result = await sdk.notebooks.delete(['id-1', 'id-2'])
-console.log(`Deleted: ${result.deleted.join(', ')}`)
+// Update description only
+const updated = await sdk.notebooks.update('notebook-id', {
+  description: 'New description',
+})
+
+// Update both
+const updated = await sdk.notebooks.update('notebook-id', {
+  title: 'New Title',
+  description: 'New Description',
+})
 ```
 
 ---
 
-#### `share(notebookId: string, options: ShareNotebookOptions)` → `Promise<ShareNotebookResult>`
-Share notebook with users or enable link sharing.
+### Delete Notebook
+
+**Method:** `sdk.notebooks.delete(notebookIds)`
 
 **Parameters:**
-- `notebookId: string` - The notebook ID
-- `options.users?: Array<{email: string, role: 2|3|4}>` - Users to share with (2=editor, 3=viewer, 4=remove)
-- `options.anyoneWithLink?: boolean` - Enable public link access
-- `options.notify?: boolean` - Notify users (default: true, only used when users are provided)
-- `options.accessType?: 1|2` - Access type (1=anyone with link, 2=restricted)
+- `notebookIds: string | string[]` - Single notebook ID or array of IDs (required)
 
-**Returns:**
-- `ShareNotebookResult` - Object with:
-  - `shareUrl: string` - Share URL (always present)
-  - `success: boolean` - Operation status
-  - `notebookId: string` - The notebook ID
-  - `accessType: 1|2` - Access type set
-  - `linkEnabled: boolean` - Whether link sharing is enabled
-  - `isShared: boolean` - Whether notebook is shared
-  - `publicAccess: boolean` - Whether public access is enabled
-  - `users?: Array<{email: string, role: 2|3}>` - Users with access (if users were shared)
+**Returns:** `Promise<DeleteNotebookResult>`
 
-**Example:**
+**Description:**
+Deletes one or more notebooks. Returns confirmation with deleted IDs and count.
+
+**Return Fields:**
+- `deleted: string[]` - Array of deleted notebook IDs
+- `count: number` - Number of notebooks deleted
+
+<details>
+<summary><strong>Validation</strong></summary>
+
+- All provided IDs are validated before deletion
+- Throws `APIError` if any ID is invalid
+- Supports both single ID and array of IDs
+
+</details>
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- No confirmation required - deletion is immediate
+- Batch deletion is supported (pass array of IDs)
+- Returns validation/confirmation object (not void)
+- All IDs are validated before any deletion occurs
+
+</details>
+
+**Usage:**
 ```typescript
-// Share with users
+// Delete single notebook
+const result = await sdk.notebooks.delete('notebook-id')
+console.log(`Deleted ${result.count} notebook: ${result.deleted[0]}`)
+
+// Delete multiple notebooks
+const result = await sdk.notebooks.delete(['id-1', 'id-2', 'id-3'])
+console.log(`Deleted ${result.count} notebooks: ${result.deleted.join(', ')}`)
+```
+
+---
+
+### Share Notebook
+
+**Method:** `sdk.notebooks.share(notebookId, options)`
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required, automatically trimmed)
+- `options: ShareNotebookOptions`
+  - `users?: Array<{email: string, role: 2|3|4}>` - Users to share with (optional)
+  - `anyoneWithLink?: boolean` - Enable public link access (optional)
+  - `notify?: boolean` - Notify users (default: true, only used when users are provided)
+  - `accessType?: 1|2` - Access type (optional, default: 2=restricted)
+
+**Returns:** `Promise<ShareNotebookResult>`
+
+**Description:**
+Shares notebook with users or enables link sharing. Supports multiple users with different roles. Automatically fetches updated sharing state after operation.
+
+**User Roles:**
+
+| Role | Value | Description |
+|------|-------|-------------|
+| Editor | `2` | Can edit notebook content |
+| Viewer | `3` | Can view notebook only |
+| Remove | `4` | Remove user from shared list |
+
+**Access Types:**
+
+| Access Type | Value | Description |
+|-------------|-------|-------------|
+| Anyone with link | `1` | Public access via share link |
+| Restricted | `2` | Only specified users can access |
+
+**Return Fields:**
+- `shareUrl: string` - Share URL (always present, even if not shared)
+- `success: boolean` - Whether the share operation succeeded
+- `notebookId: string` - The notebook ID that was shared
+- `accessType: 1|2` - Access type that was set
+- `linkEnabled: boolean` - Whether "anyone with link" is enabled
+- `isShared: boolean` - Whether the notebook is shared
+- `publicAccess: boolean` - Whether public access is enabled
+- `users?: Array<{email: string, role: 2|3}>` - Users with access (only present if users were shared)
+
+**Notify Behavior:**
+- `notify` is only used when `users` are provided
+- Default: `true` (users are notified when permissions change)
+- Set to `false` to share silently
+- Not used when only changing link access (no user changes)
+
+<details>
+<summary><strong>Validation</strong></summary>
+
+- Email addresses are validated using regex before sharing
+- Throws `APIError` if any email is invalid
+- Supports multiple users in a single call
+
+</details>
+
+<details>
+<summary><strong>Notes</strong></summary>
+- Notebook ID is automatically trimmed
+- Makes prerequisite `JFMDGd` call before sharing (to initialize sharing state)
+- After successful share, makes another `JFMDGd` call to fetch updated state
+- `shareUrl` is always returned (constructed from notebook ID if not explicitly shared)
+- Supports sharing with multiple users in a single operation
+- Can combine user sharing with link access in one call
+
+</details>
+
+**Usage:**
+```typescript
+// Share with users (notify enabled by default)
 const result = await sdk.notebooks.share('notebook-id', {
   users: [
     { email: 'user1@example.com', role: 2 }, // editor
@@ -291,17 +490,32 @@ const result = await sdk.notebooks.share('notebook-id', {
   accessType: 2, // restricted
 })
 
-// Enable link sharing
+// Share with users (silent, no notification)
+const result = await sdk.notebooks.share('notebook-id', {
+  users: [
+    { email: 'user@example.com', role: 2 },
+  ],
+  notify: false,
+  accessType: 2,
+})
+
+// Enable link sharing (anyone with link)
 const result = await sdk.notebooks.share('notebook-id', {
   anyoneWithLink: true,
   accessType: 1, // anyone with link
 })
+
+// Remove user (role: 4)
+const result = await sdk.notebooks.share('notebook-id', {
+  users: [
+    { email: 'user@example.com', role: 4 }, // remove
+  ],
+  accessType: 2,
+})
 ```
 
-</details>
-
 <details>
-<summary><b>📄 Sources</b> - Add & manage sources</summary>
+<summary><b>Sources</b> - Add & manage sources</summary>
 
 ### Methods
 
@@ -446,7 +660,7 @@ console.log(`Ready: ${status.readyCount}/${status.totalCount}`)
 </details>
 
 <details>
-<summary><b>🎨 Artifacts</b> - Generate study materials</summary>
+<summary><b>Artifacts</b> - Generate study materials</summary>
 
 ### Methods
 
@@ -565,7 +779,7 @@ await sdk.artifacts.delete('artifact-id')
 </details>
 
 <details>
-<summary><b>💬 Generation & Chat</b> - Chat & content generation</summary>
+<summary><b>Generation & Chat</b> - Chat & content generation</summary>
 
 ### Methods
 
@@ -643,7 +857,7 @@ const outline = await sdk.generation.generateOutline('notebook-id')
 </details>
 
 <details>
-<summary><b>📝 Notes</b> - Manage notes</summary>
+<summary><b>Notes</b> - Manage notes</summary>
 
 ### Methods
 
@@ -783,13 +997,13 @@ try {
   })
 } catch (error) {
   if (error instanceof NotebookLMAuthError) {
-    console.error('❌ Authentication failed - refresh your cookies')
+    console.error('Authentication failed - refresh your cookies')
   } else if (error instanceof RateLimitError) {
-    console.error('❌ Rate limit exceeded:', error.message)
+    console.error('Rate limit exceeded:', error.message)
   } else if (error instanceof APIError) {
-    console.error('❌ API error:', error.message)
+    console.error('API error:', error.message)
   } else if (error instanceof NotebookLMError) {
-    console.error('❌ NotebookLM error:', error.message)
+    console.error('NotebookLM error:', error.message)
   }
 }
 ```
