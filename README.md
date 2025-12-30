@@ -46,22 +46,20 @@ npm install notebooklm-kit
 
 | Feature | Description | Method | Example |
 |---------|-------------|--------|---------|
-| List Sources | List all sources in a notebook | [`sdk.sources.list()`](#list-sources) | [source-list.ts](examples/source-list.ts) |
-| Get Source | Get one or all sources | [`sdk.sources.get()`](#get-source) | [source-get.ts](examples/source-get.ts) |
-| Add URL | Add a source from a web page URL | [`sdk.sources.add.url()`](#add-url-source) | [source-add-url.ts](examples/source-add-url.ts) |
-| Add Text | Add a source from text content | [`sdk.sources.add.text()`](#add-text-source) | [source-add-text.ts](examples/source-add-text.ts) |
-| Add File | Add a source from a file (PDF, image, etc.) | [`sdk.sources.add.file()`](#add-file-source) | |
-| Add YouTube | Add a YouTube video as a source | [`sdk.sources.add.youtube()`](#add-youtube-source) | [source-add-youtube.ts](examples/source-add-youtube.ts) |
-| Add Google Drive | Add a Google Drive file as a source | [`sdk.sources.add.drive()`](#add-google-drive-source) | |
-| Batch Add | Add multiple sources at once | [`sdk.sources.add.batch()`](#batch-add-sources) | [source-add-batch.ts](examples/source-add-batch.ts) |
-| Web Search (Simple) | Search web and wait for results | [`sdk.sources.add.web.searchAndWait()`](#web-search-simple) | [source-web-search.ts](examples/source-web-search.ts) |
-| Web Search (Advanced) | Multi-step web search workflow | [`sdk.sources.add.web.search()`](#web-search-advanced) | [source-web-search-advanced.ts](examples/source-web-search-advanced.ts) |
-| Get Search Results | Get search results from a session | [`sdk.sources.add.web.getResults()`](#get-search-results) | |
-| Add Discovered | Add discovered sources from search | [`sdk.sources.add.web.addDiscovered()`](#add-discovered-sources) | |
-| Update Source | Update source metadata | [`sdk.sources.update()`](#update-source) | |
-| Delete Source | Delete a source from a notebook | [`sdk.sources.delete()`](#delete-source) | [source-delete.ts](examples/source-delete.ts) |
-| Refresh Source | Re-fetch and reprocess source content | [`sdk.sources.refresh()`](#refresh-source) | |
-| Check Status | Check source processing status | [`sdk.sources.status()`](#check-processing-status) | [source-status.ts](examples/source-status.ts) |
+| List Sources | List all sources in a notebook | [`sdk.sources.list(notebookId)`](#list-sources) | [source-list.ts](examples/source-list.ts) |
+| Get Source | Get one or all sources | [`sdk.sources.get(notebookId, sourceId?)`](#get-source) | [source-get.ts](examples/source-get.ts) |
+| Add URL | Add a source from a web page URL | [`sdk.sources.add.url(notebookId, options)`](#add-url-source) | [source-add-url.ts](examples/source-add-url.ts) |
+| Add Text | Add a source from text content | [`sdk.sources.add.text(notebookId, options)`](#add-text-source) | [source-add-text.ts](examples/source-add-text.ts) |
+| Add File | Add a source from a file (PDF, image, etc.) | [`sdk.sources.add.file(notebookId, options)`](#add-file-source) | [source-add-file.ts](examples/source-add-file.ts) |
+| Add YouTube | Add a YouTube video as a source | [`sdk.sources.add.youtube(notebookId, options)`](#add-youtube-source) | [source-add-youtube.ts](examples/source-add-youtube.ts) |
+| Add Google Drive | Add a Google Drive file as a source | [`sdk.sources.add.drive(notebookId, options)`](#add-google-drive-source) | [source-add-drive.ts](examples/source-add-drive.ts) |
+| Batch Add | Add multiple sources at once | [`sdk.sources.add.batch(notebookId, options)`](#batch-add-sources) | [source-add-batch.ts](examples/source-add-batch.ts) |
+| Web Search (Simple) | Search web and wait for results | [`sdk.sources.add.web.searchAndWait(notebookId, options)`](#web-search-simple) | [source-web-search.ts](examples/source-web-search.ts) |
+| Web Search (Advanced) | Multi-step web search workflow | [`sdk.sources.add.web.search()`](#web-search-advanced) → `getResults()` → `addDiscovered()` | [source-web-search-advanced.ts](examples/source-web-search-advanced.ts) |
+| Update Source | Update source metadata | [`sdk.sources.update(notebookId, sourceId, updates)`](#update-source) | [source-update.ts](examples/source-update.ts) |
+| Delete Source | Delete a source from a notebook | [`sdk.sources.delete(notebookId, sourceId)`](#delete-source) | [source-delete.ts](examples/source-delete.ts) |
+| Refresh Source | Re-fetch and reprocess source content | [`sdk.sources.refresh(notebookId, sourceId)`](#refresh-source) | [source-refresh.ts](examples/source-refresh.ts) |
+| Check Status | Check source processing status | [`sdk.sources.status(notebookId)`](#check-processing-status) | [source-status.ts](examples/source-status.ts) |
 
 ### `sdk.artifacts` - Artifact Management
 
@@ -666,7 +664,7 @@ console.log(`Ready: ${status.readyCount}/${status.totalCount}`)
 
 ## Sources
 
-Examples: [source-list.ts](examples/source-list.ts) | [source-get.ts](examples/source-get.ts) | [source-add-url.ts](examples/source-add-url.ts) | [source-add-text.ts](examples/source-add-text.ts) | [source-add-youtube.ts](examples/source-add-youtube.ts) | [source-add-batch.ts](examples/source-add-batch.ts) | [source-web-search.ts](examples/source-web-search.ts) | [source-web-search-advanced.ts](examples/source-web-search-advanced.ts) | [source-status.ts](examples/source-status.ts) | [source-delete.ts](examples/source-delete.ts)
+Examples: [source-list.ts](examples/source-list.ts) | [source-get.ts](examples/source-get.ts) | [source-add-url.ts](examples/source-add-url.ts) | [source-add-text.ts](examples/source-add-text.ts) | [source-add-file.ts](examples/source-add-file.ts) | [source-add-youtube.ts](examples/source-add-youtube.ts) | [source-add-drive.ts](examples/source-add-drive.ts) | [source-add-batch.ts](examples/source-add-batch.ts) | [source-web-search.ts](examples/source-web-search.ts) | [source-web-search-advanced.ts](examples/source-web-search-advanced.ts) | [source-update.ts](examples/source-update.ts) | [source-delete.ts](examples/source-delete.ts) | [source-refresh.ts](examples/source-refresh.ts) | [source-status.ts](examples/source-status.ts)
 
 ### List Sources
 
