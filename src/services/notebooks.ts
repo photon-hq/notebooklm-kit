@@ -44,7 +44,7 @@ export class NotebooksService {
   }
   
   async create(options: CreateNotebookOptions): Promise<Notebook> {
-    let { title = '' } = options;
+    let { title = '', emoji } = options;
     
     if (!title || title.trim() === '') {
       title = `Untitled Notebook ${new Date().toLocaleDateString()}`;
@@ -64,6 +64,12 @@ export class NotebooksService {
     const notebook = this.parseCreateResponse(response, title);
     this.quota?.recordUsage('createNotebook');
     
+    // Set emoji if provided
+    if (emoji) {
+      await this.setEmoji(notebook.projectId, emoji);
+      notebook.emoji = emoji;
+    }
+    
     return notebook;
   }
   
@@ -75,29 +81,52 @@ export class NotebooksService {
       throw new APIError('Invalid notebook ID format', undefined, 400);
     }
     
-    if (!options.title && !options.description) {
-      throw new APIError('At least one field (title or description) must be provided', undefined, 400);
+    // Validate: at least one field must be provided (title, description, or emoji)
+    if (!options.title && !options.description && !options.emoji) {
+      throw new APIError('At least one field (title, description, or emoji) must be provided', undefined, 400);
     }
     
     if (options.title && options.title.length > 100) {
       throw new APIError('Notebook title exceeds maximum length (100 characters)', undefined, 400);
     }
     
-    const updateArray: any[] = [null, null, null, null];
-    
-    if (options.title !== undefined) {
-      updateArray[3] = [null, options.title];
+    // Set emoji if provided (supports: emoji only, title + emoji, or emoji + description)
+    if (options.emoji !== undefined) {
+      await this.setEmoji(notebookId, options.emoji);
     }
     
-    const updates = [updateArray];
+    // Update title and/or description if provided (supports: title only, description only, or title + description)
+    if (options.title !== undefined || options.description !== undefined) {
+      const updateArray: any[] = [null, null, null, null];
+      
+      if (options.title !== undefined) {
+        updateArray[3] = [null, options.title];
+      }
+      
+      const updates = [updateArray];
+      
+      const response = await this.rpc.call(
+        RPC.RPC_UPDATE_PROJECT,
+        [notebookId, updates],
+        notebookId
+      );
+      
+      const notebook = this.parseGetResponse(response, notebookId, null);
+      
+      // Ensure emoji is set in the returned notebook if it was updated
+      if (options.emoji !== undefined) {
+        notebook.emoji = options.emoji;
+      }
+      
+      return notebook;
+    }
     
-    const response = await this.rpc.call(
-      RPC.RPC_UPDATE_PROJECT,
-      [notebookId, updates],
-      notebookId
-    );
-    
-    return this.parseGetResponse(response, notebookId, null);
+    // If only emoji was updated (no title or description), fetch the notebook and update emoji in response
+    const notebook = await this.get(notebookId);
+    if (options.emoji !== undefined) {
+      notebook.emoji = options.emoji;
+    }
+    return notebook;
   }
   
   async delete(notebookIds: string | string[]): Promise<DeleteNotebookResult> {
@@ -510,6 +539,33 @@ export class NotebooksService {
       };
     } catch (error) {
       throw new NotebookLMError(`Failed to parse notebook data: ${(error as Error).message}`);
+    }
+  }
+  
+  /**
+   * Set emoji for a notebook using the s0tc2d RPC
+   * Based on mm40.txt: emoji is set via s0tc2d with args [notebookId, [[null, null, null, [null, null, emoji]]]]
+   */
+  private async setEmoji(notebookId: string, emoji: string): Promise<void> {
+    if (!emoji || typeof emoji !== 'string') {
+      throw new APIError('Invalid emoji format', undefined, 400);
+    }
+    
+    // Emoji should be a single Unicode character (can be a multi-byte emoji)
+    // Validate it's not empty after trimming
+    const trimmedEmoji = emoji.trim();
+    if (!trimmedEmoji) {
+      throw new APIError('Emoji cannot be empty', undefined, 400);
+    }
+    
+    // RPC call structure from mm40.txt:
+    // s0tc2d RPC with args: [notebookId, [[null, null, null, [null, null, emoji]]]]
+    const args = [notebookId, [[null, null, null, [null, null, trimmedEmoji]]]];
+    
+    try {
+      await this.rpc.call(RPC.RPC_UPDATE_PROJECT, args, notebookId);
+    } catch (error) {
+      throw new APIError(`Failed to set emoji: ${(error as Error).message}`, undefined, 500);
     }
   }
   

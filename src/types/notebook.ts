@@ -39,6 +39,7 @@ export interface SharingSettings {
 export interface CreateNotebookOptions {
   title?: string; /** Notebook title (optional, auto-generated if empty) */
   description?: string; /** Initial description (optional) */
+  emoji?: string; /** Notebook emoji (optional) */
 }
 
 /**
@@ -47,6 +48,7 @@ export interface CreateNotebookOptions {
 export interface UpdateNotebookOptions {
   title?: string; /** New title */
   description?: string; /** New description */
+  emoji?: string; /** New emoji */
   metadata?: Record<string, any>; /** Other metadata updates */
 }
 

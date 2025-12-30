@@ -38,7 +38,7 @@ npm install notebooklm-kit
 | List Notebooks | List all your notebooks (recently viewed) | [`sdk.notebooks.list()`](#list-notebooks) | [notebook-list.ts](examples/notebook-list.ts) |
 | Get Notebook | Get full details of a specific notebook | [`sdk.notebooks.get(notebookId)`](#get-notebook) | [notebook-get.ts](examples/notebook-get.ts) |
 | Create Notebook | Create a new notebook (auto-generates title if empty) | [`sdk.notebooks.create(options)`](#create-notebook) | [notebook-create.ts](examples/notebook-create.ts) |
-| Update Notebook | Update notebook title or description | [`sdk.notebooks.update(notebookId, options)`](#update-notebook) | [notebook-update.ts](examples/notebook-update.ts) |
+| Update Notebook | Update notebook title, description, or emoji | [`sdk.notebooks.update(notebookId, options)`](#update-notebook) | [notebook-update.ts](examples/notebook-update.ts) |
 | Delete Notebook | Delete one or more notebooks | [`sdk.notebooks.delete(notebookIds)`](#delete-notebook) | [notebook-delete.ts](examples/notebook-delete.ts) |
 | Share Notebook | Share notebook with users or enable link sharing | [`sdk.notebooks.share(notebookId, options)`](#share-notebook) | [notebook-share.ts](examples/notebook-share.ts) |
 
@@ -250,6 +250,7 @@ if (notebook.sharing?.isShared) {
 - `options: CreateNotebookOptions`
   - `title: string` - Notebook title (optional, auto-generated if empty)
   - `description?: string` - Initial description (optional)
+  - `emoji?: string` - Notebook emoji (optional)
 
 **Returns:** `Promise<Notebook>`
 
@@ -291,13 +292,20 @@ const notebook = await sdk.notebooks.create({
   title: 'My Research Project',
 })
 
+// With title and emoji
+const notebook = await sdk.notebooks.create({
+  title: 'My Research Project',
+  emoji: '📚',
+})
+
 // Auto-generated title
 const untitled = await sdk.notebooks.create({})
 
-// With description
+// With description and emoji
 const notebook = await sdk.notebooks.create({
   title: 'Project Notes',
   description: 'Initial project description',
+  emoji: '🔬',
 })
 ```
 
@@ -314,17 +322,18 @@ const notebook = await sdk.notebooks.create({
 - `options: UpdateNotebookOptions`
   - `title?: string` - New title (optional)
   - `description?: string` - New description (optional)
+  - `emoji?: string` - New emoji (optional)
   - `metadata?: Record<string, any>` - Other metadata updates (optional)
 
 **Returns:** `Promise<Notebook>` (same as `get()` - full notebook details)
 
 **Description:**
-Updates notebook title or description. Returns full notebook details after update (same structure as `get()`).
+Updates notebook title, description, or emoji. Returns full notebook details after update (same structure as `get()`). Supports updating emoji only, title only, or both together.
 
 <details>
 <summary><strong>Validation</strong></summary>
 
-- At least one field (`title` or `description`) must be provided
+- At least one field (`title`, `description`, or `emoji`) must be provided
 - Title maximum length: 100 characters
 - Notebook ID is automatically trimmed (removes trailing spaces)
 - Returns error if notebook doesn't exist
@@ -351,15 +360,27 @@ const updated = await sdk.notebooks.update('notebook-id', {
   title: 'Updated Title',
 })
 
+// Update emoji only
+const updated = await sdk.notebooks.update('notebook-id', {
+  emoji: '🔥',
+})
+
+// Update both title and emoji
+const updated = await sdk.notebooks.update('notebook-id', {
+  title: 'New Title',
+  emoji: '⭐',
+})
+
 // Update description only
 const updated = await sdk.notebooks.update('notebook-id', {
   description: 'New description',
 })
 
-// Update both
+// Update all fields
 const updated = await sdk.notebooks.update('notebook-id', {
   title: 'New Title',
   description: 'New Description',
+  emoji: '🎯',
 })
 ```
 
