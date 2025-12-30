@@ -23,6 +23,78 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 | **`sdk.generation`** | Chat & content generation | `chat()`, `generateDocumentGuides()`, `generateOutline()` |
 | **`sdk.notes`** | Manage notes | `create()`, `list()`, `update()`, `delete()` |
 
+## Features
+
+### `sdk.notebooks` - Notebook Management
+
+| Feature | Description | Method | Example |
+|---------|-------------|--------|---------|
+| List Notebooks | List all your notebooks (recently viewed) | `sdk.notebooks.list()` | |
+| Get Notebook | Get full details of a specific notebook | `sdk.notebooks.get(notebookId)` | |
+| Create Notebook | Create a new notebook (auto-generates title if empty) | `sdk.notebooks.create(options)` | |
+| Update Notebook | Update notebook title or description | `sdk.notebooks.update(notebookId, options)` | |
+| Delete Notebook | Delete one or more notebooks | `sdk.notebooks.delete(notebookIds)` | |
+| Share Notebook | Share notebook with users or enable link sharing | `sdk.notebooks.share(notebookId, options)` | |
+
+### `sdk.sources` - Source Management
+
+| Feature | Description | Method | Example |
+|---------|-------------|--------|---------|
+| Add from URL | Add a source from a web page URL | `sdk.sources.addFromURL(notebookId, options)` | |
+| Add from Text | Add a source from text content | `sdk.sources.addFromText(notebookId, options)` | |
+| Add from File | Add a source from a file (PDF, image, etc.) | `sdk.sources.addFromFile(notebookId, options)` | |
+| Add YouTube | Add a YouTube video as a source | `sdk.sources.addYouTube(notebookId, options)` | |
+| Add Google Drive | Add a Google Drive file as a source | `sdk.sources.addGoogleDrive(notebookId, options)` | |
+| Search Web | Search the web for sources | `sdk.sources.searchWeb(notebookId, options)` | |
+| Search Web and Wait | Search web and wait for results | `sdk.sources.searchWebAndWait(notebookId, options)` | |
+| Get Search Results | Get search results from a session | `sdk.sources.getSearchResults(notebookId, sessionId?)` | |
+| Add Discovered | Add discovered sources from search | `sdk.sources.addDiscovered(notebookId, options)` | |
+| Batch Add | Add multiple sources at once | `sdk.sources.addBatch(notebookId, options)` | |
+| Delete Source | Delete a source from a notebook | `sdk.sources.delete(notebookId, sourceId)` | |
+| Update Source | Update source metadata | `sdk.sources.update(notebookId, sourceId, updates)` | |
+| Refresh Source | Re-fetch and reprocess source content | `sdk.sources.refresh(notebookId, sourceId)` | |
+| Poll Processing | Check source processing status | `sdk.sources.pollProcessing(notebookId)` | |
+| Select Source | Select a source (deprecated) | `sdk.sources.selectSource(sourceId)` | |
+| Load Content | Load source content (deprecated) | `sdk.sources.loadContent(sourceId)` | |
+| Check Freshness | Check if source needs refresh (deprecated) | `sdk.sources.checkFreshness(sourceId)` | |
+| Add Deep Research | Add deep research source (deprecated) | `sdk.sources.addDeepResearch(notebookId, query)` | |
+| Act On | Perform action on sources (deprecated) | `sdk.sources.actOn(notebookId, action, sourceIds)` | |
+
+### `sdk.artifacts` - Artifact Management
+
+| Feature | Description | Method | Example |
+|---------|-------------|--------|---------|
+| Create Artifact | Create study material (quiz, flashcards, mind map, etc.) | `sdk.artifacts.create(notebookId, type, options)` | |
+| List Artifacts | List all artifacts in a notebook | `sdk.artifacts.list(notebookId)` | |
+| Get Artifact | Get artifact details | `sdk.artifacts.get(artifactId, notebookId?)` | |
+| Download Artifact | Download artifact data (quiz questions, CSV, JSON, etc.) | `sdk.artifacts.download(artifactId, outputDir, notebookId?)` | |
+| Rename Artifact | Rename an artifact | `sdk.artifacts.rename(artifactId, newTitle)` | |
+| Delete Artifact | Delete an artifact | `sdk.artifacts.delete(artifactId, notebookId?)` | |
+| Update Artifact | Update artifact metadata | `sdk.artifacts.update(artifactId, updates)` | |
+
+### `sdk.generation` - Generation & Chat
+
+| Feature | Description | Method | Example |
+|---------|-------------|--------|---------|
+| Chat | Chat with notebook content | `sdk.generation.chat(notebookId, message, sourceIds?)` | |
+| Generate Document Guides | Generate document guides for sources | `sdk.generation.generateDocumentGuides(notebookId)` | |
+| Generate Notebook Guide | Generate a notebook guide | `sdk.generation.generateNotebookGuide(notebookId)` | |
+| Generate Outline | Generate an outline for the notebook | `sdk.generation.generateOutline(notebookId)` | |
+| Generate Report Suggestions | Generate report suggestions | `sdk.generation.generateReportSuggestions(notebookId)` | |
+| Generate Magic View | Generate magic view | `sdk.generation.generateMagicView(notebookId, sourceIds)` | |
+| Start Draft | Start a draft | `sdk.generation.startDraft(notebookId)` | |
+| Start Section | Start a section | `sdk.generation.startSection(notebookId)` | |
+| Generate Section | Generate a section | `sdk.generation.generateSection(notebookId)` | |
+
+### `sdk.notes` - Notes Management
+
+| Feature | Description | Method | Example |
+|---------|-------------|--------|---------|
+| List Notes | List all notes in a notebook | `sdk.notes.list(notebookId)` | |
+| Create Note | Create a new note | `sdk.notes.create(notebookId, options)` | |
+| Update Note | Update a note | `sdk.notes.update(notebookId, noteId, options)` | |
+| Delete Note | Delete a note | `sdk.notes.delete(notebookId, noteIds)` | |
+
 ## Installation
 
 ```bash
