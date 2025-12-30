@@ -13,12 +13,13 @@ export { SourcesService } from './services/sources.js';
 export { NotesService } from './services/notes.js';
 export { ArtifactsService } from './services/artifacts.js';
 export { GenerationService } from './services/generation.js';
-export { fetchQuizData } from './services/quiz.js';
-export { fetchFlashcardData } from './services/flashcards.js';
-export type { ParsedFlashcardData } from './services/flashcards.js';
-export { downloadAudioFile } from './services/audio.js';
-export { downloadVideoFile } from './services/video.js';
-export { downloadSlidesFile } from './services/slides.js';
+// Artifact functions are now in ArtifactsService - use artifacts.get() or artifacts.download() instead
+// Legacy exports below are kept for backward compatibility but will be removed
+export { fetchQuizData } from './services/artifacts.js';
+export { fetchFlashcardData } from './services/artifacts.js';
+export type { ParsedFlashcardData } from './services/artifacts.js';
+export { downloadAudioFile } from './services/artifacts.js';
+export { downloadSlidesFile } from './services/artifacts.js';
 export { 
   createReport, 
   reportToDocs, 
@@ -28,10 +29,10 @@ export {
   formatReportAsText,
   formatReportAsHTML,
   formatReportAsJSON,
-} from './services/reports.js';
-export type { CreateReportOptions, ReportContent } from './services/reports.js';
-export { fetchInfographic } from './services/infographics.js';
-export type { InfographicImageData, FetchInfographicOptions } from './services/infographics.js';
+} from './services/artifacts.js';
+export type { CreateReportOptions, ReportContent } from './services/artifacts.js';
+export { fetchInfographic } from './services/artifacts.js';
+export type { InfographicImageData, FetchInfographicOptions } from './services/artifacts.js';
 
 // Types
 export type {
@@ -99,13 +100,13 @@ export type {
   AudioOverview,
   CreateAudioOverviewOptions,
   ShareAudioResult,
-} from './types/audio.js';
+} from './services/artifacts.js';
 
 export {
-  AudioStatus,
   ShareOption,
-  AudioLanguage,
-} from './types/audio.js';
+} from './services/artifacts.js';
+
+// Legacy exports removed - use ArtifactState from artifacts.ts and NotebookLMLanguage from languages.js instead
 
 // Language support
 export {
@@ -120,18 +121,17 @@ export {
 export type {
   VideoOverview,
   CreateVideoOverviewOptions,
-} from './types/video.js';
+} from './services/artifacts.js';
 
-export {
-  VideoStatus,
-} from './types/video.js';
+// Legacy export - deprecated, use ArtifactState from artifacts.ts instead
+// VideoStatus is no longer exported - use ArtifactState instead
 
 // Video service types
 export type {
   GetVideoUrlOptions,
-} from './services/video.js';
+} from './services/artifacts.js';
 
-export { VideoService } from './services/video.js';
+// VideoService is no longer exported - use ArtifactsService.video.create() instead
 
 export type {
   Artifact,

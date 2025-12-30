@@ -19,7 +19,7 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 |---------|---------|---------|
 | **`sdk.notebooks`** | Notebook management | `list()`, `create()`, `get()`, `update()`, `delete()`, `share()` |
 | **`sdk.sources`** | Add & manage sources | `addFromURL()`, `addFromText()`, `addFromFile()`, `addYouTube()`, `searchWebAndWait()` |
-| **`sdk.artifacts`** | Generate study materials | `create()`, `list()`, `get()`, `download()`, `delete()`, `rename()` |
+| **`sdk.artifacts`** | Generate study materials | `create()`, `list()`, `get()`, `download()`, `delete()`, `rename()`, `share()` |
 | **`sdk.generation`** | Chat & content generation | `chat()`, `generateDocumentGuides()`, `generateOutline()` |
 | **`sdk.notes`** | Manage notes | `create()`, `list()`, `update()`, `delete()` |
 
@@ -70,13 +70,13 @@ npm install notebooklm-kit
 
 | Feature | Description | Method | Example |
 |---------|-------------|--------|---------|
-| Create Artifact | Create study material (quiz, flashcards, mind map, etc.) | `sdk.artifacts.create(notebookId, type, options)` | |
-| List Artifacts | List all artifacts in a notebook | `sdk.artifacts.list(notebookId)` | |
-| Get Artifact | Get artifact details | `sdk.artifacts.get(artifactId, notebookId?)` | |
-| Download Artifact | Download artifact data (quiz questions, CSV, JSON, etc.) | `sdk.artifacts.download(artifactId, outputDir, notebookId?)` | |
-| Rename Artifact | Rename an artifact | `sdk.artifacts.rename(artifactId, newTitle)` | |
-| Delete Artifact | Delete an artifact | `sdk.artifacts.delete(artifactId, notebookId?)` | |
-| Update Artifact | Update artifact metadata | `sdk.artifacts.update(artifactId, updates)` | |
+| Create Artifact | Create study material (quiz, flashcards, mind map, etc.) | [`sdk.artifacts.create()`](#create-artifact) or `sdk.artifacts.{type}.create()` | [artifact-create.ts](examples/artifact-create.ts) |
+| List Artifacts | List all artifacts in a notebook (with filtering) | [`sdk.artifacts.list()`](#list-artifacts) | [artifact-list.ts](examples/artifact-list.ts) |
+| Get Artifact | Get artifact details (auto-fetches content when ready) | [`sdk.artifacts.get()`](#get-artifact) | [artifact-get.ts](examples/artifact-get.ts) |
+| Download Artifact | Download artifact data to disk (quiz/flashcard JSON, audio file) | [`sdk.artifacts.download()`](#download-artifact) | [artifact-download.ts](examples/artifact-download.ts) |
+| Rename Artifact | Rename an artifact | [`sdk.artifacts.rename()`](#rename-artifact) | [artifact-rename.ts](examples/artifact-rename.ts) |
+| Delete Artifact | Delete an artifact | [`sdk.artifacts.delete()`](#delete-artifact) | [artifact-delete.ts](examples/artifact-delete.ts) |
+| Share Artifact | Share artifact/notebook with users or enable link sharing | [`sdk.artifacts.share()`](#share-artifact) | [artifact-share.ts](examples/artifact-share.ts) |
 
 ### `sdk.generation` - Generation & Chat
 
@@ -667,124 +667,566 @@ console.log(`Ready: ${status.readyCount}/${status.totalCount}`)
 
 </details>
 
-<details>
-<summary><b>Artifacts</b> - Generate study materials</summary>
+## Artifacts
 
-### Methods
+Examples: [artifact-create.ts](examples/artifact-create.ts) | [artifact-list.ts](examples/artifact-list.ts) | [artifact-get.ts](examples/artifact-get.ts) | [artifact-download.ts](examples/artifact-download.ts) | [artifact-rename.ts](examples/artifact-rename.ts) | [artifact-delete.ts](examples/artifact-delete.ts) | [artifact-share.ts](examples/artifact-share.ts)
 
-#### `create(notebookId: string, type: ArtifactType, options: CreateArtifactOptions)` → `Promise<Artifact>`
-Create a study material (quiz, flashcards, mind map, etc.).
+### Create Artifact
+
+**Method:** `sdk.artifacts.create(notebookId, type, options)` or `sdk.artifacts.{type}.create(notebookId, options)`
+
+**Example:** [artifact-create.ts](examples/artifact-create.ts)
 
 **Parameters:**
-- `notebookId: string` - The notebook ID
-- `type: ArtifactType` - Artifact type (QUIZ, FLASHCARDS, MIND_MAP, etc.)
-- `options.instructions: string` - Instructions for generation
-- `options.sourceIds?: string[]` - Specific source IDs (optional, uses all if not provided)
-- `options.customization?: object` - Type-specific customization options
+- `notebookId: string` - The notebook ID (required)
+- `type: ArtifactType` - Artifact type (required for main method)
+- `options: CreateArtifactOptions`
+  - `title?: string` - Artifact title (optional)
+  - `instructions?: string` - Instructions for generation (optional)
+  - `sourceIds?: string[]` - Specific source IDs (optional, uses all if not provided)
+  - `customization?: object` - Type-specific customization options (optional)
 
-**Returns:**
-- `Artifact` - Created artifact with: `artifactId`, `type`, `state`, `title`, etc.
+**Returns:** `Promise<Artifact>` (or `Promise<VideoOverview>` / `Promise<AudioOverview>` for video/audio)
 
-**Example:**
+**Description:**
+Creates a study material artifact (quiz, flashcards, report, mind map, infographic, slide deck, audio, video). Supports customization options for 6 out of 8 artifact types. Returns immediately with artifact metadata - check `state` field to see if artifact is ready.
+
+**Artifact Types:**
+
+| Type | Value | Customization | Sub-Service |
+|------|-------|---------------|-------------|
+| Quiz | `ArtifactType.QUIZ` | ✅ Yes | `sdk.artifacts.quiz.create()` |
+| Flashcards | `ArtifactType.FLASHCARDS` | ✅ Yes | `sdk.artifacts.flashcard.create()` |
+| Report | `ArtifactType.REPORT` | ❌ No | `sdk.artifacts.report.create()` |
+| Mind Map | `ArtifactType.MIND_MAP` | ❌ No | `sdk.artifacts.mindmap.create()` |
+| Infographic | `ArtifactType.INFOGRAPHIC` | ✅ Yes | `sdk.artifacts.infographic.create()` |
+| Slide Deck | `ArtifactType.SLIDE_DECK` | ✅ Yes | `sdk.artifacts.slide.create()` |
+| Audio | `ArtifactType.AUDIO` | ✅ Yes | `sdk.artifacts.audio.create()` |
+| Video | `ArtifactType.VIDEO` | ✅ Yes | `sdk.artifacts.video.create()` |
+
+**Customization Options:**
+
+**Quiz/Flashcards:**
+- `numberOfQuestions` / `numberOfCards`: `1` (Fewer), `2` (Standard), `3` (More)
+- `difficulty`: `1` (Easy), `2` (Medium), `3` (Hard)
+- `language?: string` - Language code (e.g., 'en', 'hi', 'es')
+
+**Slide Deck:**
+- `format`: `2` (Standard), `3` (Detailed)
+- `length`: `1` (Short), `2` (Medium), `3` (Long)
+- `language?: string`
+
+**Infographic:**
+- `orientation`: `1` (Portrait), `2` (Landscape), `3` (Square)
+- `levelOfDetail`: `1` (Simple), `2` (Standard), `3` (Detailed)
+- `language?: string`
+
+**Audio:**
+- `format`: `0` (Narrative), `1` (Conversational), `2` (News), `3` (Podcast)
+- `length`: `1` (Short), `2` (Medium), `3` (Long)
+- `language?: string`
+
+**Video:**
+- `format`: `1` (Standard), `2` (Detailed)
+- `visualStyle`: `0-10` (Various styles)
+- `focus?: string` - Focus area
+- `customStyleDescription?: string` - Custom style description
+- `language?: string`
+
+**Return Fields:**
+- `artifactId: string` - Unique artifact ID (required for other operations)
+- `type: ArtifactType` - Artifact type
+- `state: ArtifactState` - Current state: `CREATING`, `READY`, or `FAILED`
+- `title: string` - Artifact title
+- `sourceIds?: string[]` - Source IDs used to create the artifact
+- `createdAt?: string` - Creation timestamp
+- `updatedAt?: string` - Last update timestamp
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Artifacts are created asynchronously - check `state` field to see if ready
+- Use `get(artifactId)` to fetch full artifact data when `state === READY`
+- Quota is checked before creation (if quota manager is enabled)
+- Usage is recorded after successful creation
+- Audio and video artifacts return `AudioOverview` / `VideoOverview` instead of `Artifact`
+- Sub-services provide type-safe convenience methods (e.g., `sdk.artifacts.quiz.create()`)
+
+</details>
+
+**Usage:**
 ```typescript
 import { ArtifactType } from 'notebooklm-kit'
 
+// Generic create method
 const quiz = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
+  title: 'Chapter 1 Quiz',
   instructions: 'Create questions covering key concepts',
   customization: {
-    numberOfQuestions: 2, // 1=Fewer, 2=Standard, 3=More
-    difficulty: 2, // 1=Easy, 2=Medium, 3=Hard
+    numberOfQuestions: 2, // Standard
+    difficulty: 2, // Medium
     language: 'en',
   },
 })
-```
 
----
+// Using sub-services (type-safe)
+const quiz = await sdk.artifacts.quiz.create('notebook-id', {
+  title: 'Chapter 1 Quiz',
+  instructions: 'Create questions covering key concepts',
+  customization: {
+    numberOfQuestions: 2,
+    difficulty: 2,
+    language: 'en',
+  },
+})
 
-#### `list(notebookId: string)` → `Promise<Artifact[]>`
-List all artifacts in a notebook.
+const flashcards = await sdk.artifacts.flashcard.create('notebook-id', {
+  customization: {
+    numberOfCards: 3, // More cards
+    difficulty: 1, // Easy
+  },
+})
 
-**Parameters:**
-- `notebookId: string` - The notebook ID
+const video = await sdk.artifacts.video.create('notebook-id', {
+  instructions: 'Create a summary video',
+  customization: {
+    format: 1,
+    visualStyle: 0,
+    language: 'en',
+  },
+})
 
-**Returns:**
-- `Artifact[]` - Array of artifacts
-
-**Example:**
-```typescript
-const artifacts = await sdk.artifacts.list('notebook-id')
-const quizzes = artifacts.filter(a => a.type === ArtifactType.QUIZ)
-```
-
----
-
-#### `get(artifactId: string)` → `Promise<Artifact>`
-Get artifact details.
-
-**Parameters:**
-- `artifactId: string` - The artifact ID
-
-**Returns:**
-- `Artifact` - Artifact details
-
-**Example:**
-```typescript
-const artifact = await sdk.artifacts.get('artifact-id')
-console.log(`State: ${artifact.state}`)
-```
-
----
-
-#### `download(artifactId: string, outputDir: string, notebookId?: string)` → `Promise<DownloadResult>`
-Download artifact data (quiz questions, flashcard CSV, mind map JSON, etc.).
-
-**Parameters:**
-- `artifactId: string` - The artifact ID
-- `outputDir: string` - Output directory path
-- `notebookId?: string` - Notebook ID (required for audio/video)
-
-**Returns:**
-- `DownloadResult` - Object with:
-  - `filePath: string` - Path to downloaded file
-  - `data?: any` - Parsed data (for quizzes, flashcards, etc.)
-
-**Example:**
-```typescript
-const result = await sdk.artifacts.download('artifact-id', './downloads')
-console.log(`Downloaded: ${result.filePath}`)
-if (result.data) {
-  console.log('Quiz questions:', result.data.questions)
+// Check if ready
+if (quiz.state === ArtifactState.READY) {
+  const fullQuiz = await sdk.artifacts.get(quiz.artifactId, 'notebook-id')
 }
 ```
 
 ---
 
-#### `rename(artifactId: string, newTitle: string)` → `Promise<void>`
-Rename an artifact.
+### List Artifacts
+
+**Method:** `sdk.artifacts.list(notebookId, options?)`
+
+**Example:** [artifact-list.ts](examples/artifact-list.ts)
 
 **Parameters:**
-- `artifactId: string` - The artifact ID
-- `newTitle: string` - New title
+- `notebookId: string` - The notebook ID (required)
+- `options?: { type?: ArtifactType; state?: ArtifactState }` - Filtering options (optional)
 
-**Example:**
+**Returns:** `Promise<Artifact[]>`
+
+**Description:**
+Lists all artifacts in a notebook. Supports filtering by type and/or state. Returns lightweight artifact metadata for display/selection.
+
+**Return Fields:**
+- `artifactId: string` - Unique artifact ID
+- `type: ArtifactType` - Artifact type
+- `state: ArtifactState` - Current state (`CREATING`, `READY`, `FAILED`)
+- `title: string` - Artifact title
+- `sourceIds?: string[]` - Source IDs used
+- `createdAt?: string` - Creation timestamp
+- `updatedAt?: string` - Last update timestamp
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Returns all artifact types (quiz, flashcards, report, mind map, infographic, slide deck, audio, video)
+- Filtering is optional - returns all artifacts if no filters provided
+- Does not include full artifact content (use `get()` for that)
+- Check `state` field to see if artifacts are ready before fetching content
+
+</details>
+
+**Usage:**
 ```typescript
-await sdk.artifacts.rename('artifact-id', 'New Title')
+import { ArtifactType, ArtifactState } from 'notebooklm-kit'
+
+// List all artifacts
+const artifacts = await sdk.artifacts.list('notebook-id')
+console.log(`Found ${artifacts.length} artifacts`)
+
+// Filter by type
+const quizzes = await sdk.artifacts.list('notebook-id', {
+  type: ArtifactType.QUIZ,
+})
+
+// Filter by state
+const ready = await sdk.artifacts.list('notebook-id', {
+  state: ArtifactState.READY,
+})
+
+// Filter by both type and state
+const readyQuizzes = await sdk.artifacts.list('notebook-id', {
+  type: ArtifactType.QUIZ,
+  state: ArtifactState.READY,
+})
+
+// Display artifacts
+artifacts.forEach(artifact => {
+  console.log(`${artifact.title} (${artifact.type}) - ${artifact.state}`)
+})
 ```
 
 ---
 
-#### `delete(artifactId: string)` → `Promise<void>`
-Delete an artifact.
+### Get Artifact
+
+**Method:** `sdk.artifacts.get(artifactId, notebookId?, options?)`
+
+**Example:** [artifact-get.ts](examples/artifact-get.ts)
 
 **Parameters:**
-- `artifactId: string` - The artifact ID
+- `artifactId: string` - The artifact ID (required)
+- `notebookId?: string` - Notebook ID (required for audio artifacts, optional for others)
+- `options?: { exportToDocs?: boolean; exportToSheets?: boolean }` - Export options (for reports only)
 
-**Example:**
-```typescript
-await sdk.artifacts.delete('artifact-id')
-```
+**Returns:** `Promise<Artifact | QuizData | FlashcardData | AudioArtifact | VideoArtifact | any>`
+
+**Description:**
+Retrieves detailed artifact information. Automatically fetches full content when artifact is `READY`:
+- **Quiz/Flashcards/Audio**: Downloads and returns full data (questions, flashcards array, audio data)
+- **Video/Slides**: Returns URL for accessing the content
+- **Reports**: Returns content or exports to Google Docs/Sheets if options provided
+- **Infographics**: Returns image data with dimensions
+- **Mind Maps**: Returns with `experimental: true` flag
+
+**Return Types by Artifact Type:**
+
+| Type | Returns | Content |
+|------|---------|---------|
+| Quiz | `QuizData` | Questions, options, correct answers, explanations |
+| Flashcards | `FlashcardData` | Flashcards array, CSV, totalCards |
+| Audio | `AudioArtifact` | Audio data (base64), saveToFile helper |
+| Video | `VideoArtifact` | Video URL (`url` field) |
+| Slides | `Artifact` | PDF URL (`url` field) |
+| Report | `ReportContent` or `{exportUrl}` | Report content or export URL |
+| Infographic | `InfographicImageData` | Image data, dimensions, URL |
+| Mind Map | `Artifact` | Metadata with `experimental: true` |
+
+**Report Export Options:**
+- `exportToDocs?: boolean` - Export to Google Docs and return export URL
+- `exportToSheets?: boolean` - Export to Google Sheets and return export URL
+- If neither provided, returns report content as text/markdown/HTML/JSON
+
+<details>
+<summary><strong>Validation</strong></summary>
+
+- Export options (`exportToDocs`, `exportToSheets`) can only be used with `REPORT` artifacts
+- Throws error if export options are used on non-report artifacts
+- `notebookId` is required for audio artifacts (must match `artifactId`)
 
 </details>
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Automatically detects artifact type and fetches appropriate content
+- For `READY` artifacts, returns full data instead of just metadata
+- For `CREATING` or `FAILED` artifacts, returns metadata only
+- Video and slides return URLs (use these URLs to access content)
+- Quiz and flashcards return full structured data
+- Audio returns data with `saveToFile()` helper function
+
+</details>
+
+**Usage:**
+```typescript
+import { ArtifactType, ArtifactState } from 'notebooklm-kit'
+
+// Get quiz with full data
+const quiz = await sdk.artifacts.get('quiz-id', 'notebook-id')
+if (quiz.state === ArtifactState.READY) {
+  console.log(`Quiz: ${quiz.title}`)
+  console.log(`Questions: ${quiz.questions?.length || 0}`)
+  quiz.questions?.forEach((q, i) => {
+    console.log(`Q${i + 1}: ${q.question}`)
+  })
+}
+
+// Get flashcards with full data
+const flashcards = await sdk.artifacts.get('flashcard-id', 'notebook-id')
+if (flashcards.state === ArtifactState.READY) {
+  console.log(`Total cards: ${flashcards.totalCards}`)
+  flashcards.flashcards?.forEach(card => {
+    console.log(`Q: ${card.question} | A: ${card.answer}`)
+  })
+}
+
+// Get video URL
+const video = await sdk.artifacts.get('video-id', 'notebook-id')
+if (video.url) {
+  console.log(`Video URL: ${video.url}`)
+}
+
+// Get slide deck PDF URL
+const slides = await sdk.artifacts.get('slide-id', 'notebook-id')
+if (slides.url) {
+  console.log(`PDF URL: ${slides.url}`)
+}
+
+// Get report content
+const report = await sdk.artifacts.get('report-id', 'notebook-id')
+console.log(`Report: ${report.content?.title}`)
+console.log(`Content: ${report.content?.content}`)
+
+// Export report to Google Docs
+const report = await sdk.artifacts.get('report-id', 'notebook-id', {
+  exportToDocs: true,
+})
+console.log(`Docs URL: ${report.exportUrl}`)
+
+// Export report to Google Sheets
+const report = await sdk.artifacts.get('report-id', 'notebook-id', {
+  exportToSheets: true,
+})
+console.log(`Sheets URL: ${report.exportUrl}`)
+
+// Get audio with save helper
+const audio = await sdk.artifacts.get('notebook-id', 'notebook-id') // audio uses notebook ID
+if (audio.audioData && audio.saveToFile) {
+  await audio.saveToFile('./audio.mp3')
+}
+```
+
+---
+
+### Download Artifact
+
+**Method:** `sdk.artifacts.download(artifactId, folderPath, notebookId?)`
+
+**Example:** [artifact-download.ts](examples/artifact-download.ts)
+
+**Parameters:**
+- `artifactId: string` - The artifact ID (required)
+- `folderPath: string` - Output folder path (required)
+- `notebookId?: string` - Notebook ID (required for audio artifacts)
+
+**Returns:** `Promise<{ filePath: string; data: any }>`
+
+**Description:**
+Downloads artifact content and saves to disk. Automatically determines file format and saves with appropriate filename.
+
+**Supported Artifacts:**
+
+| Type | Format | Filename | Content |
+|------|--------|----------|---------|
+| Quiz | JSON | `quiz_{artifactId}_{timestamp}.json` | Complete quiz data with questions, options, answers, explanations |
+| Flashcards | JSON | `flashcard_{artifactId}_{timestamp}.json` | Complete flashcard data with array, CSV, totalCards |
+| Audio | Audio file | `audio_{artifactId}.mp3` | Audio file (binary) |
+| Video | ⚠️ Experimental | N/A | Not implemented - use `get()` to retrieve URL |
+| Slides | ⚠️ Experimental | N/A | Not implemented - use `get()` to retrieve PDF URL |
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Quiz and flashcards are saved as JSON files with complete data
+- Audio is saved as binary file (format depends on backend)
+- Video and slides downloads are experimental - use `get()` to get URLs instead
+- Files are saved with timestamps to avoid overwrites
+- Returns both file path and parsed data (for quiz/flashcards)
+
+</details>
+
+**Usage:**
+```typescript
+// Download quiz
+const result = await sdk.artifacts.download('quiz-id', './downloads', 'notebook-id')
+console.log(`Saved to: ${result.filePath}`)
+console.log(`Questions: ${result.data.questions?.length || 0}`)
+
+// Download flashcards
+const result = await sdk.artifacts.download('flashcard-id', './downloads', 'notebook-id')
+console.log(`Saved to: ${result.filePath}`)
+console.log(`Total cards: ${result.data.totalCards}`)
+
+// Download audio
+const result = await sdk.artifacts.download('notebook-id', './downloads', 'notebook-id')
+console.log(`Audio saved to: ${result.filePath}`)
+
+// Video/Slides: Use get() instead
+const video = await sdk.artifacts.get('video-id', 'notebook-id')
+console.log(`Video URL: ${video.url}`) // Use this URL to download
+```
+
+---
+
+### Rename Artifact
+
+**Method:** `sdk.artifacts.rename(artifactId, newTitle)`
+
+**Example:** [artifact-rename.ts](examples/artifact-rename.ts)
+
+**Parameters:**
+- `artifactId: string` - The artifact ID (required)
+- `newTitle: string` - New title (required)
+
+**Returns:** `Promise<Artifact>`
+
+**Description:**
+Renames an artifact. Updates only the title field. Works for all artifact types.
+
+**Return Fields:**
+Same as `get()` - returns updated artifact with new title
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Only updates the title - other fields remain unchanged
+- Works for all artifact types (quiz, flashcards, report, mind map, infographic, slide deck, audio, video)
+- Returns full artifact object after update
+
+</details>
+
+**Usage:**
+```typescript
+// Rename any artifact
+const updated = await sdk.artifacts.rename('artifact-id', 'My Updated Quiz')
+console.log(`New title: ${updated.title}`)
+
+// Rename audio artifact (uses notebook ID)
+const updated = await sdk.artifacts.rename('notebook-id', 'My Audio Overview')
+```
+
+---
+
+### Delete Artifact
+
+**Method:** `sdk.artifacts.delete(artifactId, notebookId?)`
+
+**Example:** [artifact-delete.ts](examples/artifact-delete.ts)
+
+**Parameters:**
+- `artifactId: string` - The artifact ID (required)
+- `notebookId?: string` - Notebook ID (required for audio/video artifacts)
+
+**Returns:** `Promise<void>`
+
+**Description:**
+Permanently deletes an artifact. Works for all artifact types. This action cannot be undone.
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Deletion is permanent and cannot be undone
+- Works for all artifact types
+- Audio artifacts require passing notebook ID (same as `artifactId`)
+- Video artifacts are detected automatically
+- Other artifacts use standard delete RPC
+
+</details>
+
+**Usage:**
+```typescript
+// Delete any artifact
+await sdk.artifacts.delete('artifact-id')
+
+// Delete audio artifact (requires notebook ID)
+await sdk.artifacts.delete('notebook-id', 'notebook-id')
+
+// Delete video artifact
+await sdk.artifacts.delete('video-id', 'notebook-id')
+```
+
+---
+
+### Share Artifact
+
+**Method:** `sdk.artifacts.share(notebookId, options)`
+
+**Example:** [artifact-share.ts](examples/artifact-share.ts)
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required, artifacts are shared at notebook level)
+- `options: ShareArtifactOptions`
+  - `users?: Array<{email: string, role: 2|3|4}>` - Users to share with (optional)
+  - `notify?: boolean` - Notify users (default: true, only used when users are provided)
+  - `accessType?: 1|2` - Access type: 1=anyone with link, 2=restricted (optional, default: 2)
+
+**Returns:** `Promise<ShareArtifactResult>`
+
+**Description:**
+Shares an artifact (or the notebook containing the artifact) with specific users or makes it publicly accessible via a shareable link. Artifacts are shared at the notebook level, so sharing an artifact shares the entire notebook.
+
+**User Roles:**
+
+| Role | Value | Description |
+|------|-------|-------------|
+| Editor | `2` | Can edit notebook content |
+| Viewer | `3` | Can view notebook only |
+| Remove | `4` | Remove user from shared list |
+
+**Access Types:**
+
+| Access Type | Value | Description |
+|-------------|-------|-------------|
+| Anyone with link | `1` | Public access via share link |
+| Restricted | `2` | Only specified users can access |
+
+**Return Fields:**
+- `shareUrl: string` - Share URL (always present)
+- `success: boolean` - Whether the share operation succeeded
+- `notebookId: string` - The notebook ID that was shared
+- `accessType: 1|2` - Access type
+- `isShared: boolean` - Whether the notebook is shared
+- `users?: Array<{email: string, role: 2|3}>` - Users with access (if users were shared)
+
+<details>
+<summary><strong>Validation</strong></summary>
+
+- Email addresses are validated using regex before sharing
+- Throws `APIError` if any email is invalid
+- Must provide either `users` array or `accessType=1` (anyone with link)
+- Supports multiple users in a single call
+
+</details>
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Artifacts are shared at the notebook level - sharing an artifact shares the entire notebook
+- `notify` is only used when `users` are provided
+- Default: `true` (users are notified when permissions change)
+- Set to `false` to share silently
+- `shareUrl` is always returned (constructed from notebook ID if not explicitly shared)
+
+</details>
+
+**Usage:**
+```typescript
+// Share with users (restricted access, notify enabled by default)
+const result = await sdk.artifacts.share('notebook-id', {
+  users: [
+    { email: 'user1@example.com', role: 2 }, // editor
+    { email: 'user2@example.com', role: 3 }, // viewer
+  ],
+  notify: true,
+  accessType: 2, // restricted
+})
+
+// Share with users (silent, no notification)
+const result = await sdk.artifacts.share('notebook-id', {
+  users: [
+    { email: 'user@example.com', role: 2 },
+  ],
+  notify: false,
+  accessType: 2,
+})
+
+// Enable link sharing (anyone with link)
+const result = await sdk.artifacts.share('notebook-id', {
+  accessType: 1, // anyone with link
+})
+console.log(`Share URL: ${result.shareUrl}`)
+
+// Remove user (role: 4)
+const result = await sdk.artifacts.share('notebook-id', {
+  users: [
+    { email: 'user@example.com', role: 4 }, // remove
+  ],
+  accessType: 2,
+})
+```
 
 <details>
 <summary><b>Generation & Chat</b> - Chat & content generation</summary>

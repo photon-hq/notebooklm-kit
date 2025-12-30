@@ -16,7 +16,7 @@
     "removeComments": false,
     "resolveJsonModule": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "rpc/audios.ts", "rpc/flashcards.ts", "rpc/videos.ts", "rpc/video.ts"],
   "exclude": ["node_modules", "dist"]
 }
 
