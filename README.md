@@ -77,21 +77,21 @@ npm install notebooklm-kit
 
 | Feature | Description | Method | Example |
 |---------|-------------|--------|---------|
-| Chat | Chat with notebook content (with source selection & conversation history) | `sdk.generation.chat(notebookId, prompt, options?)` | [chat-basic.ts](examples/chat-basic.ts) |
-| Chat with Sources | Chat with specific sources | `sdk.generation.chat(notebookId, prompt, { sourceIds })` | [chat-with-sources.ts](examples/chat-with-sources.ts) |
-| Chat Conversation | Chat with conversation history | `sdk.generation.chat(notebookId, prompt, { conversationHistory })` | [chat-conversation.ts](examples/chat-conversation.ts) |
-| Set Chat Config | Configure chat (custom prompt, learning guide, response length) | `sdk.generation.setChatConfig(notebookId, config)` | [generation-set-chat-config.ts](examples/generation-set-chat-config.ts) |
-| Generate Document Guides | Generate document guides for all or specific sources | `sdk.generation.generateDocumentGuides(notebookId, sourceId?)` | [generation-document-guides.ts](examples/generation-document-guides.ts) |
-| Delete Chat History | Delete a conversation history | `sdk.generation.deleteChatHistory(notebookId, conversationId)` | [generation-delete-chat-history.ts](examples/generation-delete-chat-history.ts) |
+| Chat | Chat with notebook content (with source selection & conversation history) | [`sdk.generation.chat(notebookId, prompt, options?)`](#chat) | [chat-basic.ts](examples/chat-basic.ts) |
+| Chat with Sources | Chat with specific sources | [`sdk.generation.chat(notebookId, prompt, { sourceIds })`](#chat) | [chat-with-sources.ts](examples/chat-with-sources.ts) |
+| Chat Conversation | Chat with conversation history | [`sdk.generation.chat(notebookId, prompt, { conversationHistory })`](#chat) | [chat-conversation.ts](examples/chat-conversation.ts) |
+| Set Chat Config | Configure chat (custom prompt, learning guide, response length) | [`sdk.generation.setChatConfig(notebookId, config)`](#set-chat-configuration) | [generation-set-chat-config.ts](examples/generation-set-chat-config.ts) |
+| Generate Document Guides | Generate document guides for all or specific sources | [`sdk.generation.generateDocumentGuides(notebookId, sourceId?)`](#generate-document-guides) | [generation-document-guides.ts](examples/generation-document-guides.ts) |
+| Delete Chat History | Delete a conversation history | [`sdk.generation.deleteChatHistory(notebookId, conversationId)`](#delete-chat-history) | [generation-delete-chat-history.ts](examples/generation-delete-chat-history.ts) |
 
 ### `sdk.notes` - Notes Management
 
 | Feature | Description | Method | Example |
 |---------|-------------|--------|---------|
-| List Notes | List all notes in a notebook | `sdk.notes.list(notebookId)` | [note-list.ts](examples/note-list.ts) |
-| Create Note | Create a new note | `sdk.notes.create(notebookId, options)` | [note-create.ts](examples/note-create.ts) |
-| Update Note | Update a note | `sdk.notes.update(notebookId, noteId, options)` | [note-update.ts](examples/note-update.ts) |
-| Delete Note | Delete a note | `sdk.notes.delete(notebookId, noteIds)` | [note-delete.ts](examples/note-delete.ts) |
+| List Notes | List all notes in a notebook | [`sdk.notes.list(notebookId)`](#list-notes) | [note-list.ts](examples/note-list.ts) |
+| Create Note | Create a new note | [`sdk.notes.create(notebookId, options)`](#create-note) | [note-create.ts](examples/note-create.ts) |
+| Update Note | Update a note | [`sdk.notes.update(notebookId, noteId, options)`](#update-note) | [note-update.ts](examples/note-update.ts) |
+| Delete Note | Delete a note | [`sdk.notes.delete(notebookId, noteIds)`](#delete-note) | [note-delete.ts](examples/note-delete.ts) |
 
 ## Authentication
 
