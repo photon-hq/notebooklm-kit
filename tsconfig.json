@@ -5,7 +5,7 @@
     "lib": ["ES2022", "DOM"],
     "moduleResolution": "node",
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": "./",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -16,7 +16,7 @@
     "removeComments": false,
     "resolveJsonModule": true
   },
-  "include": ["src/**/*", "rpc/audios.ts", "rpc/flashcards.ts", "rpc/videos.ts", "rpc/video.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "rpc", "examples", "test"]
 }
 

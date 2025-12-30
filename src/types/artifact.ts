@@ -7,13 +7,21 @@ export { NotebookLMLanguage, getLanguageInfo, isLanguageSupported, COMMON_LANGUA
 
 /**
  * Artifact type enum
+ * 
+ * **Supported Types:**
+ * - `UNKNOWN` (0) - Fallback for undefined/missing types
+ * - `REPORT` (1) - Comprehensive reports/documents
+ * - `QUIZ` (5) - Interactive quizzes with questions and answers
+ * - `FLASHCARDS` (6) - Study flashcards
+ * - `MIND_MAP` (7) - Visual mind maps
+ * - `INFOGRAPHIC` (8) - Data visualizations
+ * - `SLIDE_DECK` (9) - Presentation slides
+ * - `AUDIO` (10) - Audio overview/podcast
+ * - `VIDEO` (11) - Video overview
  */
 export enum ArtifactType {
   UNKNOWN = 0,
-  DOCUMENT = 1,
-  PRESENTATION = 2,
-  OUTLINE = 3,
-  STUDY_GUIDE = 4,
+  REPORT = 1,
   QUIZ = 5,
   FLASHCARDS = 6,
   MIND_MAP = 7,

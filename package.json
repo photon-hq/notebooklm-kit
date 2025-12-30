@@ -1,6 +1,6 @@
 {
   "name": "notebooklm-kit",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "TypeScript SDK for NotebookLM API",
   "type": "module",
   "main": "./dist/index.js",
@@ -21,13 +21,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run clean && npm run build",
-    "create-notebook": "node create-notebook.js",
-    "list-notebooks": "node list-notebooks.js",
-    "test-notebooks": "node test-notebooks.js",
-    "test-source-operations": "node test/test-source-operations.js",
-    "test-web-search": "node test/test-web-search-interactive.js",
-    "test-deep-search": "node test/test-deep-search-interactive.js"
+    "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
     "notebooklm",
@@ -52,17 +46,7 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@types/react": "^19.2.7",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.2",
-    "typescript": "^5.7.0",
-    "vite": "^7.3.0"
-  },
-  "dependencies": {
-    "dotenv": "^17.2.3",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
-    "video2ascii": "^1.1.0"
+    "typescript": "^5.7.0"
   },
   "engines": {
     "node": ">=18.0.0"

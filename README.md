@@ -17,11 +17,11 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 
 | Service | Purpose | Methods |
 |---------|---------|---------|
-| **`sdk.notebooks`** | Notebook management | `list()`, `create()`, `get()`, `update()`, `delete()`, `share()` |
-| **`sdk.sources`** | Add & manage sources | `addFromURL()`, `addFromText()`, `addFromFile()`, `addYouTube()`, `searchWebAndWait()` |
-| **`sdk.artifacts`** | Generate study materials | `create()`, `list()`, `get()`, `download()`, `delete()`, `rename()`, `share()` |
-| **`sdk.generation`** | Chat & content generation | `chat()`, `generateDocumentGuides()`, `generateOutline()` |
-| **`sdk.notes`** | Manage notes | `create()`, `list()`, `update()`, `delete()` |
+| **[`sdk.notebooks`](#sdknotebooks---notebook-management)** | Notebook management | `list()`, `create()`, `get()`, `update()`, `delete()`, `share()` |
+| **[`sdk.sources`](#sdksources---source-management)** | Add & manage sources | `addFromURL()`, `addFromText()`, `addFromFile()`, `addYouTube()`, `searchWebAndWait()` |
+| **[`sdk.artifacts`](#sdkartifacts---artifact-management)** | Generate study materials | `create()`, `list()`, `get()`, `download()`, `delete()`, `rename()`, `share()` |
+| **[`sdk.generation`](#sdkgeneration---generation--chat)** | Chat & content generation | `chat()`, `generateDocumentGuides()`, `generateOutline()` |
+| **[`sdk.notes`](#sdknotes---notes-management)** | Manage notes | `create()`, `list()`, `update()`, `delete()` |
 
 ## Installation
 
@@ -706,32 +706,204 @@ Creates a study material artifact (quiz, flashcards, report, mind map, infograph
 
 **Customization Options:**
 
-**Quiz/Flashcards:**
-- `numberOfQuestions` / `numberOfCards`: `1` (Fewer), `2` (Standard), `3` (More)
-- `difficulty`: `1` (Easy), `2` (Medium), `3` (Hard)
-- `language?: string` - Language code (e.g., 'en', 'hi', 'es')
+<details>
+<summary><strong>Quiz Customization</strong></summary>
 
-**Slide Deck:**
-- `format`: `2` (Standard), `3` (Detailed)
-- `length`: `1` (Short), `2` (Medium), `3` (Long)
-- `language?: string`
+| Option | Values | Description | Default |
+|-------|--------|-------------|---------|
+| `numberOfQuestions` | `1`, `2`, `3` | **1** = Fewer (5-10 questions), **2** = Standard (10-15 questions), **3** = More (15-20+ questions) | `2` |
+| `difficulty` | `1`, `2`, `3` | **1** = Easy (basic recall), **2** = Medium (application), **3** = Hard (analysis/synthesis) | `2` |
+| `language` | `string` | Language code (e.g., `'en'`, `'hi'`, `'es'`). Use `NotebookLMLanguage` enum for type safety. Supports 80+ languages. | `'en'` |
 
-**Infographic:**
-- `orientation`: `1` (Portrait), `2` (Landscape), `3` (Square)
-- `levelOfDetail`: `1` (Simple), `2` (Standard), `3` (Detailed)
-- `language?: string`
+**Example:**
+```typescript
+customization: {
+  numberOfQuestions: 2, // Standard (10-15 questions)
+  difficulty: 2, // Medium difficulty
+  language: NotebookLMLanguage.ENGLISH,
+}
+```
 
-**Audio:**
-- `format`: `0` (Narrative), `1` (Conversational), `2` (News), `3` (Podcast)
-- `length`: `1` (Short), `2` (Medium), `3` (Long)
-- `language?: string`
+</details>
 
-**Video:**
-- `format`: `1` (Standard), `2` (Detailed)
-- `visualStyle`: `0-10` (Various styles)
-- `focus?: string` - Focus area
-- `customStyleDescription?: string` - Custom style description
-- `language?: string`
+<details>
+<summary><strong>Flashcard Customization</strong></summary>
+
+| Option | Values | Description | Default |
+|-------|--------|-------------|---------|
+| `numberOfCards` | `1`, `2`, `3` | **1** = Fewer (10-15 cards), **2** = Standard (15-25 cards), **3** = More (25-40+ cards) | `2` |
+| `difficulty` | `1`, `2`, `3` | **1** = Easy (basic terms), **2** = Medium (concepts), **3** = Hard (complex relationships) | `2` |
+| `language` | `string` | Language code (e.g., `'en'`, `'hi'`, `'es'`). Use `NotebookLMLanguage` enum for type safety. Supports 80+ languages. | `'en'` |
+
+**Example:**
+```typescript
+customization: {
+  numberOfCards: 3, // More cards (25-40+)
+  difficulty: 1, // Easy (basic terms)
+  language: NotebookLMLanguage.ENGLISH,
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Slide Deck Customization</strong></summary>
+
+| Option | Values | Description | Default |
+|-------|--------|-------------|---------|
+| `format` | `2`, `3` | **2** = Presenter slides (concise, bullet points), **3** = Detailed deck (comprehensive, full content) | `2` |
+| `length` | `1`, `2`, `3` | **1** = Short (5-10 slides), **2** = Default (10-15 slides), **3** = Long (15-25+ slides) | `2` |
+| `language` | `string` | Language code (e.g., `'en'`, `'hi'`, `'es'`). Use `NotebookLMLanguage` enum for type safety. Supports 80+ languages. | `'en'` |
+
+**Example:**
+```typescript
+customization: {
+  format: 2, // Presenter slides (concise)
+  length: 2, // Default (10-15 slides)
+  language: NotebookLMLanguage.ENGLISH,
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Infographic Customization</strong></summary>
+
+| Option | Values | Description | Default |
+|-------|--------|-------------|---------|
+| `orientation` | `1`, `2`, `3` | **1** = Landscape (wide format), **2** = Portrait (tall format), **3** = Square (1:1 aspect ratio) | `1` |
+| `levelOfDetail` | `1`, `2`, `3` | **1** = Concise (key points only), **2** = Standard (balanced detail), **3** = Detailed (comprehensive information) | `2` |
+| `language` | `string` | Language code (e.g., `'en'`, `'hi'`, `'es'`). Use `NotebookLMLanguage` enum for type safety. Supports 80+ languages. | `'en'` |
+
+**Example:**
+```typescript
+customization: {
+  orientation: 1, // Landscape (wide format)
+  levelOfDetail: 2, // Standard detail
+  language: NotebookLMLanguage.ENGLISH,
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Audio Customization</strong></summary>
+
+| Option | Values | Description | Default |
+|-------|--------|-------------|---------|
+| `format` | `0`, `1`, `2`, `3` | **0** = Deep dive (comprehensive analysis), **1** = Brief (quick summary), **2** = Critique (critical analysis), **3** = Debate (multiple perspectives) | `0` |
+| `length` | `1`, `2`, `3` | **1** = Short (2-5 minutes), **2** = Default (5-10 minutes), **3** = Long (10-15+ minutes) | `2` |
+| `language` | `string` | Language code (e.g., `'en'`, `'hi'`, `'es'`). Use `NotebookLMLanguage` enum for type safety. Supports 80+ languages. | `'en'` |
+
+**Note:** Audio artifacts always use all sources in the notebook. The `sourceIds` option is ignored.
+
+**Example:**
+```typescript
+customization: {
+  format: 0, // Deep dive (comprehensive analysis)
+  length: 2, // Default (5-10 minutes)
+  language: NotebookLMLanguage.ENGLISH,
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Video Customization</strong></summary>
+
+| Option | Values | Description | Default |
+|-------|--------|-------------|---------|
+| `format` | `1`, `2` | **1** = Explainer (comprehensive explanation), **2** = Brief (quick overview) | `1` |
+| `visualStyle` | `0-10` | Visual style for the video (see table below) | `0` |
+| `focus` | `string` | What should the AI hosts focus on? (optional, e.g., "Key concepts and main findings") | - |
+| `customStyleDescription` | `string` | Custom visual style description (required when `visualStyle=1`) | - |
+| `language` | `string` | Language code (e.g., `'en'`, `'hi'`, `'es'`). Use `NotebookLMLanguage` enum for type safety. Supports 80+ languages. | `'en'` |
+
+**Visual Style Options:**
+
+| Value | Style Name | Description |
+|-------|------------|-------------|
+| `0` | Auto-select | AI chooses the best style automatically (default) |
+| `1` | Custom | Requires `customStyleDescription` - describe your desired style |
+| `2` | Classic | Traditional, professional style |
+| `3` | Whiteboard | Hand-drawn whiteboard style |
+| `4` | Kawaii | Cute, colorful style |
+| `5` | Anime | Anime-inspired style |
+| `6` | Watercolour | Watercolor painting style |
+| `7` | Anime (alternative) | Alternative anime style |
+| `8` | Retro print | Vintage print/poster style |
+| `9` | Heritage | Traditional ink-wash/woodcut style |
+| `10` | Paper-craft | Layered paper cutout style |
+
+**Note:** 
+- All styles except Custom (`1`) support only the `focus` option
+- Custom (`1`) additionally requires `customStyleDescription`
+- Video artifacts **require** `sourceIds` to be provided (cannot use all sources)
+
+**Example:**
+```typescript
+// Auto-select style
+customization: {
+  format: 1, // Explainer
+  visualStyle: 0, // Auto-select (AI chooses)
+  focus: 'Key concepts and main findings',
+  language: NotebookLMLanguage.ENGLISH,
+}
+
+// Custom style
+customization: {
+  format: 1, // Explainer
+  visualStyle: 1, // Custom
+  customStyleDescription: 'Modern minimalist design with blue and white colors',
+  focus: 'Key concepts and main findings',
+  language: NotebookLMLanguage.ENGLISH,
+}
+
+// Specific style (e.g., Whiteboard)
+customization: {
+  format: 1, // Explainer
+  visualStyle: 3, // Whiteboard style
+  focus: 'Step-by-step explanation of the process',
+  language: NotebookLMLanguage.ENGLISH,
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Report & Mind Map (No Customization)</strong></summary>
+
+**Report** and **Mind Map** artifacts do not support customization options. They only support:
+- `title?: string` - Artifact title (optional)
+- `instructions?: string` - Custom instructions for generation (optional)
+- `sourceIds?: string[]` - Specific source IDs to use (optional, uses all sources if omitted)
+
+**Example:**
+```typescript
+// Create report
+const report = await sdk.artifacts.report.create('notebook-id', {
+  title: 'Research Report',
+  instructions: 'Create a comprehensive research report',
+  sourceIds: ['source-id-1', 'source-id-2'], // Optional
+})
+
+// Create mind map
+const mindMap = await sdk.artifacts.mindmap.create('notebook-id', {
+  title: 'Concept Map',
+  instructions: 'Create a visual mind map of key concepts',
+  sourceIds: ['source-id-1'], // Optional
+})
+```
+
+</details>
+
+**Source Selection Behavior:**
+
+| Artifact Type | `sourceIds` Behavior |
+|---------------|---------------------|
+| **Quiz, Flashcards, Slide Deck, Infographic, Report, Mind Map** | Optional - omit to use all sources, or specify to use selected sources |
+| **Audio** | Ignored - always uses all sources in notebook |
+| **Video** | **Required** - must provide `sourceIds` (cannot use all sources) |
 
 **Return Fields:**
 - `artifactId: string` - Unique artifact ID (required for other operations)

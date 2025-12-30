@@ -7,6 +7,7 @@ import { RPCClient } from '../rpc/rpc-client.js';
 import * as RPC from '../rpc/rpc-methods.js';
 import { NotebookLMError } from '../types/common.js';
 import { APIError } from '../utils/errors.js';
+import { ArtifactType, ArtifactState } from '../types/artifact.js';
 import * as https from 'https';
 import * as http from 'http';
 import { createHash } from 'node:crypto';
@@ -15,24 +16,8 @@ import { createHash } from 'node:crypto';
 // Types
 // ========================================================================
 
-export enum ArtifactType {
-  UNKNOWN = 0,
-  REPORT = 1,
-  QUIZ = 5,
-  FLASHCARDS = 6,
-  MIND_MAP = 7,
-  INFOGRAPHIC = 8,
-  SLIDE_DECK = 9,
-  AUDIO = 10,
-  VIDEO = 11,
-}
-
-export enum ArtifactState {
-  UNKNOWN = 0,
-  CREATING = 1,
-  READY = 2,
-  FAILED = 3,
-}
+// Re-export for backward compatibility
+export { ArtifactType, ArtifactState } from '../types/artifact.js';
 
 export enum ShareOption {
   PRIVATE = 0,
@@ -1555,8 +1540,8 @@ export class ArtifactsService {
       return ArtifactType.QUIZ;
     }
     
-    // Both Video and Outline use type 3 in the API response
-    // We need to differentiate them by looking for video-specific patterns
+    // Type 3 in API response can be VIDEO (we check for video-specific patterns)
+    // If not video, defaults to REPORT
     if (apiType === 3) {
       // Check for video-specific patterns:
       // 1. Look for video URLs (lh3.googleusercontent.com/notebooklm/...)
