@@ -1,6 +1,6 @@
 {
   "name": "notebooklm-kit",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "TypeScript SDK for NotebookLM API",
   "type": "module",
   "main": "./dist/index.js",
@@ -46,6 +46,7 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.0"
   },
   "engines": {
@@ -53,5 +54,9 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "playwright": "^1.57.0"
   }
 }

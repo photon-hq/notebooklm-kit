@@ -51,9 +51,8 @@ async function main() {
         break;
       }
 
-      case ArtifactType.VIDEO:
-      case ArtifactType.SLIDE_DECK: {
-        console.log('⚠️  Video/Slide downloads are experimental.');
+      case ArtifactType.VIDEO: {
+        console.log('⚠️  Video downloads are experimental.');
         console.log('Use artifacts.get() to retrieve the URL instead:\n');
         
         const content = await sdk.artifacts.get(artifactId, notebookId);
@@ -68,6 +67,14 @@ async function main() {
         } else {
           console.log('URL not available yet. Please try again later.');
         }
+        break;
+      }
+
+      case ArtifactType.SLIDE_DECK: {
+        console.log('Downloading slide deck as PDF...');
+        const result = await sdk.artifacts.download(artifactId, outputDir, notebookId);
+        console.log(`✓ Saved to: ${result.filePath}`);
+        console.log(`  Format: ${result.data.downloadFormat || 'pdf'}`);
         break;
       }
 

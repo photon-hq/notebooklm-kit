@@ -89,9 +89,16 @@ async function main() {
 
         case ArtifactType.SLIDE_DECK: {
           const slides = artifact as any;
-          console.log(`PDF URL: ${slides.url || 'Not available'}`);
-          if (slides.url) {
-            console.log('  Use this URL to access/download the PDF');
+          if (slides.downloadPath) {
+            console.log(`Downloaded to: ${slides.downloadPath}`);
+            console.log(`Format: ${slides.downloadFormat || 'pdf'}`);
+          } else {
+            console.log('⚠️  Slides require download with outputPath option');
+            console.log('\nTo download slides:');
+            console.log('  // Download as PDF (default)');
+            console.log('  const slides = await sdk.artifacts.get(artifactId, notebookId, { outputPath: "./downloads" });');
+            console.log('  // Download as PNG files');
+            console.log('  const slides = await sdk.artifacts.get(artifactId, notebookId, { downloadAs: "png", outputPath: "./downloads" });');
           }
           break;
         }
@@ -157,6 +164,16 @@ async function main() {
       console.log('  const report = await sdk.artifacts.get(artifactId, notebookId, { exportToDocs: true });');
       console.log('\nTo export report to Google Sheets:');
       console.log('  const report = await sdk.artifacts.get(artifactId, notebookId, { exportToSheets: true });');
+    }
+
+    // Example: Download slides
+    if (artifact.type === ArtifactType.SLIDE_DECK && artifact.state === ArtifactState.READY && !(artifact as any).downloadPath) {
+      console.log('\n=== Slide Download (Required) ===\n');
+      console.log('Slides require download with outputPath option:');
+      console.log('  // Download as PDF (default)');
+      console.log('  const slides = await sdk.artifacts.get(artifactId, notebookId, { outputPath: "./downloads" });');
+      console.log('  // Download as PNG files');
+      console.log('  const slides = await sdk.artifacts.get(artifactId, notebookId, { downloadAs: "png", outputPath: "./downloads" });');
     }
   } catch (error) {
     handleError(error, 'Failed to get artifact');

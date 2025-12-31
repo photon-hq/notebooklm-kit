@@ -85,15 +85,6 @@ export class BatchExecuteClient {
       }
     }
     
-    // Always log batch execute calls (not just in debug mode)
-    console.log('\n📡 BatchExecute Request');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('URL:', url.toString());
-    
-    if (this.config.debug) {
-      console.log('Full URL:', url.toString());
-    }
-    
     // Build request body
     const envelope = rpcs.map(rpc => this.buildRPCData(rpc));
     const reqBody = JSON.stringify([envelope]);
@@ -103,16 +94,11 @@ export class BatchExecuteClient {
     formData.set('f.req', reqBody);
     formData.set('at', this.config.authToken);
     
-    // Always log request details
-    console.log('RPC IDs:', rpcs.map(r => r.id).join(', '));
-    console.log('Request ID:', url.searchParams.get('_reqid'));
-    console.log('Auth Token:', this.maskSensitiveValue(this.config.authToken));
-    
     if (this.config.debug) {
-      console.log('\nRequest Body (first 500 chars):', reqBody.substring(0, 500));
-      console.log('Full Request Body:', reqBody);
-    } else {
-      console.log('Request Body (first 200 chars):', reqBody.substring(0, 200));
+      console.log('\n📡 BatchExecute Request');
+      console.log('URL:', url.toString());
+      console.log('RPC IDs:', rpcs.map(r => r.id).join(', '));
+      console.log('Request Body:', reqBody);
     }
     
     // Execute request with retry logic
@@ -135,99 +121,20 @@ export class BatchExecuteClient {
       if (attempt > 0) {
         // Calculate retry delay with exponential backoff
         const multiplier = Math.pow(2, attempt - 1);
-          let delay = retryDelay * multiplier;
-          if (delay > retryMaxDelay) {
-            delay = retryMaxDelay;
+        let delay = retryDelay * multiplier;
+        if (delay > retryMaxDelay) {
+          delay = retryMaxDelay;
         }
-        
-          console.log(`⏳ Waiting ${delay}ms before retry...`);
-        
         await this.sleep(delay);
       }
       
       try {
-        // Parse and validate cookies
-        const cookieParts = this.config.cookies.split(';').map(c => c.trim()).filter(c => c);
-        const cookieMap: Record<string, string> = {};
-        cookieParts.forEach(cookie => {
-          const [name, ...valueParts] = cookie.split('=');
-          if (name && valueParts.length > 0) {
-            cookieMap[name] = valueParts.join('=');
-          }
-        });
-        
-        // Check for required cookies
-        const requiredCookies = ['SID', 'HSID', 'SSID', 'APISID', 'SAPISID'];
-        // Critical HttpOnly cookies (must be manually extracted from DevTools)
-        const criticalHttpOnlyCookies = [
-          '__Secure-1PSID',
-          '__Secure-3PSID',
-          'OSID',
-          '__Secure-OSID',
-          '__Secure-ENID',
-          '__Secure-BUCKET',
-          '__Secure-1PSIDTS',
-          '__Secure-3PSIDTS',
-          '__Secure-1PSIDCC',
-          '__Secure-3PSIDCC',
-          'AEC',
-          'NID'
-        ];
-        
-        const missingRequired = requiredCookies.filter(name => !cookieMap[name]);
-        const missingCritical = criticalHttpOnlyCookies.filter(name => !cookieMap[name]);
-        
-        console.log('\n🍪 Cookie Analysis:');
-        console.log('  Total cookies:', cookieParts.length);
-        console.log('\n  Required cookies:');
-        requiredCookies.forEach(name => {
-          const present = cookieMap[name] ? '✅' : '❌';
-          console.log(`    ${present} ${name}`);
-        });
-        console.log('\n  Critical HttpOnly cookies (must extract from DevTools):');
-        criticalHttpOnlyCookies.forEach(name => {
-          const present = cookieMap[name] ? '✅' : '❌';
-          console.log(`    ${present} ${name}`);
-        });
-        
-        if (missingRequired.length > 0) {
-          console.error(`\n⚠️  Missing required cookies: ${missingRequired.join(', ')}`);
-        }
-        
-        if (missingCritical.length > 0) {
-          console.error(`\n⚠️  Missing critical HttpOnly cookies: ${missingCritical.join(', ')}`);
-          console.error('   These cookies are HttpOnly and cannot be accessed via JavaScript.');
-          console.error('   You must manually copy them from Chrome DevTools:');
-          console.error('   1. Open DevTools (F12) → Application → Cookies → https://notebooklm.google.com');
-          console.error('   2. Copy the cookie values and add them to your NOTEBOOKLM_COOKIES string');
-          console.error('   3. The most critical ones are: __Secure-1PSID, __Secure-3PSID, OSID, __Secure-OSID');
-        }
-        
         // Create request headers
         const headers: Record<string, string> = {
           'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
           'Cookie': this.config.cookies,
           ...this.config.headers,
         };
-        
-        if (this.config.debug) {
-          console.log('\nRequest Headers:');
-          for (const [key, value] of Object.entries(headers)) {
-            if (key.toLowerCase() === 'cookie') {
-              console.log(`${key}: ${this.maskCookieValues(value)}`);
-            } else {
-              console.log(`${key}: ${value}`);
-            }
-          }
-        } else {
-          // Always show masked cookie header
-          console.log('\nCookie Header (masked):', this.maskCookieValues(this.config.cookies));
-        }
-        
-        // Make the request
-        console.log('\n📤 Making HTTP Request');
-        console.log('URL:', url.toString());
-        console.log('Method: POST');
         
         let response: Response;
         try {
@@ -237,15 +144,11 @@ export class BatchExecuteClient {
           body: formData.toString(),
         });
         } catch (fetchError) {
-          console.error('\n❌ Fetch Error (Network/Connection)');
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          console.error('Error type:', fetchError?.constructor?.name || typeof fetchError);
-          console.error('Error message:', (fetchError as Error)?.message || String(fetchError));
-          if (fetchError instanceof Error && fetchError.stack) {
-            console.error('Stack trace:', fetchError.stack);
+          const errorMsg = (fetchError as Error)?.message || String(fetchError);
+          if (this.config.debug) {
+            console.error('\n❌ Fetch Error:', errorMsg);
+            console.error('URL:', url.toString());
           }
-          console.error('URL:', url.toString());
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
           lastError = fetchError instanceof Error ? fetchError : new Error(String(fetchError));
           if (this.isRetryableError(lastError) && attempt < maxRetries) {
             continue;
@@ -255,34 +158,17 @@ export class BatchExecuteClient {
         
         lastResponseStatus = response.status;
         
-        // Always log response status and headers
-        console.log('\n📥 BatchExecute Response');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('Status:', response.status, response.statusText);
-        console.log('Status OK:', response.ok);
-        
-        if (this.config.debug) {
-          console.log('Response Headers:');
-          response.headers.forEach((value, key) => {
-            console.log(`  ${key}: ${value}`);
-          });
-        }
-        
         // Read response body first (before checking status)
         let body: string;
         try {
           body = await response.text();
           lastResponseBody = body;
         } catch (readError) {
-          console.error('\n❌ Error Reading Response Body');
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          console.error('Error type:', readError?.constructor?.name || typeof readError);
-          console.error('Error message:', (readError as Error)?.message || String(readError));
-          if (readError instanceof Error && readError.stack) {
-            console.error('Stack trace:', readError.stack);
+          const errorMsg = (readError as Error)?.message || String(readError);
+          if (this.config.debug) {
+            console.error('\n❌ Error Reading Response Body:', errorMsg);
+            console.error('Response status:', response.status);
           }
-          console.error('Response status:', response.status);
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
           lastError = readError instanceof Error ? readError : new Error(String(readError));
           if (this.isRetryableError(lastError) && attempt < maxRetries) {
             continue;
@@ -291,34 +177,27 @@ export class BatchExecuteClient {
         }
         
         if (this.config.debug) {
-          console.log('Response Body (first 1000 chars):', body.substring(0, 1000));
-          console.log('Full Response Body:', body);
-        } else {
-          console.log('Response Body (first 300 chars):', body.substring(0, 300));
+          console.log('Response Status:', response.status, response.statusText);
+          console.log('Response Body:', body);
         }
         
         // Check if we should retry based on status
         if (this.isRetryableStatus(response.status) && attempt < maxRetries) {
           lastError = new Error(`Server returned status ${response.status}: ${response.statusText}`);
-          console.log(`Server returned retryable status ${response.status}, will retry...`);
+          if (this.config.debug) {
+            console.log(`Retryable status ${response.status}, retrying...`);
+          }
           continue;
         }
         
         // Check for auth errors (401 - do not retry, credentials are invalid)
         if (response.status === 401) {
-          console.error('\n❌ Authentication Error (401) - Not Retrying');
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          console.error('Status: 401 Unauthorized');
-          console.error('This indicates your auth token or cookies are invalid/expired.');
-          console.error('Please refresh your credentials and try again.');
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-          throw new AuthErrorClass('Authentication failed. Please check your credentials.');
+          throw new AuthErrorClass('Authentication failed (401). Please check your credentials.');
         }
         
         // Check for other error statuses
         if (!response.ok) {
-          const errorMsg = body ? `Request failed: ${response.status} ${response.statusText}. Response: ${body.substring(0, 200)}` : `Request failed: ${response.status} ${response.statusText}`;
-          throw new ErrorClass(errorMsg, response.status);
+          throw new ErrorClass(`Request failed: ${response.status} ${response.statusText}`, response.status);
         }
         
         // Decode response
@@ -326,21 +205,12 @@ export class BatchExecuteClient {
         try {
           responses = this.decodeResponse(body);
         } catch (decodeError) {
-          console.error('\n❌ Error Decoding Response');
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          console.error('Error type:', decodeError?.constructor?.name || typeof decodeError);
-          console.error('Error message:', (decodeError as Error)?.message || String(decodeError));
-          if (decodeError instanceof Error && decodeError.stack) {
-            console.error('Stack trace:', decodeError.stack);
-          }
-          console.error('Response status:', response.status);
-          console.error('Response body length:', body.length);
+          const errorMsg = (decodeError as Error)?.message || String(decodeError);
           if (this.config.debug) {
+            console.error('\n❌ Error Decoding Response:', errorMsg);
+            console.error('Response status:', response.status);
             console.error('Response body:', body);
-          } else {
-            console.error('Response body (first 1000 chars):', body.substring(0, 1000));
           }
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
           lastError = decodeError instanceof Error ? decodeError : new Error(String(decodeError));
           if (this.isRetryableError(lastError) && attempt < maxRetries) {
             continue;
@@ -349,30 +219,20 @@ export class BatchExecuteClient {
         }
         
         if (responses.length === 0) {
-          console.error('❌ No valid responses found in server response');
           throw new ErrorClass('No valid responses found in server response');
         }
-        
-        // Always log decoded response count
-        console.log(`Decoded ${responses.length} response(s)`);
         
         // Check for API errors in first response
         const firstResponse = responses[0];
         const apiError = isErrorResponse(firstResponse);
         if (apiError) {
-          console.error('❌ API Error detected:', apiError.message);
-          if (this.config.debug) {
-            console.error('Error details:', JSON.stringify(apiError, null, 2));
-          }
           throw apiError;
         }
         
-        // Log success
-        console.log('✅ BatchExecute successful');
+        // Log success only in debug mode
         if (this.config.debug) {
-          console.log('Response data (first 500 chars):', JSON.stringify(firstResponse.data, null, 2).substring(0, 500));
+          console.log('✅ BatchExecute successful');
         }
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
         
         return firstResponse;
         
@@ -384,49 +244,14 @@ export class BatchExecuteClient {
           lastError = new Error(String(error) || 'Unknown error');
         }
         
-        // Always log errors with full details
-        console.error('\n❌ BatchExecute Error (Attempt ' + (attempt + 1) + '/' + (maxRetries + 1) + ')');
-        console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.error('Error type:', error?.constructor?.name || typeof error);
-        console.error('Error message:', (error as Error)?.message || String(error));
-        
-        if (error instanceof Error && error.stack) {
-          console.error('Stack trace:');
-          console.error(error.stack);
-        }
-        
-        if (error instanceof Error && 'cause' in error && error.cause) {
-          console.error('Error cause:', error.cause);
-        }
-        
-        if (lastResponseStatus !== undefined) {
-          console.error('Response status:', lastResponseStatus);
-        } else {
-          console.error('Response status: (no response received)');
-        }
-        
-        if (lastResponseBody !== undefined) {
-          console.error('Response body length:', lastResponseBody.length);
-          if (this.config.debug) {
-            console.error('Full response body:', lastResponseBody);
-          } else {
-            console.error('Response body (first 1000 chars):', lastResponseBody.substring(0, 1000));
-            if (lastResponseBody.length > 1000) {
-              console.error(`... (${lastResponseBody.length - 1000} more characters)`);
-            }
-          }
-        } else {
-          console.error('Response body: (no response body received)');
-        }
-        
+        // Log error (simplified)
+        const errorMsg = (error as Error)?.message || String(error);
         if (this.config.debug) {
-          console.error('Full error object:', error);
-          if (error instanceof Error) {
-            console.error('Error name:', error.name);
-            console.error('Error properties:', Object.keys(error));
+          console.error(`\n❌ Error (attempt ${attempt + 1}/${maxRetries + 1}):`, errorMsg);
+          if (lastResponseStatus !== undefined) {
+            console.error('Response status:', lastResponseStatus);
           }
         }
-        console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
         
         // Check if error is retryable
         if (error instanceof ErrorClass && 'isRetryable' in error) {
@@ -465,25 +290,11 @@ export class BatchExecuteClient {
     
     if (lastResponseStatus !== undefined) {
       errorMessage += ` (HTTP ${lastResponseStatus})`;
-      console.error('Last response status:', lastResponseStatus);
-    } else {
-      console.error('No response status received');
     }
     
-    if (lastResponseBody !== undefined) {
-      console.error('Last response body length:', lastResponseBody.length);
-      if (lastResponseBody.length < 1000) {
-        errorMessage += ` - Response: ${lastResponseBody}`;
-        console.error('Last response body:', lastResponseBody);
-      } else {
-        console.error('Last response body (first 1000 chars):', lastResponseBody.substring(0, 1000));
-        errorMessage += ` - Response: ${lastResponseBody.substring(0, 500)}...`;
-      }
-    } else {
-      console.error('No response body received');
+    if (lastResponseBody !== undefined && lastResponseBody.length < 500) {
+      errorMessage += ` - ${lastResponseBody}`;
     }
-    
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     
     throw new NetworkErrorClass(`All retry attempts failed: ${errorMessage}`, lastError || undefined);
   }

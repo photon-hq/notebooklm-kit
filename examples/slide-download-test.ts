@@ -1,0 +1,791 @@
+/**
+ * Interactive slide download test function
+ * 
+ * Based on Manus AI solution for downloading slide images:
+ * 1. Lists slide artifacts from a notebook
+ * 2. Provides interactive selection
+ * 3. Extracts image URLs from artifact data
+ * 4. Downloads each image (following redirects)
+ * 5. Combines images into PDF
+ * 
+ * Usage:
+ *   
+ * Option 1: Using tsx (recommended - install: npm install -D tsx)
+ *   NOTEBOOK_ID=your-notebook-id npx tsx examples/slide-download-test.ts
+ *   OR: npm install -D tsx && NOTEBOOK_ID=your-notebook-id tsx examples/slide-download-test.ts
+ * 
+ * Option 2: Compile and run
+ *   npm run build
+ *   node dist/examples/slide-download-test.js
+ * 
+ * Option 3: Using ts-node with ESM
+ *   npm install -D ts-node @types/node
+ *   NOTEBOOK_ID=your-notebook-id node --loader ts-node/esm examples/slide-download-test.ts
+ */
+
+import * as readline from 'readline';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { chromium, Browser, BrowserContext, Page } from 'playwright';
+import { NotebookLMClient } from '../src/client/notebooklm-client.js';
+import { ArtifactType, ArtifactState } from '../src/types/artifact.js';
+import * as RPC from '../src/rpc/rpc-methods.js';
+import { handleError } from './utils.js';
+
+// User-Agent header matching browser
+const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0';
+
+/**
+ * Create readline interface for interactive prompts
+ */
+function createReadlineInterface(): readline.Interface {
+  return readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+}
+
+/**
+ * Prompt user for input
+ */
+function question(rl: readline.Interface, query: string): Promise<string> {
+  return new Promise((resolve) => {
+    rl.question(query, resolve);
+  });
+}
+
+/**
+ * Recursively search for slide URLs in the artifact data structure
+ * Slides are typically in arrays like: [["https://lh3.googleusercontent.com/notebooklm/...", width, height], ...]
+ */
+function findSlideUrlsInStructure(data: any, urls: string[] = []): string[] {
+  if (!data) {
+    return urls;
+  }
+  
+  // If it's an array, check if first element is a URL string
+  if (Array.isArray(data)) {
+    // Check if this array contains a slide URL (format: [url, width, height])
+    if (data.length >= 1 && typeof data[0] === 'string') {
+      let potentialUrl = data[0];
+      
+      // Decode escaped characters first (e.g., \u003d -> =)
+      potentialUrl = potentialUrl.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&');
+      
+      // Check if it's a notebooklm slide URL
+      // Pattern: https://lh3.googleusercontent.com/notebooklm/...=w...?authuser=0
+      if (potentialUrl.includes('lh3.googleusercontent.com/notebooklm/')) {
+        // Check for the pattern =w (width) or =s (size) which indicates it's a slide image
+        if ((potentialUrl.includes('=w') || potentialUrl.includes('=s')) && 
+            potentialUrl.includes('?authuser=0')) {
+          if (!urls.includes(potentialUrl)) {
+            urls.push(potentialUrl);
+          }
+        }
+      }
+    }
+    
+    // Recursively search all elements
+    for (const item of data) {
+      findSlideUrlsInStructure(item, urls);
+    }
+  } else if (typeof data === 'object' && data !== null) {
+    // Recursively search object values
+    for (const value of Object.values(data)) {
+      findSlideUrlsInStructure(value, urls);
+    }
+  } else if (typeof data === 'string') {
+    // Check if this string itself is a URL
+    let decodedUrl = data.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&');
+    if (decodedUrl.includes('lh3.googleusercontent.com/notebooklm/')) {
+      if ((decodedUrl.includes('=w') || decodedUrl.includes('=s')) && 
+          decodedUrl.includes('?authuser=0')) {
+        if (!urls.includes(decodedUrl)) {
+          urls.push(decodedUrl);
+        }
+      }
+    }
+  }
+  
+  return urls;
+}
+
+/**
+ * Extract slide image URLs from artifact RPC response
+ * Pattern: https://lh3.googleusercontent.com/notebooklm/[ASSET_ID]=w1376-h768?authuser=0
+ * 
+ * Based on extract_urls.py pattern:
+ * r'https://lh3\.googleusercontent\.com/notebooklm/[^=\s]+=[^?\s]+\?authuser=0'
+ */
+function extractSlideImageUrls(artifactData: any): string[] {
+  const urls: string[] = [];
+  
+  if (!artifactData) {
+    return urls;
+  }
+  
+  // First, try structured extraction (more reliable)
+  const structuredUrls = findSlideUrlsInStructure(artifactData);
+  if (structuredUrls.length > 0) {
+    console.log(`Found ${structuredUrls.length} URL(s) using structured extraction\n`);
+    return structuredUrls;
+  }
+  
+  // Fallback: string-based regex extraction
+  const dataString = JSON.stringify(artifactData);
+  
+  // Pattern for notebooklm asset URLs (matching extract_urls.py)
+  // Format: https://lh3.googleusercontent.com/notebooklm/[ASSET_ID]=w1376-h768?authuser=0
+  const urlPattern = /https:\\?\/\\?\/lh3\.googleusercontent\.com\\?\/notebooklm\\?\/[^"'\s\)\]]+\\?u003dw[^"'\s\)\]]+\\?u003d[^"'\s\)\]]+\\?u003dauthuser\\?u003d0/g;
+  const matches = dataString.match(urlPattern);
+  
+  if (matches) {
+    for (const match of matches) {
+      // Decode escaped characters
+      let url = match.replace(/\\/g, '').replace(/u003d/g, '=').replace(/u0026/g, '&');
+      if (!urls.includes(url)) {
+        urls.push(url);
+      }
+    }
+    console.log(`Found ${urls.length} URL(s) using regex pattern\n`);
+  }
+  
+  // Also try a more lenient pattern
+  if (urls.length === 0) {
+    const lenientPattern = /lh3\.googleusercontent\.com\/notebooklm\/[^"'\s\)\]]+/g;
+    const lenientMatches = dataString.match(lenientPattern);
+    
+    if (lenientMatches) {
+      for (const match of lenientMatches) {
+        let url = `https://${match}`;
+        // Decode escaped characters
+        url = url.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&');
+        // Add ?authuser=0 if not present
+        if (!url.includes('authuser=0')) {
+          if (!url.includes('?')) {
+            url += '?authuser=0';
+          } else {
+            url += '&authuser=0';
+          }
+        }
+        if (!urls.includes(url)) {
+          urls.push(url);
+        }
+      }
+      console.log(`Found ${urls.length} URL(s) using lenient pattern\n`);
+    }
+  }
+  
+  return urls;
+}
+
+/**
+ * Generate SAPISIDHASH from cookies and timestamp
+ * Format: SAPISIDHASH <timestamp>_<hash>
+ * Hash algorithm: SHA1(timestamp + SAPISID_value + origin)
+ * 
+ * However, this is complex. For now, we'll try without it first since
+ * the mm45.txt curl commands don't show Authorization headers for image requests.
+ */
+function generateAuthHeader(cookies: string): string | null {
+  // Extract SAPISID cookie value
+  const sapisidMatch = cookies.match(/SAPISID=([^;]+)/);
+  if (!sapisidMatch) {
+    return null;
+  }
+  
+  // Note: SAPISIDHASH requires timestamp and SHA1 hash - for now, skip it
+  // and rely on cookies only, as the mm45.txt examples show image requests
+  // without Authorization headers
+  return null; // Return null to skip authorization header for now
+}
+
+/**
+ * Download image from URL, following redirects
+ * Returns the final image data as Buffer
+ * 
+ * Based on download_slides.py implementation:
+ * - Uses cookies, Authorization header, User-Agent, and Referer
+ * - Follows 302 redirects from notebooklm to rd-notebooklm
+ */
+/**
+ * Authenticate with Google using Playwright
+ */
+async function authenticateWithGoogle(page: Page, email: string, password: string): Promise<void> {
+  console.log('  Authenticating with Google...');
+  
+  // Navigate to Google sign-in
+  await page.goto('https://accounts.google.com/signin', { waitUntil: 'networkidle' });
+  
+  // Enter email
+  await page.fill('input[type="email"]', email);
+  await page.click('button:has-text("Next"), #identifierNext');
+  await page.waitForTimeout(2000);
+  
+  // Enter password
+  await page.fill('input[type="password"]', password);
+  await page.click('button:has-text("Next"), #passwordNext');
+  
+  // Wait for authentication to complete (may redirect to Google home or show 2FA)
+  await page.waitForTimeout(3000);
+  
+  // Check if we're still on a sign-in page (might need 2FA)
+  const currentUrl = page.url();
+  if (currentUrl.includes('accounts.google.com/signin')) {
+    console.log('  ⚠️  Still on sign-in page - you may need to complete 2FA manually');
+    console.log('  Waiting 30 seconds for manual completion...');
+    await page.waitForTimeout(30000);
+  }
+  
+  console.log('  ✓ Authentication complete');
+}
+
+/**
+ * Download image using Playwright (headless browser)
+ */
+async function downloadImageWithPlaywright(
+  url: string,
+  page: Page
+): Promise<Buffer> {
+  try {
+    // Navigate to the image URL - Playwright will handle redirects automatically
+    const response = await page.goto(url, { waitUntil: 'networkidle' });
+    
+    if (!response) {
+      throw new Error('No response from server');
+    }
+    
+    // Check if we got redirected to a sign-in page
+    const finalUrl = page.url();
+    if (finalUrl.includes('accounts.google.com/signin')) {
+      throw new Error('Authentication required - redirected to sign-in page');
+    }
+    
+    // Check response status
+    if (response.status() >= 400) {
+      throw new Error(`HTTP ${response.status()}: ${response.statusText()}`);
+    }
+    
+    // Get the response body as buffer
+    const imageBuffer = await response.body();
+    
+    // Validate it's an image (basic check)
+    const isValidImage = imageBuffer.length > 0 && (
+      (imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50 && imageBuffer[2] === 0x4E && imageBuffer[3] === 0x47) || // PNG
+      (imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8 && imageBuffer[2] === 0xFF) || // JPEG
+      (imageBuffer[0] === 0x52 && imageBuffer[1] === 0x49 && imageBuffer[2] === 0x46 && imageBuffer[3] === 0x46) // RIFF (WebP)
+    );
+    
+    if (!isValidImage) {
+      // Check if it's HTML (redirect to sign-in)
+      const text = imageBuffer.toString('utf-8', 0, Math.min(500, imageBuffer.length));
+      if (text.includes('Sign in') || text.includes('accounts.google.com') || text.includes('<html')) {
+        throw new Error('Authentication required - received HTML instead of image');
+      }
+      throw new Error('Downloaded data is not a valid image');
+    }
+    
+    return Buffer.from(imageBuffer);
+  } catch (error: any) {
+    throw new Error(`Failed to download image: ${error.message}`);
+  }
+}
+
+/**
+ * Combine images into PDF using a simple approach
+ * Note: This requires pdf-lib or similar library, or we can save images separately
+ * For now, we'll save images and provide instructions to combine them
+ */
+async function saveImages(
+  images: Buffer[],
+  outputDir: string,
+  slideTitle: string
+): Promise<string[]> {
+  await fs.mkdir(outputDir, { recursive: true });
+  
+  const savedPaths: string[] = [];
+  for (let i = 0; i < images.length; i++) {
+    const imagePath = path.join(outputDir, `slide_${i + 1}.png`);
+    await fs.writeFile(imagePath, images[i]);
+    savedPaths.push(imagePath);
+    console.log(`  Saved slide ${i + 1}/${images.length}: ${imagePath}`);
+  }
+  
+  return savedPaths;
+}
+
+/**
+ * Main test function
+ */
+  async function main() {
+    const rl = createReadlineInterface();
+    
+    // Declare browser variables outside try block so they're accessible in finally
+    let browser: Browser | undefined;
+    let context: BrowserContext | undefined;
+    let page: Page | undefined;
+    let authToken: string;
+    let cookies: string;
+    
+    try {
+      // Get Google credentials from environment variables or prompt
+      console.log('=== Credentials Configuration ===\n');
+      const googleEmail = process.env.GOOGLE_EMAIL || await question(rl, 'Enter your Google email: ');
+      const googlePassword = process.env.GOOGLE_PASSWORD || await question(rl, 'Enter your Google password: ');
+      
+      if (!googleEmail || !googlePassword) {
+        throw new Error('Google email and password are required. Set GOOGLE_EMAIL and GOOGLE_PASSWORD environment variables or enter them when prompted.');
+      }
+    
+      console.log('\n=== Setting up Playwright Browser ===\n');
+    
+    try {
+      // Launch browser and create page
+      browser = await chromium.launch({ headless: false }); // Use headless: false to see the browser for cookie extraction
+      context = await browser.newContext({
+        userAgent: USER_AGENT,
+        viewport: { width: 1920, height: 1080 }
+      });
+      page = await context.newPage();
+      
+      // Set up request interception to capture Cookie headers from network requests
+      let capturedCookieHeader: string | null = null;
+      page.on('request', (request) => {
+        const url = request.url();
+        const method = request.method();
+        
+        // Capture Cookie header from:
+        // 1. batchexecute calls to https://notebooklm.google.com/_/LabsTailwindUi/data/batchexecute
+        // 2. POST requests to https://notebooklm.google.com/
+        const isBatchexecute = url.includes('batchexecute') && url.includes('LabsTailwindUi');
+        const isNotebooklmPost = url.startsWith('https://notebooklm.google.com/') && method === 'POST';
+        
+        if (isBatchexecute || isNotebooklmPost) {
+          const headers = request.headers();
+          const cookieHeader = headers['cookie'] || headers['Cookie'];
+          if (cookieHeader && cookieHeader.length > 100 && !capturedCookieHeader) {
+            capturedCookieHeader = cookieHeader;
+            const source = isBatchexecute ? 'batchexecute request' : 'POST to notebooklm.google.com';
+            console.log(`  ✓ Cookie header captured from ${source}`);
+          }
+        }
+      });
+      
+      // Authenticate with Google
+      console.log('=== Authenticating with Google ===\n');
+      await authenticateWithGoogle(page, googleEmail, googlePassword);
+      
+      // Navigate to NotebookLM and extract credentials
+      console.log('\n=== Navigating to NotebookLM and Extracting Credentials ===\n');
+      console.log('  Navigating to NotebookLM...');
+      
+      // Use domcontentloaded instead of networkidle to avoid timeout issues
+      await page.goto('https://notebooklm.google.com/', { 
+        waitUntil: 'domcontentloaded',
+        timeout: 60000 
+      });
+      
+      // Wait for the page to be ready and check if we're signed in
+      await page.waitForTimeout(5000); // Give page time to load
+      
+      let currentUrl = page.url();
+      if (currentUrl.includes('accounts.google.com/signin')) {
+        console.log('  ⚠️  Sign-in required, authenticating again...');
+        await authenticateWithGoogle(page, googleEmail, googlePassword);
+        await page.goto('https://notebooklm.google.com/', { 
+          waitUntil: 'domcontentloaded',
+          timeout: 60000 
+        });
+        await page.waitForTimeout(5000);
+        currentUrl = page.url();
+      }
+      
+      if (currentUrl.includes('accounts.google.com/signin')) {
+        throw new Error('Failed to authenticate - still on sign-in page. Please check credentials.');
+      }
+      
+      console.log('  ✓ Successfully navigated to NotebookLM\n');
+      
+      // Wait for WIZ_global_data to be available (with retries)
+      console.log('  Waiting for page to fully load...');
+      let extractedAuthToken: string | null = null;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        extractedAuthToken = await page.evaluate(() => {
+          // @ts-ignore
+          return window.WIZ_global_data?.SNlM0e || null;
+        });
+        
+        if (extractedAuthToken) {
+          break;
+        }
+        
+        console.log(`  Waiting for auth token... (attempt ${attempt + 1}/10)`);
+        await page.waitForTimeout(2000);
+      }
+      
+      if (!extractedAuthToken) {
+        // Try waiting a bit longer and check again
+        await page.waitForTimeout(5000);
+        extractedAuthToken = await page.evaluate(() => {
+          // @ts-ignore
+          return window.WIZ_global_data?.SNlM0e || null;
+        });
+      }
+      
+      if (!extractedAuthToken) {
+        throw new Error('Failed to extract auth token. The page may still be loading or WIZ_global_data is not available.');
+      }
+      
+      authToken = extractedAuthToken;
+      console.log(`  ✓ Auth token extracted (${authToken.substring(0, 50)}...)\n`);
+      
+      // Try to automatically capture cookies from network requests
+      console.log('=== Cookie Configuration ===\n');
+      console.log('Waiting for batchexecute requests...');
+      await page.waitForTimeout(15000); // Wait 15 seconds for batchexecute calls
+      
+      if (capturedCookieHeader) {
+        cookies = capturedCookieHeader;
+        console.log(`  ✓ Cookies automatically captured from network requests (${cookies.length} characters)\n`);
+      } else {
+        // Fall back to manual cookie input
+        console.log('⚠️  Could not automatically capture cookies from network requests.');
+        console.log('Please copy cookies from your browser:\n');
+        console.log('  Instructions:');
+        console.log('    1. The browser window should still be open');
+        console.log('    2. Open Developer Tools (F12)');
+        console.log('    3. Go to the Network tab');
+        console.log('    4. Look for any request to notebooklm.google.com or batchexecute');
+        console.log('    5. Click on the request');
+        console.log('    6. In the Headers section, find the "Cookie" header');
+        console.log('    7. Copy the entire Cookie value (it will be a long string)\n');
+        
+        const manualCookies = await question(rl, 'Paste the Cookie header value here (or press Enter to abort): ');
+        
+        if (!manualCookies || manualCookies.trim().length === 0) {
+          throw new Error('Cookie extraction aborted by user.');
+        }
+        
+        if (manualCookies.trim().length < 100) {
+          console.log('  ⚠️  Warning: Cookie string seems too short. Make sure you copied the complete Cookie header.');
+          const confirm = await question(rl, 'Continue anyway? (y/n): ');
+          if (confirm.toLowerCase() !== 'y') {
+            throw new Error('Cookie extraction cancelled by user.');
+          }
+        }
+        
+        cookies = manualCookies.trim();
+        console.log(`  ✓ Cookies accepted (${cookies.length} characters)\n`);
+      }
+      // Browser stays open for later image downloads
+    } catch (error: any) {
+      if (browser) {
+        await browser.close();
+      }
+      throw error;
+    }
+    
+    // Create NotebookLM client with extracted credentials
+    console.log('\n=== Creating NotebookLM Client ===\n');
+    const client = new NotebookLMClient({
+      authToken,
+      cookies,
+      autoRefresh: false, // Disable auto-refresh for testing
+    });
+    
+    // First verify credentials by trying to list notebooks
+    console.log('=== Verifying Credentials and Listing Notebooks ===\n');
+    let notebooks;
+    try {
+      notebooks = await client.notebooks.list();
+      console.log(`✓ Credentials valid. Found ${notebooks.length} notebook(s)\n`);
+    } catch (error: any) {
+      if (error.message?.includes('Permission denied') || error.message?.includes('290')) {
+        throw new Error(
+          'Permission denied: Your credentials may be expired or invalid.\n' +
+          'Please verify your credentials are current and try again.'
+        );
+      }
+      throw error;
+    }
+    
+    // Prompt user to select a notebook
+    if (notebooks.length === 0) {
+      throw new Error('No notebooks found in your account.');
+    }
+    
+    console.log('Available notebooks:\n');
+    notebooks.forEach((n, i) => {
+      console.log(`  ${i + 1}. ${n.title || 'Untitled'} (${n.projectId})`);
+    });
+    console.log();
+    const notebookSelection = await question(rl, `Select notebook (1-${notebooks.length}) or enter notebook ID: `);
+    
+    let notebookId: string;
+    const selectionNum = parseInt(notebookSelection, 10);
+    if (!isNaN(selectionNum) && selectionNum >= 1 && selectionNum <= notebooks.length) {
+      notebookId = notebooks[selectionNum - 1].projectId;
+      console.log(`✓ Selected notebook: ${notebooks[selectionNum - 1].title || 'Untitled'}\n`);
+    } else {
+      // Treat as notebook ID
+      notebookId = notebookSelection.trim();
+      const notebookExists = notebooks.some(n => n.projectId === notebookId);
+      if (!notebookExists) {
+        console.warn(`⚠ Warning: Notebook ID "${notebookId}" not found in your notebooks.`);
+        const continueAnyway = await question(rl, 'Continue anyway? (y/n): ');
+        if (continueAnyway.toLowerCase() !== 'y') {
+          throw new Error('Aborted by user');
+        }
+      }
+    }
+    
+    console.log('=== Listing Slide Artifacts ===\n');
+    const artifacts = await client.artifacts.list(notebookId);
+    const slideArtifacts = artifacts.filter(
+      a => a.type === ArtifactType.SLIDE_DECK && a.state === ArtifactState.READY
+    );
+    
+    if (slideArtifacts.length === 0) {
+      console.log('No ready slide decks found in this notebook.');
+      return;
+    }
+    
+    console.log(`Found ${slideArtifacts.length} slide deck(s):\n`);
+    slideArtifacts.forEach((artifact, index) => {
+      console.log(`  ${index + 1}. ${artifact.title || 'Untitled'} (${artifact.artifactId})`);
+    });
+    
+    console.log();
+    const selection = await question(rl, `Select slide deck (1-${slideArtifacts.length}): `);
+    const selectedIndex = parseInt(selection, 10) - 1;
+    
+    if (selectedIndex < 0 || selectedIndex >= slideArtifacts.length) {
+      throw new Error('Invalid selection');
+    }
+    
+    const selectedArtifact = slideArtifacts[selectedIndex];
+    console.log(`\nSelected: ${selectedArtifact.title || 'Untitled'} (${selectedArtifact.artifactId})\n`);
+    
+    console.log('=== Extracting Image URLs ===\n');
+    
+    // Use the list response (which was working) to extract slide URLs
+    // RPC_GET_ARTIFACT gives 400 errors, so we'll extract from the list response
+    const rpc = client.getRPCClient();
+    const artifactsListResponse = await rpc.call(
+      RPC.RPC_LIST_ARTIFACTS,
+      [[2], notebookId], // [2] is artifact type filter for SLIDE_DECK
+      notebookId
+    );
+    
+    // Save the full response for analysis
+    const responseDir = path.join(process.cwd(), 'download testing', 'How to Reverse Engineer and Replicate API and RPC Calls');
+    await fs.mkdir(responseDir, { recursive: true });
+    const responseFilePath = path.join(responseDir, `artifacts-list-response-${selectedArtifact.artifactId}.json`);
+    await fs.writeFile(responseFilePath, JSON.stringify(artifactsListResponse, null, 2));
+    const responseTxtPath = path.join(responseDir, `artifacts-list-response-${selectedArtifact.artifactId}.txt`);
+    await fs.writeFile(responseTxtPath, JSON.stringify(artifactsListResponse));
+    console.log(`✓ Saved full RPC response to: ${responseFilePath}\n`);
+    
+    // Parse the response - it might be double-encoded JSON (string containing JSON)
+    let parsedResponse = artifactsListResponse;
+    if (typeof artifactsListResponse === 'string') {
+      try {
+        parsedResponse = JSON.parse(artifactsListResponse);
+        // Might be double-encoded (JSON string inside JSON string)
+        if (typeof parsedResponse === 'string') {
+          parsedResponse = JSON.parse(parsedResponse);
+        }
+      } catch (e) {
+        // Already parsed or not valid JSON string
+      }
+    }
+    
+    // Helper function to extract slide URLs from a slide deck artifact
+    // Slides are in format: [["https://...", width, height], ...]
+    function extractSlideUrlsFromArtifact(artifact: any, maxDepth = 15): string[] {
+      const urls: string[] = [];
+      
+      function searchForSlides(obj: any, depth = 0): void {
+        if (depth > maxDepth) {
+          return; // Prevent infinite recursion
+        }
+        
+        if (Array.isArray(obj)) {
+          // Check if this is a slide array: [url_string, width_int, height_int]
+          if (obj.length >= 3 && 
+              typeof obj[0] === 'string' && 
+              obj[0].includes('lh3.googleusercontent.com/notebooklm/') &&
+              (obj[0].includes('=w') || obj[0].includes('=s')) &&
+              typeof obj[1] === 'number' &&
+              typeof obj[2] === 'number') {
+            // Get the full URL string (it should already be complete with =w1376-h768)
+            let url = String(obj[0]);
+            // Decode any escaped characters (from JSON encoding) - handle Unicode escapes
+            url = url.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&').replace(/\\u002f/g, '/');
+            // Ensure the URL is complete - it should end with =w1376-h768 or similar
+            // Add ?authuser=0 if not present (required for download)
+            if (!url.includes('?')) {
+              url += '?authuser=0';
+            } else if (!url.includes('authuser=0')) {
+              // Check if query string exists but doesn't have authuser
+              url += '&authuser=0';
+            }
+            // Only add if we haven't seen it before and it has the correct format
+            if (!urls.includes(url) && (url.includes('=w') || url.includes('=s'))) {
+              urls.push(url);
+            }
+            return; // Don't recurse into the width/height numbers
+          }
+          
+          // Recursively search all elements
+          for (const item of obj) {
+            searchForSlides(item, depth + 1);
+          }
+        } else if (typeof obj === 'object' && obj !== null) {
+          for (const value of Object.values(obj)) {
+            searchForSlides(value, depth + 1);
+          }
+        } else if (typeof obj === 'string' && obj.includes('lh3.googleusercontent.com/notebooklm') && (obj.includes('=w') || obj.includes('=s'))) {
+          // Direct URL string (might be in a different format)
+          let url = obj.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&');
+          if (!url.includes('?')) {
+            url += '?authuser=0';
+          } else if (!url.includes('authuser=0')) {
+            url += '&authuser=0';
+          }
+          if (!urls.includes(url)) {
+            urls.push(url);
+          }
+        }
+      }
+      
+      searchForSlides(artifact);
+      return urls;
+    }
+    
+    // Find the specific slide deck artifact in the list response
+    let imageUrls: string[] = [];
+    if (Array.isArray(parsedResponse)) {
+      // Response is [[artifact1, artifact2, ...]]
+      const artifacts = Array.isArray(parsedResponse[0]) ? parsedResponse[0] : parsedResponse;
+      
+      console.log(`Searching through ${artifacts.length} artifacts for ${selectedArtifact.artifactId}...\n`);
+      
+      for (const artifactEntry of artifacts) {
+        if (Array.isArray(artifactEntry) && artifactEntry.length > 0) {
+          const artifactId = artifactEntry[0];
+          if (artifactId === selectedArtifact.artifactId) {
+            // This is our slide deck - extract image URLs from this specific artifact ONLY
+            console.log(`✓ Found artifact entry for ${selectedArtifact.artifactId} at position ${artifacts.indexOf(artifactEntry)}, extracting URLs...\n`);
+            imageUrls = extractSlideUrlsFromArtifact(artifactEntry);
+            console.log(`Extracted ${imageUrls.length} URLs from artifact entry\n`);
+            break;
+          }
+        }
+      }
+    }
+    
+    // If not found in specific artifact, search the entire response as fallback
+    if (imageUrls.length === 0) {
+      console.log('⚠ URLs not found in specific artifact entry, searching entire response...\n');
+      imageUrls = extractSlideUrlsFromArtifact(parsedResponse);
+    }
+    
+    if (imageUrls.length === 0) {
+      console.error('No image URLs found in artifact data.');
+      console.error('\nTo debug:');
+      console.error(`1. Check the saved response file: ${responseFilePath}`);
+      console.error(`2. Search for "lh3.googleusercontent.com/notebooklm" in the file`);
+      console.error(`3. The slide deck may not be ready or the format may have changed.`);
+      throw new Error('No image URLs found in artifact data. See saved response files for debugging.');
+    }
+    
+    // Remove duplicates and sort
+    imageUrls = Array.from(new Set(imageUrls));
+    
+    // Filter to only include URLs with the correct format (=w or =s followed by numbers)
+    // This helps exclude wrong URLs from other artifacts
+    const validImageUrls = imageUrls.filter(url => {
+      // Must have =w or =s followed by numbers, and should end with ?authuser=0 or have it added
+      return url.includes('=w') || url.includes('=s');
+    });
+    
+    if (validImageUrls.length < imageUrls.length) {
+      console.log(`Filtered ${imageUrls.length} URLs down to ${validImageUrls.length} valid slide URLs\n`);
+    }
+    imageUrls = validImageUrls;
+    
+    console.log(`Found ${imageUrls.length} slide image URL(s)\n`);
+    
+    // Show first URL for debugging - verify format matches mm45.txt
+    if (imageUrls.length > 0) {
+      const firstUrl = imageUrls[0];
+      console.log(`First URL (complete, for verification):`);
+      console.log(`${firstUrl}\n`);
+      console.log(`Format verification:`);
+      console.log(`  Has =w1376-h768: ${firstUrl.includes('=w1376-h768') ? '✓' : '✗'}`);
+      console.log(`  Has ?authuser=0: ${firstUrl.includes('?authuser=0') ? '✓' : '✗'}`);
+      console.log(`  Ends with: ...${firstUrl.substring(Math.max(0, firstUrl.length - 35))}\n`);
+    }
+    
+    // Use the same browser/page for downloading (already authenticated and has cookies)
+    console.log('\n=== Downloading Images ===\n');
+    
+    if (!page) {
+      throw new Error('Browser page is not available for downloading images. This should not happen.');
+    }
+    
+    const images: Buffer[] = [];
+    
+    for (let i = 0; i < imageUrls.length; i++) {
+      const url = imageUrls[i];
+      console.log(`Downloading slide ${i + 1}/${imageUrls.length}...`);
+      console.log(`  URL: ${url}`);
+      console.log(`  URL length: ${url.length} chars`);
+      
+      try {
+        const imageData = await downloadImageWithPlaywright(url, page);
+        images.push(imageData);
+        console.log(`  ✓ Downloaded (${(imageData.length / 1024).toFixed(2)} KB)\n`);
+      } catch (error: any) {
+        console.error(`  ✗ Failed: ${error.message}\n`);
+        // Continue with other images even if one fails
+      }
+    }
+    
+    if (images.length === 0) {
+      throw new Error('No images were successfully downloaded');
+    }
+    
+    console.log(`\n=== Saving Images ===\n`);
+    const outputDir = path.join(process.cwd(), 'downloads', selectedArtifact.artifactId);
+    const savedPaths = await saveImages(images, outputDir, selectedArtifact.title || 'slides');
+    
+    console.log(`\n✓ Successfully downloaded ${images.length} slide(s) to: ${outputDir}`);
+    console.log(`\nNote: To combine images into a PDF, you can use:`);
+    console.log(`  - ImageMagick: convert ${outputDir}/slide_*.png ${outputDir}/slides.pdf`);
+      console.log(`  - Python PIL: python -c "from PIL import Image; import glob; images = [Image.open(f).convert('RGB') for f in sorted(glob.glob('${outputDir}/slide_*.png'))]; images[0].save('${outputDir}/slides.pdf', save_all=True, append_images=images[1:])"`);
+      
+      // Close browser after all downloads are complete
+      if (browser) {
+        await browser.close();
+        console.log('\n✓ Browser closed');
+      }
+      
+      client.dispose();
+    } catch (error: any) {
+      handleError(error, 'Failed to download slides');
+    } finally {
+      // Ensure browser is closed on error
+      if (browser) {
+        await browser.close();
+      }
+      rl.close();
+    }
+}
+
+// Run if called directly
+main().catch(console.error);
+
+export { main as testSlideDownload };
+

@@ -11,6 +11,7 @@ import { ArtifactType, ArtifactState } from '../types/artifact.js';
 import * as https from 'https';
 import * as http from 'http';
 import { createHash } from 'node:crypto';
+import { Browser, BrowserContext, Page, chromium } from 'playwright';
 
 // ========================================================================
 // Types
@@ -203,6 +204,13 @@ export interface FetchInfographicOptions {
 
 export interface DownloadSlidesOptions {
   googleDomainCookies?: string;
+}
+
+export interface GetSlideOptions {
+  /** Download format: 'pdf' (default) or 'png' */
+  downloadAs?: 'pdf' | 'png';
+  /** Output directory path (required for slides) */
+  outputPath: string;
 }
 
 export interface GetVideoUrlOptions {
@@ -705,6 +713,7 @@ export class ArtifactsService {
    * - `notebookId` (string, optional): Optional notebook ID (helpful for audio/video if get() needs it)
    * - `options` (object, optional): Additional options
    *   - For reports: `exportToDocs?: boolean` or `exportToSheets?: boolean` - Export report to Google Docs/Sheets and return URL
+   *   - For slides: `downloadAs?: 'pdf' | 'png'` (default: 'pdf') and `outputPath: string` (required) - Download slides as PDF or PNG files
    * 
    * **Output:** Returns an `Artifact` object containing:
    * - `artifactId`: Unique identifier
@@ -720,7 +729,7 @@ export class ArtifactsService {
    * - For FLASHCARDS: Returns `Artifact + FlashcardData` (flashcards array, CSV, totalCards)
    * - For AUDIO: Returns `Artifact + audioData` (base64 audio data)
    * - For VIDEO: Returns `Artifact + { url: string }` (video URL)
-   * - For SLIDE_DECK: Returns `Artifact + { url: string }` (PDF URL)
+   * - For SLIDE_DECK: Downloads slides (requires `outputPath` option) - returns `Artifact + { downloadPath: string, downloadFormat: 'pdf' | 'png' }`
    * - For INFOGRAPHIC: Returns `Artifact + InfographicImageData`
    * - For REPORT: Returns `Artifact + ReportContent` or `Artifact + { exportUrl: string }` if export options provided
    * - For MIND_MAP: Returns `Artifact + { experimental: true }`
@@ -750,9 +759,17 @@ export class ArtifactsService {
    * // Get audio artifact (use audioId from create() or list())
    * const audio = await sdk.artifacts.audio.create('notebook-id');
    * const audioData = await client.artifacts.get(audio.audioId, 'notebook-id');
+   * 
+   * // Download slide deck as PDF (default)
+   * const slides = await client.artifacts.get('slide-id', 'notebook-id', { outputPath: './downloads' });
+   * console.log('Slides saved to:', slides.downloadPath);
+   * 
+   * // Download slide deck as PNG files
+   * const slidesPng = await client.artifacts.get('slide-id', 'notebook-id', { downloadAs: 'png', outputPath: './downloads' });
+   * console.log('PNG files saved to:', slidesPng.downloadPath);
    * ```
    */
-  async get(artifactId: string, notebookId?: string, options?: { exportToDocs?: boolean; exportToSheets?: boolean }): Promise<Artifact | QuizData | FlashcardData | AudioArtifact | VideoArtifact | any> {
+  async get(artifactId: string, notebookId?: string, options?: { exportToDocs?: boolean; exportToSheets?: boolean } & GetSlideOptions): Promise<Artifact | QuizData | FlashcardData | AudioArtifact | VideoArtifact | any> {
     let artifact: Artifact;
     
     if (notebookId && artifactId === notebookId) {
@@ -838,29 +855,46 @@ export class ArtifactsService {
             }
           }
         } else if (artifact.type === ArtifactType.SLIDE_DECK) {
-          let pdfUrl = extractPdfUrl(artifact);
-          if (!pdfUrl) {
-            try {
-              const artifactsListResponse = await this.rpc.call(RPC.RPC_LIST_ARTIFACTS, [[2], notebookId], notebookId);
-              pdfUrl = extractPdfUrl(artifactsListResponse);
-              if (!pdfUrl && Array.isArray(artifactsListResponse)) {
-                for (const artifactEntry of artifactsListResponse) {
-                  if (Array.isArray(artifactEntry) && artifactEntry.length > 0) {
-                    const entryId = artifactEntry[0];
-                    if (entryId === artifactId) {
-                      pdfUrl = extractPdfUrl(artifactEntry);
-                      if (pdfUrl) break;
-                    }
-                  }
-                }
-              }
-            } catch (error) {
-              // If list fetch fails, continue without URL
-            }
+          // Slides always require download - outputPath is required
+          const slideOptions = options as GetSlideOptions;
+          if (!slideOptions?.outputPath) {
+            throw new NotebookLMError('outputPath is required for slide downloads. Use get() with outputPath option to download slides.');
           }
-          if (pdfUrl) {
-            return { ...artifact, url: normalizePdfUrl(pdfUrl) };
+          
+          if (!notebookId) {
+            throw new NotebookLMError('notebookId is required for slide downloads');
           }
+          
+          const rpcCookies = this.rpc.getCookies();
+          if (!rpcCookies) {
+            throw new NotebookLMError('Cookies are required for slide downloads. Ensure the RPC client has cookies configured.');
+          }
+          
+          // Get artifact list response to extract image URLs
+          const artifactsListResponse = await this.rpc.call(RPC.RPC_LIST_ARTIFACTS, [[2], notebookId], notebookId);
+          const imageUrls = extractSlideImageUrls(artifactsListResponse, artifactId);
+          
+          if (imageUrls.length === 0) {
+            throw new NotebookLMError('No slide image URLs found. The slide deck may not be ready yet.');
+          }
+          
+          // Download images using Playwright
+          const images = await downloadSlideImages(imageUrls, rpcCookies);
+          
+          // Save as PDF (default) or PNG
+          const downloadFormat = slideOptions.downloadAs || 'pdf';
+          const result = await saveSlideImages(
+            images,
+            slideOptions.outputPath,
+            artifact.title || 'slides',
+            downloadFormat
+          );
+          
+          return {
+            ...artifact,
+            downloadPath: result.filePath,
+            downloadFormat: result.type,
+          };
         } else if (artifact.type === ArtifactType.MIND_MAP) {
           return { ...artifact, experimental: true };
         }
@@ -1240,8 +1274,10 @@ export class ArtifactsService {
    * - The video URL is available in `artifact.url` field from `get()` method.
    * 
    * **Slide Deck:**
-   * - ⚠️ **Experimental**: Download not implemented. Use `get()` to retrieve the PDF URL.
-   * - The PDF URL is available in `artifact.url` field from `get()` method.
+   * - Format: PDF file (by default) or PNG files in subfolder
+   * - Filename: `<artifact-title>.pdf` or `<artifact-title>/slide_*.png`
+   * - Content: Slides downloaded as PDF or individual PNG images
+   * - Uses Playwright for authentication and download
    * 
    * **Quiz:**
    * - Format: JSON file
@@ -1301,13 +1337,14 @@ export class ArtifactsService {
    * const audioResult = await client.artifacts.download(audio.audioId, './downloads', 'notebook-id');
    * console.log(`Audio saved to: ${audioResult.filePath}`);
    * 
-   * // Video and Slides: Download not available (experimental)
+   * // Video: Download not available (experimental)
    * // Use get() to retrieve URLs instead:
    * const video = await client.artifacts.get('video-id', 'notebook-id');
    * console.log('Video URL:', video.url);
    * 
-   * const slides = await client.artifacts.get('slide-id', 'notebook-id');
-   * console.log('PDF URL:', slides.url);
+   * // Slides: Download using download() or get() with downloadAs option
+   * const slidesResult = await client.artifacts.download('slide-id', './downloads', 'notebook-id');
+   * console.log('Slides saved to:', slidesResult.filePath);
    * 
    * // Download mind map
    * const mindmapResult = await client.artifacts.download('mindmap-id', './downloads');
@@ -1379,13 +1416,47 @@ export class ArtifactsService {
       
       return { filePath, data: audioData };
       
-    } else if (artifact.type === ArtifactType.VIDEO || artifact.type === ArtifactType.SLIDE_DECK) {
-      // Video and Slides: Experimental - URLs are available but download not implemented
+    } else if (artifact.type === ArtifactType.VIDEO) {
+      // Video: URLs are available but download not implemented
       throw new NotebookLMError(
-        `Download for ${artifact.type === ArtifactType.VIDEO ? 'video' : 'slide deck'} artifacts is experimental. ` +
+        `Download for video artifacts is experimental. ` +
         `Use get() to retrieve the URL instead. ` +
-        `Video/Slide URLs are available in the artifact.url field.`
+        `Video URLs are available in the artifact.url field.`
       );
+    } else if (artifact.type === ArtifactType.SLIDE_DECK) {
+      // Slides: Download using Playwright
+      if (!notebookId) {
+        throw new NotebookLMError('notebookId is required for slide downloads');
+      }
+      
+      const rpcCookies = this.rpc.getCookies();
+      if (!rpcCookies) {
+        throw new NotebookLMError('Cookies are required for slide downloads. Ensure the RPC client has cookies configured.');
+      }
+      
+      // Get artifact list response to extract image URLs
+      const artifactsListResponse = await this.rpc.call(RPC.RPC_LIST_ARTIFACTS, [[2], notebookId], notebookId);
+      const imageUrls = extractSlideImageUrls(artifactsListResponse, artifactId);
+      
+      if (imageUrls.length === 0) {
+        throw new NotebookLMError('No slide image URLs found. The slide deck may not be ready yet.');
+      }
+      
+      // Download images using Playwright
+      const images = await downloadSlideImages(imageUrls, rpcCookies);
+      
+      // Save as PDF by default
+      const result = await saveSlideImages(
+        images,
+        folderPath,
+        artifact.title || 'slides',
+        'pdf'
+      );
+      
+      return {
+        filePath: result.filePath,
+        data: { ...artifact, downloadPath: result.filePath, downloadFormat: result.type },
+      };
     } else {
       // Other artifact types: Save raw data
       const fsModule: any = await import('fs/promises' as any).catch(() => null);
@@ -4269,6 +4340,279 @@ export async function downloadSlidesFile(
     };
   } catch (error: any) {
     throw new NotebookLMError(`Failed to download slide deck file for slide ID ${slideId}: ${error.message}`);
+  }
+}
+
+// ========================================================================
+// Slide download helper functions (Playwright-based)
+// ========================================================================
+
+const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0';
+
+/**
+ * Extract slide image URLs from artifact RPC response
+ */
+function extractSlideImageUrls(artifactData: any, targetArtifactId?: string): string[] {
+  const urls: string[] = [];
+  
+  function searchForSlides(obj: any, depth = 0): void {
+    if (depth > 15) return;
+    
+    if (Array.isArray(obj)) {
+      // Check if this is a slide array: [url_string, width_int, height_int]
+      if (obj.length >= 3 && 
+          typeof obj[0] === 'string' && 
+          obj[0].includes('lh3.googleusercontent.com/notebooklm/') &&
+          (obj[0].includes('=w') || obj[0].includes('=s')) &&
+          typeof obj[1] === 'number' &&
+          typeof obj[2] === 'number') {
+        let url = String(obj[0]);
+        url = url.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&').replace(/\\u002f/g, '/');
+        if (!url.includes('?')) {
+          url += '?authuser=0';
+        } else if (!url.includes('authuser=0')) {
+          url += '&authuser=0';
+        }
+        if (!urls.includes(url) && (url.includes('=w') || url.includes('=s'))) {
+          urls.push(url);
+        }
+        return;
+      }
+      
+      for (const item of obj) {
+        searchForSlides(item, depth + 1);
+      }
+    } else if (typeof obj === 'object' && obj !== null) {
+      for (const value of Object.values(obj)) {
+        searchForSlides(value, depth + 1);
+      }
+    } else if (typeof obj === 'string' && obj.includes('lh3.googleusercontent.com/notebooklm') && (obj.includes('=w') || obj.includes('=s'))) {
+      let url = obj.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&');
+      if (!url.includes('?')) {
+        url += '?authuser=0';
+      } else if (!url.includes('authuser=0')) {
+        url += '&authuser=0';
+      }
+      if (!urls.includes(url)) {
+        urls.push(url);
+      }
+    }
+  }
+  
+  // If targetArtifactId is provided, search for that specific artifact first
+  if (targetArtifactId && Array.isArray(artifactData)) {
+    const artifacts = Array.isArray(artifactData[0]) ? artifactData[0] : artifactData;
+    for (const artifactEntry of artifacts) {
+      if (Array.isArray(artifactEntry) && artifactEntry.length > 0) {
+        const artifactId = artifactEntry[0];
+        if (artifactId === targetArtifactId) {
+          searchForSlides(artifactEntry);
+          return Array.from(new Set(urls));
+        }
+      }
+    }
+  }
+  
+  searchForSlides(artifactData);
+  return Array.from(new Set(urls));
+}
+
+/**
+ * Download image using Playwright
+ */
+async function downloadImageWithPlaywright(url: string, page: Page): Promise<Buffer> {
+  const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+  
+  if (!response) {
+    throw new Error('No response from server');
+  }
+  
+  const finalUrl = page.url();
+  if (finalUrl.includes('accounts.google.com/signin')) {
+    throw new Error('Authentication required - redirected to sign-in page');
+  }
+  
+  if (response.status() >= 400) {
+    throw new Error(`HTTP ${response.status()}: ${response.statusText()}`);
+  }
+  
+  const imageBuffer = await response.body();
+  
+  // Validate it's an image
+  const isValidImage = imageBuffer.length > 0 && (
+    (imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50 && imageBuffer[2] === 0x4E && imageBuffer[3] === 0x47) || // PNG
+    (imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8 && imageBuffer[2] === 0xFF) || // JPEG
+    (imageBuffer[0] === 0x52 && imageBuffer[1] === 0x49 && imageBuffer[2] === 0x46 && imageBuffer[3] === 0x46) // RIFF (WebP)
+  );
+  
+  if (!isValidImage) {
+    const text = imageBuffer.toString('utf-8', 0, Math.min(500, imageBuffer.length));
+    if (text.includes('Sign in') || text.includes('accounts.google.com') || text.includes('<html')) {
+      throw new Error('Authentication required - received HTML instead of image');
+    }
+    throw new Error('Downloaded data is not a valid image');
+  }
+  
+  return Buffer.from(imageBuffer);
+}
+
+/**
+ * Parse cookie string into Playwright cookie format
+ */
+function parseCookies(cookieString: string, domain: string = 'notebooklm.google.com'): Array<{ name: string; value: string; domain: string; path: string }> {
+  const cookies: Array<{ name: string; value: string; domain: string; path: string }> = [];
+  const pairs = cookieString.split(';');
+  
+  for (const pair of pairs) {
+    const [name, ...valueParts] = pair.trim().split('=');
+    if (name && valueParts.length > 0) {
+      cookies.push({
+        name: name.trim(),
+        value: valueParts.join('=').trim(),
+        domain: domain,
+        path: '/',
+      });
+    }
+  }
+  
+  return cookies;
+}
+
+/**
+ * Download slide images using Playwright
+ */
+async function downloadSlideImages(imageUrls: string[], cookies: string): Promise<Buffer[]> {
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({
+    userAgent: USER_AGENT,
+    viewport: { width: 1920, height: 1080 }
+  });
+  
+  try {
+    // Set cookies
+    const parsedCookies = parseCookies(cookies);
+    await context.addCookies(parsedCookies);
+    
+    const page = await context.newPage();
+    const images: Buffer[] = [];
+    
+    for (const url of imageUrls) {
+      try {
+        const imageData = await downloadImageWithPlaywright(url, page);
+        images.push(imageData);
+      } catch (error: any) {
+        throw new NotebookLMError(`Failed to download slide image: ${error.message}`);
+      }
+    }
+    
+    return images;
+  } finally {
+    await browser.close();
+  }
+}
+
+/**
+ * Combine images into PDF using pdf-lib (if available) or save as PNGs
+ */
+async function saveSlideImages(
+  images: Buffer[],
+  outputPath: string,
+  artifactTitle: string,
+  format: 'pdf' | 'png'
+): Promise<{ filePath: string; type: 'pdf' | 'png' }> {
+  const fsModule: any = await import('fs/promises').catch(() => null);
+  if (!fsModule) {
+    throw new NotebookLMError('File system access not available');
+  }
+  
+  const pathModule = await import('path');
+  await fsModule.mkdir(outputPath, { recursive: true });
+  
+  if (format === 'png') {
+    // Save as PNG files in subfolder
+    const sanitizedTitle = (artifactTitle || 'slides').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const pngDir = pathModule.join(outputPath, sanitizedTitle);
+    await fsModule.mkdir(pngDir, { recursive: true });
+    
+    const savedPaths: string[] = [];
+    for (let i = 0; i < images.length; i++) {
+      const imagePath = pathModule.join(pngDir, `slide_${i + 1}.png`);
+      await fsModule.writeFile(imagePath, images[i]);
+      savedPaths.push(imagePath);
+    }
+    
+    return { filePath: pngDir, type: 'png' };
+  } else {
+    // Try to use pdf-lib if available, otherwise save as PNGs with instructions
+    let pdfLibModule: any;
+    try {
+      // Dynamic import to avoid TypeScript compile-time errors if pdf-lib is not installed
+      pdfLibModule = await import('pdf-lib' as any);
+    } catch (error) {
+      // pdf-lib not available, save as PNGs
+      const sanitizedTitle = (artifactTitle || 'slides').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const pngDir = pathModule.join(outputPath, sanitizedTitle);
+      await fsModule.mkdir(pngDir, { recursive: true });
+      
+      for (let i = 0; i < images.length; i++) {
+        const imagePath = pathModule.join(pngDir, `slide_${i + 1}.png`);
+        await fsModule.writeFile(imagePath, images[i]);
+      }
+      
+      throw new NotebookLMError(
+        `PDF generation requires 'pdf-lib' package. Images saved as PNGs in ${pngDir}. ` +
+        `Install pdf-lib: npm install pdf-lib`
+      );
+    }
+    
+    try {
+      const { PDFDocument } = pdfLibModule;
+      const pdfDoc = await PDFDocument.create();
+      
+      for (const imageBuffer of images) {
+        let image;
+        // Detect image type and embed accordingly
+        if (imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50) {
+          // PNG
+          image = await pdfDoc.embedPng(imageBuffer);
+        } else if (imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8) {
+          // JPEG
+          image = await pdfDoc.embedJpg(imageBuffer);
+        } else {
+          // Try PNG as fallback
+          image = await pdfDoc.embedPng(imageBuffer);
+        }
+        
+        const page = pdfDoc.addPage([image.width, image.height]);
+        page.drawImage(image, {
+          x: 0,
+          y: 0,
+          width: image.width,
+          height: image.height,
+        });
+      }
+      
+      const pdfBytes = await pdfDoc.save();
+      const sanitizedTitle = (artifactTitle || 'slides').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const pdfPath = pathModule.join(outputPath, `${sanitizedTitle}.pdf`);
+      await fsModule.writeFile(pdfPath, pdfBytes);
+      
+      return { filePath: pdfPath, type: 'pdf' };
+    } catch (error: any) {
+      // PDF generation failed, save as PNGs with note
+      const sanitizedTitle = (artifactTitle || 'slides').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const pngDir = pathModule.join(outputPath, sanitizedTitle);
+      await fsModule.mkdir(pngDir, { recursive: true });
+      
+      for (let i = 0; i < images.length; i++) {
+        const imagePath = pathModule.join(pngDir, `slide_${i + 1}.png`);
+        await fsModule.writeFile(imagePath, images[i]);
+      }
+      
+      throw new NotebookLMError(
+        `PDF generation failed: ${error.message}. Images saved as PNGs in ${pngDir}.`
+      );
+    }
   }
 }
 

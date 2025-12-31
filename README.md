@@ -1719,7 +1719,8 @@ artifacts.forEach(artifact => {
 **Description:**
 Retrieves detailed artifact information. Automatically fetches full content when artifact is `READY`:
 - **Quiz/Flashcards/Audio**: Downloads and returns full data (questions, flashcards array, audio data)
-- **Video/Slides**: Returns URL for accessing the content
+- **Video**: Returns URL for accessing the content
+- **Slides**: Downloads slides (requires `outputPath` option) - returns download path
 - **Reports**: Returns content or exports to Google Docs/Sheets if options provided
 - **Infographics**: Returns image data with dimensions
 - **Mind Maps**: Returns with `experimental: true` flag
@@ -1732,7 +1733,7 @@ Retrieves detailed artifact information. Automatically fetches full content when
 | Flashcards | `FlashcardData` | Flashcards array, CSV, totalCards |
 | Audio | `AudioArtifact` | Audio data (base64), saveToFile helper |
 | Video | `VideoArtifact` | Video URL (`url` field) |
-| Slides | `Artifact` | PDF URL (`url` field) |
+| Slides | `Artifact` | Download path (`downloadPath` field, requires `outputPath` option) |
 | Report | `ReportContent` or `{exportUrl}` | Report content or export URL |
 | Infographic | `InfographicImageData` | Image data, dimensions, URL |
 | Mind Map | `Artifact` | Metadata with `experimental: true` |
@@ -1741,6 +1742,12 @@ Retrieves detailed artifact information. Automatically fetches full content when
 - `exportToDocs?: boolean` - Export to Google Docs and return export URL
 - `exportToSheets?: boolean` - Export to Google Sheets and return export URL
 - If neither provided, returns report content as text/markdown/HTML/JSON
+
+**Slide Download Options (Required):**
+- `outputPath: string` - Directory path to save downloaded slides (required)
+- `downloadAs?: 'pdf' | 'png'` - Download format: PDF (default) or PNG files
+- PNG files are saved in a subfolder named after the artifact
+- Slides always download - URL option is not available
 
 <details>
 <summary><strong>Validation</strong></summary>
@@ -1757,7 +1764,8 @@ Retrieves detailed artifact information. Automatically fetches full content when
 - Automatically detects artifact type and fetches appropriate content
 - For `READY` artifacts, returns full data instead of just metadata
 - For `CREATING` or `FAILED` artifacts, returns metadata only
-- Video and slides return URLs (use these URLs to access content)
+- Video returns URLs (use these URLs to access content)
+- Slides always download (requires `outputPath` option) - returns download path and format
 - Quiz and flashcards return full structured data
 - Audio returns data with `saveToFile()` helper function
 
@@ -1792,11 +1800,18 @@ if (video.url) {
   console.log(`Video URL: ${video.url}`)
 }
 
-// Get slide deck PDF URL
-const slides = await sdk.artifacts.get('slide-id', 'notebook-id')
-if (slides.url) {
-  console.log(`PDF URL: ${slides.url}`)
-}
+// Download slide deck as PDF (default)
+const slides = await sdk.artifacts.get('slide-id', 'notebook-id', { 
+  outputPath: './downloads' 
+})
+console.log(`PDF saved to: ${slides.downloadPath}`)
+
+// Download slide deck as PNG files
+const slidesPng = await sdk.artifacts.get('slide-id', 'notebook-id', { 
+  downloadAs: 'png', 
+  outputPath: './downloads' 
+})
+console.log(`PNG files saved to: ${slidesPng.downloadPath}`)
 
 // Get report content
 const report = await sdk.artifacts.get('report-id', 'notebook-id')
@@ -1849,15 +1864,18 @@ Downloads artifact content and saves to disk. Automatically determines file form
 | Flashcards | JSON | `flashcard_{artifactId}_{timestamp}.json` | Complete flashcard data with array, CSV, totalCards |
 | Audio | Audio file | `audio_{artifactId}.mp3` | Audio file (binary) |
 | Video | ⚠️ Experimental | N/A | Not implemented - use `get()` to retrieve URL |
-| Slides | ⚠️ Experimental | N/A | Not implemented - use `get()` to retrieve PDF URL |
+| Slides | PDF file | `<artifact-title>.pdf` or `<artifact-title>/slide_*.png` | Slides downloaded as PDF (default) or PNG files using Playwright |
 
 <details>
 <summary><strong>Notes</strong></summary>
 
 - Quiz and flashcards are saved as JSON files with complete data
 - Audio is saved as binary file (format depends on backend)
-- Video and slides downloads are experimental - use `get()` to get URLs instead
-- Files are saved with timestamps to avoid overwrites
+- Video downloads are experimental - use `get()` to get URLs instead
+- Slides are downloaded as PDF (default) or PNG files using Playwright for authentication
+- For PDF downloads, `pdf-lib` package is recommended (falls back to PNG if not available)
+- PNG files are saved in a subfolder named after the artifact
+- Files are saved with timestamps to avoid overwrites (except for slides which use artifact title)
 - Returns both file path and parsed data (for quiz/flashcards)
 
 </details>
@@ -1879,9 +1897,13 @@ const audio = await sdk.artifacts.audio.create('notebook-id')
 const result = await sdk.artifacts.download(audio.audioId, './downloads', 'notebook-id')
 console.log(`Audio saved to: ${result.filePath}`)
 
-// Video/Slides: Use get() instead
+// Video: Use get() to retrieve URL
 const video = await sdk.artifacts.get('video-id', 'notebook-id')
 console.log(`Video URL: ${video.url}`) // Use this URL to download
+
+// Slides: Download using download() or get() with downloadAs option
+const slidesResult = await sdk.artifacts.download('slide-id', './downloads', 'notebook-id')
+console.log(`Slides saved to: ${slidesResult.filePath}`)
 ```
 
 ---
