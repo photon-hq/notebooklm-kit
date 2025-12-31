@@ -27,15 +27,30 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 
 **From npm:**
 ```bash
-npm install notebooklm-kit && npx playwright install chromium
+npm install notebooklm-kit
 ```
 
 **From GitHub:**
 ```bash
-git clone https://github.com/photon-hq/notebooklm-kit.git && cd notebooklm-kit && npm install && npx playwright install chromium
+git clone https://github.com/photon-hq/notebooklm-kit.git && cd notebooklm-kit && npm install
 ```
 
 **Requirements:** Node.js >=18.0.0
+
+<details>
+<summary><strong>Development</strong></summary>
+
+**Build only (no reinstall):**
+```bash
+npm run build:dev
+```
+
+**Watch mode (auto-rebuild):**
+```bash
+npm run dev
+```
+
+</details>
 
 ## Features
 

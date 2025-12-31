@@ -18,9 +18,10 @@
     "LICENSE"
   ],
   "scripts": {
-    "postinstall": "npx playwright install chromium",
+    "postinstall": "npx playwright install chromium && npm run build",
     "setup": "npm install && npx playwright install chromium",
     "build": "tsc",
+    "build:dev": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build"
