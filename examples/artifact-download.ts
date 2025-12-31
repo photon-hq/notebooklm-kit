@@ -52,21 +52,9 @@ async function main() {
       }
 
       case ArtifactType.VIDEO: {
-        console.log('⚠️  Video downloads are experimental.');
-        console.log('Use artifacts.get() to retrieve the URL instead:\n');
-        
-        const content = await sdk.artifacts.get(artifactId, notebookId);
-        const url = (content as any).url || (content as any).videoData;
-        
-        if (url) {
-          console.log(`URL: ${url}`);
-          console.log('\nYou can download this URL using:');
-          console.log('  - curl or wget');
-          console.log('  - fetch/axios in Node.js');
-          console.log('  - Browser download');
-        } else {
-          console.log('URL not available yet. Please try again later.');
-        }
+        console.log('Downloading video as MP4...');
+        const result = await sdk.artifacts.download(artifactId, outputDir, notebookId);
+        console.log(`✓ Saved to: ${result.filePath}`);
         break;
       }
 

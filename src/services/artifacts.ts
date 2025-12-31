@@ -213,9 +213,9 @@ export interface GetSlideOptions {
   outputPath: string;
 }
 
-export interface GetVideoUrlOptions {
-  cookies?: string;
-  googleDomainCookies?: string;
+export interface GetVideoOptions {
+  /** Output directory path (required for videos) */
+  outputPath: string;
 }
 
 export interface CreateReportOptions {
@@ -714,6 +714,7 @@ export class ArtifactsService {
    * - `options` (object, optional): Additional options
    *   - For reports: `exportToDocs?: boolean` or `exportToSheets?: boolean` - Export report to Google Docs/Sheets and return URL
    *   - For slides: `downloadAs?: 'pdf' | 'png'` (default: 'pdf') and `outputPath: string` (required) - Download slides as PDF or PNG files
+   *   - For videos: `outputPath: string` (required) - Download video as MP4 file
    * 
    * **Output:** Returns an `Artifact` object containing:
    * - `artifactId`: Unique identifier
@@ -728,7 +729,7 @@ export class ArtifactsService {
    * - For QUIZ: Returns `Artifact + QuizData` (questions, options, correct answers, explanations)
    * - For FLASHCARDS: Returns `Artifact + FlashcardData` (flashcards array, CSV, totalCards)
    * - For AUDIO: Returns `Artifact + audioData` (base64 audio data)
-   * - For VIDEO: Returns `Artifact + { url: string }` (video URL)
+   * - For VIDEO: Downloads video (requires `outputPath` option) - returns `Artifact + { downloadPath: string }`
    * - For SLIDE_DECK: Downloads slides (requires `outputPath` option) - returns `Artifact + { downloadPath: string, downloadFormat: 'pdf' | 'png' }`
    * - For INFOGRAPHIC: Returns `Artifact + InfographicImageData`
    * - For REPORT: Returns `Artifact + ReportContent` or `Artifact + { exportUrl: string }` if export options provided
@@ -767,9 +768,13 @@ export class ArtifactsService {
    * // Download slide deck as PNG files
    * const slidesPng = await client.artifacts.get('slide-id', 'notebook-id', { downloadAs: 'png', outputPath: './downloads' });
    * console.log('PNG files saved to:', slidesPng.downloadPath);
+   * 
+   * // Download video as MP4
+   * const video = await client.artifacts.get('video-id', 'notebook-id', { outputPath: './downloads' });
+   * console.log('Video saved to:', video.downloadPath);
    * ```
    */
-  async get(artifactId: string, notebookId?: string, options?: { exportToDocs?: boolean; exportToSheets?: boolean } & GetSlideOptions): Promise<Artifact | QuizData | FlashcardData | AudioArtifact | VideoArtifact | any> {
+  async get(artifactId: string, notebookId?: string, options?: { exportToDocs?: boolean; exportToSheets?: boolean } & GetSlideOptions & GetVideoOptions): Promise<Artifact | QuizData | FlashcardData | AudioArtifact | VideoArtifact | any> {
     let artifact: Artifact;
     
     if (notebookId && artifactId === notebookId) {
@@ -844,16 +849,51 @@ export class ArtifactsService {
             return { ...artifact, content: reportContent };
           }
         } else if (artifact.type === ArtifactType.VIDEO) {
-          const videoUrl = (artifact as VideoArtifact).videoData;
-          if (videoUrl) {
+          // Videos always require download - outputPath is required
+          const videoOptions = options as GetVideoOptions;
+          if (!videoOptions?.outputPath) {
+            throw new NotebookLMError('outputPath is required for video downloads. Use get() with outputPath option to download videos.');
+          }
+          
+          if (!notebookId) {
+            throw new NotebookLMError('notebookId is required for video downloads');
+          }
+          
+          const rpcCookies = this.rpc.getCookies();
+          if (!rpcCookies) {
+            throw new NotebookLMError('Cookies are required for video downloads. Ensure the RPC client has cookies configured.');
+          }
+          
+          // Get video URL
+          let videoUrl = (artifact as VideoArtifact).videoData;
+          if (!videoUrl) {
             try {
-              const finalVideoUrl = await getVideoUrl(this.rpc, notebookId, {});
-              return { ...artifact, url: finalVideoUrl };
+              videoUrl = await getVideoUrl(this.rpc, notebookId, {});
             } catch (error) {
-              // If getVideoUrl fails, return the initial URL
-              return { ...artifact, url: videoUrl };
+              throw new NotebookLMError('No video URL found. The video may not be ready yet.');
             }
           }
+          
+          // Download video using Playwright
+          const videoBuffer = await downloadVideoWithPlaywright(videoUrl, rpcCookies);
+          
+          // Save video
+          const fsModule: any = await import('fs/promises').catch(() => null);
+          if (!fsModule) {
+            throw new NotebookLMError('File system access not available');
+          }
+          
+          const pathModule = await import('path');
+          await fsModule.mkdir(videoOptions.outputPath, { recursive: true });
+          
+          const sanitizedTitle = (artifact.title || 'video').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+          const videoPath = pathModule.join(videoOptions.outputPath, `${sanitizedTitle}.mp4`);
+          await fsModule.writeFile(videoPath, videoBuffer);
+          
+          return {
+            ...artifact,
+            downloadPath: videoPath,
+          };
         } else if (artifact.type === ArtifactType.SLIDE_DECK) {
           // Slides always require download - outputPath is required
           const slideOptions = options as GetSlideOptions;
@@ -4479,6 +4519,59 @@ function parseCookies(cookieString: string, domain: string = 'notebooklm.google.
 }
 
 /**
+ * Download video using Playwright
+ */
+async function downloadVideoWithPlaywright(videoUrl: string, cookies: string): Promise<Buffer> {
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({
+    userAgent: USER_AGENT,
+    viewport: { width: 1920, height: 1080 }
+  });
+  
+  try {
+    // Set cookies
+    const parsedCookies = parseCookies(cookies);
+    await context.addCookies(parsedCookies);
+    
+    const page = await context.newPage();
+    
+    // Navigate to video URL and download
+    const response = await page.goto(videoUrl, { waitUntil: 'networkidle', timeout: 60000 });
+    
+    if (!response) {
+      throw new Error('No response from server');
+    }
+    
+    const finalUrl = page.url();
+    if (finalUrl.includes('accounts.google.com/signin')) {
+      throw new Error('Authentication required - redirected to sign-in page');
+    }
+    
+    if (response.status() >= 400) {
+      throw new Error(`HTTP ${response.status()}: ${response.statusText()}`);
+    }
+    
+    // Get video data
+    const videoBuffer = await response.body();
+    
+    // Basic validation - videos are typically larger files
+    if (videoBuffer.length === 0) {
+      throw new Error('Empty response from server');
+    }
+    
+    // Check if it's HTML (redirect to sign-in or error page)
+    const text = videoBuffer.toString('utf-8', 0, Math.min(500, videoBuffer.length));
+    if (text.includes('Sign in') || text.includes('accounts.google.com') || (text.includes('<html') && !text.includes('video'))) {
+      throw new Error('Authentication required - received HTML instead of video');
+    }
+    
+    return Buffer.from(videoBuffer);
+  } finally {
+    await browser.close();
+  }
+}
+
+/**
  * Download slide images using Playwright
  */
 async function downloadSlideImages(imageUrls: string[], cookies: string): Promise<Buffer[]> {
@@ -5073,7 +5166,7 @@ function formatTextAsHTML(text: string): string {
 async function getVideoUrl(
   rpc: RPCClient,
   notebookId: string,
-  options: GetVideoUrlOptions = {}
+  options: { cookies?: string; googleDomainCookies?: string } = {}
 ): Promise<string> {
   const { cookies, googleDomainCookies } = options;
   const rpcCookies = rpc.getCookies();

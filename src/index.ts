@@ -128,7 +128,7 @@ export type {
 
 // Video service types
 export type {
-  GetVideoUrlOptions,
+  GetVideoOptions,
 } from './services/artifacts.js';
 
 // VideoService is no longer exported - use ArtifactsService.video.create() instead

@@ -80,9 +80,12 @@ async function main() {
 
         case ArtifactType.VIDEO: {
           const video = artifact as any;
-          console.log(`Video URL: ${video.url || video.videoData || 'Not available'}`);
-          if (video.url || video.videoData) {
-            console.log('  Use this URL to access/download the video');
+          if (video.downloadPath) {
+            console.log(`Downloaded to: ${video.downloadPath}`);
+          } else {
+            console.log('⚠️  Videos require download with outputPath option');
+            console.log('\nTo download video:');
+            console.log('  const video = await sdk.artifacts.get(artifactId, notebookId, { outputPath: "./downloads" });');
           }
           break;
         }
@@ -164,6 +167,13 @@ async function main() {
       console.log('  const report = await sdk.artifacts.get(artifactId, notebookId, { exportToDocs: true });');
       console.log('\nTo export report to Google Sheets:');
       console.log('  const report = await sdk.artifacts.get(artifactId, notebookId, { exportToSheets: true });');
+    }
+
+    // Example: Download videos
+    if (artifact.type === ArtifactType.VIDEO && artifact.state === ArtifactState.READY && !(artifact as any).downloadPath) {
+      console.log('\n=== Video Download (Required) ===\n');
+      console.log('Videos require download with outputPath option:');
+      console.log('  const video = await sdk.artifacts.get(artifactId, notebookId, { outputPath: "./downloads" });');
     }
 
     // Example: Download slides
