@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from 'fs';
 import { basename } from 'path';
 
 async function main() {
-  const sdk = createSDK();
+  const sdk = await createSDK();
 
   try {
     await sdk.connect(); // Initialize SDK with authentication

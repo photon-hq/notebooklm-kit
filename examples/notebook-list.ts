@@ -2,7 +2,7 @@ import type { Notebook } from '../src/types/notebook.js';
 import { createSDK, handleError } from './utils.js';
 
 async function main() {
-  const sdk = createSDK();
+  const sdk = await createSDK();
 
   try {
     await sdk.connect(); // Initialize SDK with authentication

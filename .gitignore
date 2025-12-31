@@ -39,3 +39,6 @@ coverage/
 rpc/
 test/
 nlm/
+
+# Credentials (contains sensitive auth data)
+credentials.json

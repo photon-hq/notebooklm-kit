@@ -2,7 +2,7 @@ import { createSDK, handleError } from './utils.js';
 import { ResearchMode, SearchSourceType } from '../src/types/source.js';
 
 async function main() {
-  const sdk = createSDK();
+  const sdk = await createSDK();  
 
   try {
     await sdk.connect(); // Initialize SDK with authentication

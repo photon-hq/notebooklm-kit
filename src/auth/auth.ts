@@ -7,7 +7,7 @@ import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import { NotebookLMAuthError } from '../types/common.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as os from 'os';
+import * as readline from 'readline';
 
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36';
 
@@ -35,10 +35,13 @@ export interface AuthConfig {
 
 /**
  * Get credentials storage path
+ * Saves to project root (current working directory) for easy access
  */
 function getCredentialsPath(): string {
-  const homeDir = os.homedir();
-  return path.join(homeDir, '.notebooklm', 'credentials.json');
+  // Save in project root (current working directory)
+  // This is where you run the script from (e.g., notebooklm-kit/)
+  const projectRoot = process.cwd();
+  return path.join(projectRoot, 'credentials.json');
 }
 
 /**
@@ -180,28 +183,50 @@ async function extractCredentials(page: Page, debug: boolean = false): Promise<C
     throw new NotebookLMAuthError('Failed to extract auth token. The page may still be loading.');
   }
   
+  // COMMENTED OUT: Automatic cookie extraction
   // Extract cookies from browser context
-  if (debug) {
-    console.log('Extracting cookies...');
-  }
+  // if (debug) {
+  //   console.log('Extracting cookies...');
+  // }
+  // 
+  // const cookies = await page.context().cookies();
+  // const cookieString = cookies
+  //   .map(cookie => `${cookie.name}=${cookie.value}`)
+  //   .join('; ');
+  // 
+  // if (!cookieString || cookieString.length < 100) {
+  //   throw new NotebookLMAuthError('Failed to extract cookies - cookie string too short or empty');
+  // }
   
-  const cookies = await page.context().cookies();
-  const cookieString = cookies
-    .map(cookie => `${cookie.name}=${cookie.value}`)
-    .join('; ');
-  
-  if (!cookieString || cookieString.length < 100) {
-    throw new NotebookLMAuthError('Failed to extract cookies - cookie string too short or empty');
-  }
-  
-  if (debug) {
-    console.log('✓ Credentials extracted successfully');
-  }
-  
+  // Return only auth token - cookies will be entered manually
   return {
     authToken,
-    cookies: cookieString,
+    cookies: '', // Will be filled manually
   };
+}
+
+/**
+ * Prompt for cookies input from terminal
+ */
+function promptForCookies(): Promise<string> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    console.log('\n📋 Please copy cookies from your browser:');
+    console.log('   1. Open DevTools (F12) in the browser');
+    console.log('   2. Go to Network tab');
+    console.log('   3. Click on any request to notebooklm.google.com');
+    console.log('   4. Copy the "Cookie" header value');
+    console.log('   5. Paste it below\n');
+    
+    rl.question('Enter cookies: ', (cookies: string) => {
+      rl.close();
+      resolve(cookies.trim());
+    });
+  });
 }
 
 /**
@@ -220,12 +245,9 @@ export async function autoLogin(config: AuthConfig = {}): Promise<Credentials> {
   let browser: Browser | undefined;
   
   try {
-    if (debug) {
-      console.log('Launching browser...');
-    }
-    
     // Launch browser
     browser = await chromium.launch({ headless });
+    
     const context = await browser.newContext({
       userAgent: USER_AGENT,
       viewport: { width: 1920, height: 1080 }
@@ -235,17 +257,27 @@ export async function autoLogin(config: AuthConfig = {}): Promise<Credentials> {
     // Authenticate with Google
     await authenticateWithGoogle(page, email, password, debug);
     
-    // Extract credentials from NotebookLM
-    const credentials = await extractCredentials(page, debug);
+    // Extract auth token from NotebookLM
+    const partialCredentials = await extractCredentials(page, debug);
+    
+    // Prompt for cookies manually
+    const cookies = await promptForCookies();
+    
+    if (!cookies || cookies.length < 100) {
+      throw new NotebookLMAuthError('Invalid cookies - cookie string too short or empty');
+    }
+    
+    const credentials: Credentials = {
+      authToken: partialCredentials.authToken,
+      cookies: cookies,
+    };
     
     // Save credentials for future use
     await saveCredentials(credentials);
     
-    if (debug) {
-      console.log('✓ Credentials saved to disk');
-    }
-    
     return credentials;
+  } catch (error) {
+    throw error;
   } finally {
     if (browser) {
       await browser.close();
@@ -277,13 +309,17 @@ export async function getCredentials(
     };
   }
   
-  // 3. Try saved credentials
-  const savedCredentials = await loadCredentials();
-  if (savedCredentials) {
-    return savedCredentials;
+  // 3. Try saved credentials first (before auto-login)
+  // This allows saved credentials to be reused without re-authenticating
+  // Skip if FORCE_REAUTH=true is set
+  if (process.env.FORCE_REAUTH !== 'true') {
+    const savedCredentials = await loadCredentials();
+    if (savedCredentials && savedCredentials.authToken && savedCredentials.cookies) {
+      return savedCredentials;
+    }
   }
   
-  // 4. Try auto-login if email/password available
+  // 4. Try auto-login if email/password available (only if no saved credentials)
   const email = config.email || process.env.GOOGLE_EMAIL;
   const password = config.password || process.env.GOOGLE_PASSWORD;
   
@@ -295,8 +331,8 @@ export async function getCredentials(
     'No credentials available. Provide credentials via:\n' +
     '  - Config: { authToken, cookies }\n' +
     '  - Environment: NOTEBOOKLM_AUTH_TOKEN, NOTEBOOKLM_COOKIES\n' +
-    '  - Auto-login: GOOGLE_EMAIL, GOOGLE_PASSWORD (no 2FA)\n' +
-    '  - Saved credentials: Previous auto-login session'
+    '  - Saved credentials: credentials.json in project root\n' +
+    '  - Auto-login: GOOGLE_EMAIL, GOOGLE_PASSWORD (no 2FA)'
   );
 }
 

@@ -4,7 +4,7 @@ const NOTEBOOK_ID = process.env.NOTEBOOK_ID;
 const NOTEBOOK_IDS = process.env.NOTEBOOK_IDS?.split(',').map(id => id.trim());
 
 async function main() {
-  const sdk = createSDK();
+  const sdk = await createSDK();
 
   try {
     await sdk.connect(); // Initialize SDK with authentication

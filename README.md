@@ -148,8 +148,10 @@ await sdk.dispose(); // Stop auto-refresh, clean up resources
 1. **Credentials Resolution** (in priority order):
    - Provided in config (`authToken`/`cookies`)
    - Environment variables (`NOTEBOOKLM_AUTH_TOKEN`/`NOTEBOOKLM_COOKIES`)
-   - Saved credentials (`~/.notebooklm/credentials.json`)
-   - Auto-login (if `auth.email`/`auth.password` provided)
+   - Saved credentials (`credentials.json` in project root) - **reused automatically**
+   - Auto-login (if `auth.email`/`auth.password` provided) - **only if no saved credentials**
+   
+   **Note:** Set `FORCE_REAUTH=true` in `.env` to force re-authentication and ignore saved credentials
 
 2. **Initialization:**
    - Creates RPC client with credentials
@@ -189,7 +191,8 @@ try {
 |---------|--------|---------|
 | **Auth Token** | `"tokenValue:timestamp"` | Format: `ACi2F2NZSD7yrNvFMrCkP3vZJY1R:1766720233448`<br>Expires: 1 hour after timestamp<br>Extract: `window.WIZ_global_data.SNlM0e` in NotebookLM console |
 | **Cookies** | Semicolon-separated string | `_ga=...; SID=...; SAPISID=...; ...`<br>Long-lived (2+ years for SAPISID)<br>Critical cookie: `SAPISID` (for refresh) |
-| **Auto-Login** | Email + Password | Uses Playwright headless browser<br>Extracts credentials automatically<br>Saves to `~/.notebooklm/credentials.json` |
+| **Auto-Login** | Email + Password | Uses Playwright visible browser<br>Extracts auth token automatically<br>Prompts for cookies manually<br>Saves to `credentials.json` in project root |
+| **Saved Credentials** | `credentials.json` | Automatically saved after manual cookie entry<br>Reused on subsequent runs<br>Located in project root for easy access |
 
 <details>
 <summary><strong>Credential Refresh Endpoint</strong></summary>
@@ -277,7 +280,7 @@ const sdk = new NotebookLMClient({
   },
 });
 
-await sdk.connect(); // Logs in, extracts credentials, saves to ~/.notebooklm/credentials.json
+await sdk.connect(); // Logs in, extracts auth token, prompts for cookies, saves to credentials.json
 ```
 
 <details>
@@ -298,6 +301,9 @@ NOTEBOOKLM_COOKIES="_ga=GA1.1.1949425436.1764104083; SID=g.a0005AiwX...; ..."
 NOTEBOOKLM_MAX_RETRIES=1          # Default: 1
 NOTEBOOKLM_RETRY_DELAY=1000       # Default: 1000ms
 NOTEBOOKLM_RETRY_MAX_DELAY=5000   # Default: 5000ms
+
+# Force re-authentication (optional)
+FORCE_REAUTH=true                 # Force re-authentication, ignore saved credentials
 ```
 
 **Important:** Account must NOT have 2FA enabled (or use app-specific passwords)
@@ -326,6 +332,27 @@ await sdk.connect();
 2. **Cookies**: DevTools → Network tab → Any request → Headers → Copy Cookie value
 
 </details>
+
+### Saved Credentials
+
+**Location:** `credentials.json` in project root (e.g., `notebooklm-kit/credentials.json`)
+
+When using auto-login with email/password:
+1. Browser opens and authenticates
+2. Auth token is extracted automatically
+3. You're prompted to manually paste cookies
+4. Credentials are saved to `credentials.json` for future use
+
+**Subsequent runs:**
+- Saved credentials are automatically reused (no browser prompt)
+- Faster startup - no need to re-enter cookies
+- Credentials file is in project root for easy viewing/editing
+
+**To force re-authentication:**
+- Set `FORCE_REAUTH=true` in `.env`, or
+- Delete `credentials.json` file
+
+**Security Note:** `credentials.json` contains sensitive authentication data. It's automatically added to `.gitignore` to prevent accidental commits.
 
 ### Auto-Refresh Configuration
 

@@ -570,7 +570,7 @@ async function saveImages(
     
     // Use the list response (which was working) to extract slide URLs
     // RPC_GET_ARTIFACT gives 400 errors, so we'll extract from the list response
-    const rpc = client.getRPCClient();
+    const rpc = await client.getRPCClient();
     const artifactsListResponse = await rpc.call(
       RPC.RPC_LIST_ARTIFACTS,
       [[2], notebookId], // [2] is artifact type filter for SLIDE_DECK

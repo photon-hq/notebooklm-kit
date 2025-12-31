@@ -9,7 +9,7 @@ async function main() {
     process.exit(1);
   }
 
-  const sdk = createSDK();
+  const sdk = await createSDK();
 
   try {
     await sdk.connect(); // Initialize SDK with authentication
