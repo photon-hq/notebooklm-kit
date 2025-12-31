@@ -11,6 +11,8 @@ async function main() {
   const sdk = createSDK();
 
   try {
+    await sdk.connect(); // Initialize SDK with authentication
+
     const notebook = await sdk.notebooks.get(NOTEBOOK_ID);
 
     console.log(`Notebook: ${notebook.title}`);

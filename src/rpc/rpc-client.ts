@@ -66,6 +66,22 @@ export class RPCClient {
   }
   
   /**
+   * Update cookies (called when credentials are refreshed)
+   */
+  updateCookies(cookies: string): void {
+    this.config.cookies = cookies;
+    // Update batch client cookies
+    this.batchClient.updateCookies(cookies);
+  }
+  
+  /**
+   * Get current cookies
+   */
+  getCookies(): string {
+    return this.config.cookies;
+  }
+  
+  /**
    * Execute an RPC call
    */
   async call(rpcId: string, args: any[], notebookId?: string): Promise<any> {

@@ -1,6 +1,6 @@
 {
   "name": "notebooklm-kit",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "description": "TypeScript SDK for NotebookLM API",
   "type": "module",
   "main": "./dist/index.js",
@@ -18,6 +18,8 @@
     "LICENSE"
   ],
   "scripts": {
+    "postinstall": "npx playwright install chromium",
+    "setup": "npm install && npx playwright install chromium",
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",

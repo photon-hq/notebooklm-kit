@@ -4,6 +4,8 @@ async function main() {
   const sdk = createSDK();
 
   try {
+    await sdk.connect(); // Initialize SDK with authentication
+
     // Create notebook with title
     const notebook1 = await sdk.notebooks.create({
       title: 'My Research Project',

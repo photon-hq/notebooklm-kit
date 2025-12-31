@@ -40,15 +40,43 @@ class ReqIDGenerator {
  */
 export class BatchExecuteClient {
   private config: BatchExecuteConfig;
+  
+  /**
+   * Update cookies (called when credentials are refreshed)
+   */
+  updateCookies(cookies: string): void {
+    this.config.cookies = cookies;
+  }
   private reqidGenerator: ReqIDGenerator;
   
   constructor(config: BatchExecuteConfig) {
-    // Set default retry configuration
+    // Get retry config from env vars or config, with very low defaults
+    const getEnvNumber = (key: string, defaultValue: number): number => {
+      try {
+        const value = process.env[key];
+        if (value) {
+          const parsed = parseInt(value, 10);
+          if (!isNaN(parsed)) {
+            return parsed;
+          }
+        }
+      } catch {
+        // Ignore env access errors
+      }
+      return defaultValue;
+    };
+    
+    // Set default retry configuration (very conservative - most requests succeed on first try)
+    // Defaults: 1 retry, 1s delay, 5s max delay
+    const maxRetries = config.maxRetries ?? getEnvNumber('NOTEBOOKLM_MAX_RETRIES', 1);
+    const retryDelay = config.retryDelay ?? getEnvNumber('NOTEBOOKLM_RETRY_DELAY', 1000);
+    const retryMaxDelay = config.retryMaxDelay ?? getEnvNumber('NOTEBOOKLM_RETRY_MAX_DELAY', 5000);
+    
     this.config = {
-      maxRetries: config.maxRetries ?? 1,
-      retryDelay: config.retryDelay ?? 1000,
-      retryMaxDelay: config.retryMaxDelay ?? 10000,
       ...config,
+      maxRetries,
+      retryDelay,
+      retryMaxDelay,
     };
     
     this.reqidGenerator = new ReqIDGenerator();
@@ -106,24 +134,21 @@ export class BatchExecuteClient {
     let lastResponseStatus: number | undefined;
     let lastResponseBody: string | undefined;
     
-    // Ensure maxRetries is a valid number
-    const maxRetries = this.config.maxRetries ?? 1;
-    const retryDelay = this.config.retryDelay ?? 1000;
-    const retryMaxDelay = this.config.retryMaxDelay ?? 10000;
-    
-    console.log('Retry Configuration:');
-    console.log('  maxRetries:', maxRetries);
-    console.log('  retryDelay:', retryDelay, 'ms');
-    console.log('  retryMaxDelay:', retryMaxDelay, 'ms');
+    // Use configured retry values (guaranteed to be defined after constructor)
+    const maxRetries = this.config.maxRetries!;
+    const retryDelay = this.config.retryDelay!;
+    const retryMaxDelay = this.config.retryMaxDelay!;
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      console.log(`\n🔄 Attempt ${attempt + 1}/${maxRetries + 1}`);
+      if (attempt > 0 && this.config.debug) {
+        console.log(`🔄 Retry attempt ${attempt}/${maxRetries}`);
+      }
       if (attempt > 0) {
         // Calculate retry delay with exponential backoff
         const multiplier = Math.pow(2, attempt - 1);
-        let delay = retryDelay * multiplier;
-        if (delay > retryMaxDelay) {
-          delay = retryMaxDelay;
+          let delay = retryDelay * multiplier;
+          if (delay > retryMaxDelay) {
+            delay = retryMaxDelay;
         }
         await this.sleep(delay);
       }
@@ -147,7 +172,7 @@ export class BatchExecuteClient {
           const errorMsg = (fetchError as Error)?.message || String(fetchError);
           if (this.config.debug) {
             console.error('\n❌ Fetch Error:', errorMsg);
-            console.error('URL:', url.toString());
+          console.error('URL:', url.toString());
           }
           lastError = fetchError instanceof Error ? fetchError : new Error(String(fetchError));
           if (this.isRetryableError(lastError) && attempt < maxRetries) {
@@ -167,7 +192,7 @@ export class BatchExecuteClient {
           const errorMsg = (readError as Error)?.message || String(readError);
           if (this.config.debug) {
             console.error('\n❌ Error Reading Response Body:', errorMsg);
-            console.error('Response status:', response.status);
+          console.error('Response status:', response.status);
           }
           lastError = readError instanceof Error ? readError : new Error(String(readError));
           if (this.isRetryableError(lastError) && attempt < maxRetries) {

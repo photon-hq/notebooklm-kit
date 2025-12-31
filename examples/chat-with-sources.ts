@@ -4,6 +4,8 @@ async function main() {
   const sdk = createSDK();
 
   try {
+    await sdk.connect(); // Initialize SDK with authentication
+
     // Get notebook ID, message, and source IDs from command line
     const notebookId = process.argv[2];
     const message = process.argv[3];

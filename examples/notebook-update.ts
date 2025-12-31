@@ -11,6 +11,7 @@ async function main() {
   const sdk = createSDK();
 
   try {
+    await sdk.connect(); // Initialize SDK with authentication
     // Update title only
     const updated1 = await sdk.notebooks.update(NOTEBOOK_ID, {
       title: 'Updated Title',

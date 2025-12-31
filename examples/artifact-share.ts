@@ -4,6 +4,8 @@ async function main() {
   const sdk = createSDK();
 
   try {
+    await sdk.connect(); // Initialize SDK with authentication
+
     const notebookId = process.env.NOTEBOOK_ID || 'your-notebook-id';
     const userEmails = process.env.USER_EMAILS?.split(',') || [];
     const accessType = process.env.ACCESS_TYPE === '1' ? 1 : 2; // 1=anyone with link, 2=restricted

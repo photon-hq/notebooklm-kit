@@ -4,6 +4,8 @@ async function main() {
   const sdk = createSDK();
 
   try {
+    await sdk.connect(); // Initialize SDK with authentication
+
     // Get notebook ID and config type from command line
     const notebookId = process.argv[2];
     const configType = process.argv[3] || 'default'; // 'default', 'custom', or 'learning-guide'

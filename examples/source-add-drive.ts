@@ -4,6 +4,8 @@ async function main() {
   const sdk = createSDK();
 
   try {
+    await sdk.connect(); // Initialize SDK with authentication
+
     const notebookId = process.env.NOTEBOOK_ID || 'your-notebook-id';
     const fileId = process.env.GOOGLE_DRIVE_FILE_ID || 'your-file-id';
 

@@ -168,11 +168,21 @@ export {
 } from './utils/errors.js';
 export type { ErrorCode } from './utils/errors.js';
 
-// Auth utilities (credential refresh)
+// Auth utilities (auto-login and credential refresh)
+export {
+  getCredentials,
+  autoLogin,
+  saveCredentials,
+  loadCredentials,
+  deleteCredentials,
+} from './auth/auth.js';
+export type { Credentials, AuthConfig } from './auth/auth.js';
+
 export {
   RefreshClient,
   AutoRefreshManager,
   extractGSessionId,
+  parseAuthToken,
   defaultAutoRefreshConfig,
 } from './auth/refresh.js';
 export type { AutoRefreshConfig } from './auth/refresh.js';
@@ -184,6 +194,7 @@ export {
   validateTextSource,
   validateFileSize,
   NOTEBOOKLM_LIMITS,
+  PLAN_LIMITS,
 } from './utils/quota.js';
-export type { UsageData } from './utils/quota.js';
+export type { UsageData, NotebookLMPlan, PlanLimits } from './utils/quota.js';
 

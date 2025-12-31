@@ -10,6 +10,7 @@ import { NotesService } from '../services/notes.js';
 import { ArtifactsService } from '../services/artifacts.js';
 import { GenerationService } from '../services/generation.js';
 import { AutoRefreshManager, defaultAutoRefreshConfig } from '../auth/refresh.js';
+import { getCredentials, type Credentials } from '../auth/auth.js';
 import { QuotaManager } from '../utils/quota.js';
 import type { NotebookLMConfig } from '../types/common.js';
 
@@ -61,9 +62,18 @@ import type { NotebookLMConfig } from '../types/common.js';
  * Always call `sdk.dispose()` when done to stop auto-refresh and clean up resources.
  */
 export class NotebookLMClient {
-  private rpcClient: RPCClient;
+  private rpcClient?: RPCClient;
   private refreshManager?: AutoRefreshManager;
   private quotaManager: QuotaManager;
+  private config: NotebookLMConfig;
+  private credentials?: Credentials;
+  private initialized: boolean = false;
+  
+  private _notebooks?: NotebooksService;
+  private _sources?: SourcesService;
+  private _notes?: NotesService;
+  private _artifacts?: ArtifactsService;
+  private _generation?: GenerationService;
   
   /**
    * Notebook operations
@@ -76,7 +86,12 @@ export class NotebookLMClient {
    * await sdk.notebooks.update(notebook.projectId, { title: 'Updated Title' });
    * ```
    */
-  public readonly notebooks: NotebooksService;
+  get notebooks(): NotebooksService {
+    if (!this._notebooks) {
+      throw new Error('SDK not initialized. Call await sdk.connect() first.');
+    }
+    return this._notebooks;
+  }
   
   /**
    * Source operations
@@ -89,7 +104,12 @@ export class NotebookLMClient {
    * await sdk.sources.addYouTube('notebook-id', { urlOrId: 'video-id' });
    * ```
    */
-  public readonly sources: SourcesService;
+  get sources(): SourcesService {
+    if (!this._sources) {
+      throw new Error('SDK not initialized. Call await sdk.connect() first.');
+    }
+    return this._sources;
+  }
   
   /**
    * Note operations
@@ -101,7 +121,12 @@ export class NotebookLMClient {
    * const note = await sdk.notes.create('notebook-id', { title: 'Note', content: '...' });
    * ```
    */
-  public readonly notes: NotesService;
+  get notes(): NotesService {
+    if (!this._notes) {
+      throw new Error('SDK not initialized. Call await sdk.connect() first.');
+    }
+    return this._notes;
+  }
   
   /**
    * Artifact operations
@@ -118,7 +143,12 @@ export class NotebookLMClient {
    * });
    * ```
    */
-  public readonly artifacts: ArtifactsService;
+  get artifacts(): ArtifactsService {
+    if (!this._artifacts) {
+      throw new Error('SDK not initialized. Call await sdk.connect() first.');
+    }
+    return this._artifacts;
+  }
   
   /**
    * Generation operations
@@ -130,7 +160,12 @@ export class NotebookLMClient {
    * const guide = await sdk.generation.generateNotebookGuide('notebook-id');
    * ```
    */
-  public readonly generation: GenerationService;
+  get generation(): GenerationService {
+    if (!this._generation) {
+      throw new Error('SDK not initialized. Call await sdk.connect() first.');
+    }
+    return this._generation;
+  }
   
   /**
    * Create a new NotebookLM client
@@ -189,63 +224,124 @@ export class NotebookLMClient {
    * const notebooks = await client.notebooks.list();
    * ```
    */
-  constructor(config: NotebookLMConfig) {
-    // Validate required fields
-    if (!config.authToken) {
-      throw new Error('authToken is required. Set NOTEBOOKLM_AUTH_TOKEN environment variable or pass it in config.');
+  constructor(config: NotebookLMConfig = {}) {
+    // Store config for lazy initialization
+    this.config = config;
+    this.quotaManager = new QuotaManager(
+      config.enforceQuotas === true, // Default to false
+      config.plan || 'standard' // Default to standard plan
+    );
+    
+    // Services will be initialized when connect() is called
+  }
+  
+  /**
+   * Connect / Initialize the client
+   * Loads credentials (from config, env, saved, or auto-login) and sets up services
+   * This must be called before using any services
+   * 
+   * @example
+   * ```typescript
+   * const sdk = new NotebookLMClient({});
+   * await sdk.connect();
+   * const notebooks = await sdk.notebooks.list();
+   * ```
+   */
+  async connect(): Promise<void> {
+    if (this.initialized) {
+      return;
     }
     
-    if (!config.cookies) {
-      throw new Error('cookies is required. Set NOTEBOOKLM_COOKIES environment variable or pass it in config.');
-    }
+    // Get credentials (from config, env, saved, or auto-login)
+    const credentials = await getCredentials(
+      {
+        authToken: this.config.authToken,
+        cookies: this.config.cookies,
+      },
+      {
+        email: this.config.auth?.email,
+        password: this.config.auth?.password,
+        headless: this.config.auth?.headless ?? true,
+        debug: this.config.debug,
+      }
+    );
     
-    // Create RPC client
+    this.credentials = credentials;
+    
+    // Create RPC client with credentials
     this.rpcClient = new RPCClient({
-      authToken: config.authToken,
-      cookies: config.cookies,
-      debug: config.debug,
-      authUser: config.authUser,
-      headers: config.headers,
-      urlParams: config.urlParams,
-      maxRetries: config.maxRetries,
-      retryDelay: config.retryDelay,
-      retryMaxDelay: config.retryMaxDelay,
+      authToken: credentials.authToken,
+      cookies: credentials.cookies,
+      debug: this.config.debug,
+      authUser: this.config.authUser,
+      headers: this.config.headers,
+      urlParams: this.config.urlParams,
+      maxRetries: this.config.maxRetries,
+      retryDelay: this.config.retryDelay,
+      retryMaxDelay: this.config.retryMaxDelay,
     });
     
-    // Initialize quota manager (enabled by default)
-    this.quotaManager = new QuotaManager(config.enforceQuotas !== false);
-    
-    // Initialize services with quota manager
-    this.notebooks = new NotebooksService(this.rpcClient, this.quotaManager);
-    this.sources = new SourcesService(this.rpcClient, this.quotaManager);
-    this.notes = new NotesService(this.rpcClient, this.quotaManager);
-    this.artifacts = new ArtifactsService(this.rpcClient, this.quotaManager);
-    this.generation = new GenerationService(this.rpcClient, this.quotaManager);
+    // Create services
+    this._notebooks = new NotebooksService(this.rpcClient, this.quotaManager);
+    this._sources = new SourcesService(this.rpcClient, this.quotaManager);
+    this._notes = new NotesService(this.rpcClient, this.quotaManager);
+    this._artifacts = new ArtifactsService(this.rpcClient, this.quotaManager);
+    this._generation = new GenerationService(this.rpcClient, this.quotaManager);
     
     // Setup auto-refresh if enabled
-    // Default: enabled with 10-minute interval
-    // Set autoRefresh: false to disable, or configure custom interval
-    if (config.autoRefresh !== false) {
-      const autoRefreshConfig = config.autoRefresh;
+    if (this.config.autoRefresh !== false) {
+      const autoRefreshConfig = this.config.autoRefresh;
       const refreshConfig = typeof autoRefreshConfig === 'boolean' || autoRefreshConfig === undefined
         ? defaultAutoRefreshConfig()
         : {
             enabled: autoRefreshConfig.enabled !== false,
-            interval: autoRefreshConfig.interval || 10 * 60 * 1000, // Default: 10 minutes
+            strategy: autoRefreshConfig.strategy || 'auto',
+            interval: autoRefreshConfig.interval || 10 * 60 * 1000,
+            refreshAhead: autoRefreshConfig.refreshAhead || 5 * 60 * 1000,
+            checkInterval: autoRefreshConfig.checkInterval || 60 * 1000,
             gsessionId: autoRefreshConfig.gsessionId,
-            debug: config.debug,
+            authToken: credentials.authToken,
+            debug: this.config.debug,
+            onCredentialsUpdate: (updated: Credentials) => {
+              // Update credentials and RPC client when refreshed
+              this.credentials = updated;
+              if (this.rpcClient) {
+                this.rpcClient.updateCookies(updated.cookies);
+              }
+            },
           };
       
-      this.refreshManager = new AutoRefreshManager(config.cookies, refreshConfig);
+      this.refreshManager = new AutoRefreshManager(credentials.cookies, refreshConfig);
       
-      // Start auto-refresh asynchronously (don't block constructor)
-      // Initial refresh happens immediately, then periodic refreshes at configured interval
+      // Start auto-refresh asynchronously
       this.refreshManager.start().catch(error => {
-        if (config.debug) {
+        if (this.config.debug) {
           console.error('Failed to start auto-refresh:', error.message);
         }
       });
     }
+    
+    this.initialized = true;
+  }
+  
+  /**
+   * Ensure client is connected (called before operations)
+   */
+  private async ensureConnected(): Promise<void> {
+    if (!this.initialized) {
+      await this.connect();
+    }
+  }
+  
+  /**
+   * Get RPC client (ensures connection)
+   */
+  private async getRPCClientInternal(): Promise<RPCClient> {
+    await this.ensureConnected();
+    if (!this.rpcClient) {
+      throw new Error('RPC client not initialized');
+    }
+    return this.rpcClient;
   }
   
   // ========================================================================
@@ -258,8 +354,8 @@ export class NotebookLMClient {
    * 
    * @returns The RPC client instance
    */
-  getRPCClient(): RPCClient {
-    return this.rpcClient;
+  async getRPCClient(): Promise<RPCClient> {
+    return this.getRPCClientInternal();
   }
   
   /**
@@ -282,7 +378,8 @@ export class NotebookLMClient {
    * ```
    */
   async rpc(rpcId: string, args: any[], notebookId?: string): Promise<any> {
-    return this.rpcClient.call(rpcId, args, notebookId);
+    const rpc = await this.getRPCClientInternal();
+    return rpc.call(rpcId, args, notebookId);
   }
   
   // ========================================================================
@@ -396,6 +493,7 @@ export class NotebookLMClient {
    * @example
    * ```typescript
    * const sdk = new NotebookLMClient({ ... });
+   * await sdk.connect();
    * 
    * // Use the client...
    * await sdk.notebooks.list();
@@ -407,7 +505,9 @@ export class NotebookLMClient {
   dispose(): void {
     if (this.refreshManager) {
       this.refreshManager.stop();
+      this.refreshManager = undefined;
     }
+    this.initialized = false;
   }
 }
 

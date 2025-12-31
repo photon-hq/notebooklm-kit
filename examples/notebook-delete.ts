@@ -7,6 +7,8 @@ async function main() {
   const sdk = createSDK();
 
   try {
+    await sdk.connect(); // Initialize SDK with authentication
+
     if (NOTEBOOK_IDS && NOTEBOOK_IDS.length > 0) {
       // Delete multiple notebooks
       const result = await sdk.notebooks.delete(NOTEBOOK_IDS);

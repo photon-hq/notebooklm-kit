@@ -4,6 +4,8 @@ async function main() {
   const sdk = createSDK();
 
   try {
+    await sdk.connect(); // Initialize SDK with authentication
+
     const artifactId = process.env.ARTIFACT_ID || 'your-artifact-id';
     const newTitle = process.env.NEW_TITLE || 'My Renamed Artifact';
 

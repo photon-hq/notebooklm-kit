@@ -4,6 +4,8 @@ async function main() {
   const sdk = createSDK();
 
   try {
+    await sdk.connect(); // Initialize SDK with authentication
+
     const artifactId = process.env.ARTIFACT_ID || 'your-artifact-id';
     const notebookId = process.env.NOTEBOOK_ID; // Optional, required for audio/video
 

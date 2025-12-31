@@ -911,7 +911,7 @@ export class ArtifactsService {
           }
           
           // Get artifact list response to extract image URLs
-          const artifactsListResponse = await this.rpc.call(RPC.RPC_LIST_ARTIFACTS, [[2], notebookId], notebookId);
+              const artifactsListResponse = await this.rpc.call(RPC.RPC_LIST_ARTIFACTS, [[2], notebookId], notebookId);
           const imageUrls = extractSlideImageUrls(artifactsListResponse, artifactId);
           
           if (imageUrls.length === 0) {

@@ -6,6 +6,8 @@ async function main() {
   const sdk = createSDK();
 
   try {
+    await sdk.connect(); // Initialize SDK with authentication
+
     const notebookId = process.env.NOTEBOOK_ID || 'your-notebook-id';
 
     console.log('=== Adding File Source ===\n');

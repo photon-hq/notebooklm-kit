@@ -7,19 +7,49 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, '..', '.env') });
 
+/**
+ * Create and initialize SDK with auto-login
+ * Uses auto-login by default (GOOGLE_EMAIL, GOOGLE_PASSWORD from env)
+ * Falls back to manual credentials if provided (NOTEBOOKLM_AUTH_TOKEN, NOTEBOOKLM_COOKIES)
+ */
 export function createSDK(): NotebookLMClient {
+  const googleEmail = process.env.GOOGLE_EMAIL;
+  const googlePassword = process.env.GOOGLE_PASSWORD;
   const authToken = process.env.NOTEBOOKLM_AUTH_TOKEN;
   const cookies = process.env.NOTEBOOKLM_COOKIES;
 
-  if (!authToken || !cookies) {
-    throw new Error('NOTEBOOKLM_AUTH_TOKEN and NOTEBOOKLM_COOKIES must be set in .env file');
+  // Prefer auto-login if email/password are provided
+  if (googleEmail && googlePassword) {
+    return new NotebookLMClient({
+      auth: {
+        email: googleEmail,
+        password: googlePassword,
+        headless: true, // Run in headless mode for examples
+      },
+      autoRefresh: true,
+      // Quota enforcement disabled by default
+      enforceQuotas: false,
+    });
   }
 
-  return new NotebookLMClient({
-    authToken,
-    cookies,
-    autoRefresh: true,
-  });
+  // Fallback to manual credentials
+  if (authToken && cookies) {
+    return new NotebookLMClient({
+      authToken,
+      cookies,
+      autoRefresh: true,
+      // Quota enforcement disabled by default
+      enforceQuotas: false,
+    });
+  }
+
+  // No credentials provided
+  throw new Error(
+    'Authentication required. Provide either:\n' +
+    '  - GOOGLE_EMAIL and GOOGLE_PASSWORD (for auto-login)\n' +
+    '  - NOTEBOOKLM_AUTH_TOKEN and NOTEBOOKLM_COOKIES (for manual credentials)\n' +
+    'Set these in your .env file'
+  );
 }
 
 export function handleError(error: unknown, context: string): never {

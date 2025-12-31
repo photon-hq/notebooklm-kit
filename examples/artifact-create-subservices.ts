@@ -23,6 +23,8 @@ async function main() {
   const sdk = createSDK();
 
   try {
+    await sdk.connect(); // Initialize SDK with authentication
+
     const notebookId = process.env.NOTEBOOK_ID || 'your-notebook-id';
     const sourceIds = process.env.SOURCE_IDS?.split(',') || [];
 

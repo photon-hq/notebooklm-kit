@@ -5,6 +5,8 @@ async function main() {
   const sdk = createSDK();
 
   try {
+    await sdk.connect(); // Initialize SDK with authentication
+
     const notebooks: Notebook[] = await sdk.notebooks.list();
     console.log(`Found ${notebooks.length} notebooks\n`);
 

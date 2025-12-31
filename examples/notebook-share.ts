@@ -12,6 +12,7 @@ async function main() {
   const sdk = createSDK();
 
   try {
+    await sdk.connect(); // Initialize SDK with authentication
     if (USER_EMAILS && USER_EMAILS.length > 0) {
       // Share with specific users
       const result = await sdk.notebooks.share(NOTEBOOK_ID, {

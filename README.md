@@ -25,9 +25,17 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 
 ## Installation
 
+**From npm:**
 ```bash
-npm install notebooklm-kit
+npm install notebooklm-kit && npx playwright install chromium
 ```
+
+**From GitHub:**
+```bash
+git clone https://github.com/photon-hq/notebooklm-kit.git && cd notebooklm-kit && npm install && npx playwright install chromium
+```
+
+**Requirements:** Node.js >=18.0.0
 
 ## Features
 
@@ -95,55 +103,277 @@ npm install notebooklm-kit
 | Update Note | Update a note | [`sdk.notes.update(notebookId, noteId, options)`](#update-note) | [note-update.ts](examples/note-update.ts) |
 | Delete Note | Delete a note | [`sdk.notes.delete(notebookId, noteIds)`](#delete-note) | [note-delete.ts](examples/note-delete.ts) |
 
+## Core Concepts
+
+### SDK Initialization
+
+**Methods:** `sdk.connect()` | `sdk.dispose()`
+
+**Connect:**
+```typescript
+const sdk = new NotebookLMClient({
+  auth: { email: '...', password: '...' },
+  // or
+  authToken: '...',
+  cookies: '...',
+});
+
+await sdk.connect(); // Initialize SDK, authenticate, start auto-refresh
+// Now you can use sdk.notebooks, sdk.sources, etc.
+```
+
+**Dispose:**
+```typescript
+await sdk.dispose(); // Stop auto-refresh, clean up resources
+```
+
+<details>
+<summary><strong>Connection Flow</strong></summary>
+
+1. **Credentials Resolution** (in priority order):
+   - Provided in config (`authToken`/`cookies`)
+   - Environment variables (`NOTEBOOKLM_AUTH_TOKEN`/`NOTEBOOKLM_COOKIES`)
+   - Saved credentials (`~/.notebooklm/credentials.json`)
+   - Auto-login (if `auth.email`/`auth.password` provided)
+
+2. **Initialization:**
+   - Creates RPC client with credentials
+   - Initializes all services (`notebooks`, `sources`, `artifacts`, etc.)
+   - Starts auto-refresh manager (if enabled)
+
+3. **Auto-Refresh:**
+   - Begins automatically after `connect()`
+   - Runs in background, doesn't block operations
+   - Updates credentials and cookies automatically
+
+</details>
+
+<details>
+<summary><strong>Cleanup</strong></summary>
+
+**Always call `dispose()` when done:**
+- Stops auto-refresh background timers
+- Prevents memory leaks
+- Resets client state
+- Required for graceful shutdown
+
+```typescript
+try {
+  await sdk.connect();
+  // ... use SDK ...
+} finally {
+  await sdk.dispose(); // Always cleanup
+}
+```
+
+</details>
+
+### Authentication
+
+| Concept | Format | Details |
+|---------|--------|---------|
+| **Auth Token** | `"tokenValue:timestamp"` | Format: `ACi2F2NZSD7yrNvFMrCkP3vZJY1R:1766720233448`<br>Expires: 1 hour after timestamp<br>Extract: `window.WIZ_global_data.SNlM0e` in NotebookLM console |
+| **Cookies** | Semicolon-separated string | `_ga=...; SID=...; SAPISID=...; ...`<br>Long-lived (2+ years for SAPISID)<br>Critical cookie: `SAPISID` (for refresh) |
+| **Auto-Login** | Email + Password | Uses Playwright headless browser<br>Extracts credentials automatically<br>Saves to `~/.notebooklm/credentials.json` |
+
+<details>
+<summary><strong>Credential Refresh Endpoint</strong></summary>
+
+**URL:** `https://signaler-pa.clients6.google.com/punctual/v1/refreshCreds`
+
+**Method:** POST
+
+**Headers:**
+- `Authorization: SAPISIDHASH <timestamp>_<hash>`
+- `Cookie: <full cookie string>`
+- `Content-Type: application/json+protobuf`
+
+**SAPISIDHASH:** `SHA1(timestamp + " " + SAPISID + " " + origin)`<br>
+**Origin:** `https://notebooklm.google.com`
+
+**Purpose:** Extends session validity without re-authentication
+
+</details>
+
+<details>
+<summary><strong>Auto-Refresh Strategies</strong></summary>
+
+| Strategy | Description | When to Use | Default |
+|----------|-------------|-------------|---------|
+| **auto** | Expiration-based + time-based fallback | Most use cases (recommended) | ✅ Yes |
+| **time** | Fixed interval refresh | Testing, simple scenarios | 10 min |
+| **expiration** | Only when token expires | Maximum efficiency, production | 5 min before expiry |
+
+```typescript
+// Auto (default - recommended)
+autoRefresh: { strategy: 'auto' }
+
+// Time-based
+autoRefresh: { strategy: 'time', interval: 10 * 60 * 1000 }
+
+// Expiration-based
+autoRefresh: { strategy: 'expiration', refreshAhead: 5 * 60 * 1000 }
+```
+
+</details>
+
+### Quota Limits
+
+Reference: [Official Documentation](https://support.google.com/notebooklm/answer/16213268)
+
+**Plan Types:** `standard` (default) | `plus` | `pro` | `ultra`
+
+| Limit | Standard | Plus | Pro | Ultra |
+|-------|----------|------|-----|-------|
+| **Notebooks** | 100/user | 200/user | 500/user | 500/user |
+| **Sources/Notebook** | 50 | 100 | 300 | 600 |
+| **Words/Source** | 500,000 | 500,000 | 500,000 | 500,000 |
+| **File Size** | 200MB | 200MB | 200MB | 200MB |
+| **Chats/Day** | 50 | 200 | 500 | 5,000 |
+| **Audio/Video/Day** | 3 | 6 | 20 | 200 |
+| **Reports/Day** | 10 | 20 | 100 | 1,000 |
+| **Deep Research/Month** | 10 | 90 | 600 | 6,000 |
+| **Mind Maps** | Unlimited | Unlimited | Unlimited | Unlimited |
+
+<details>
+<summary><strong>Important Notes</strong></summary>
+
+- **Daily quotas** reset after 24 hours
+- **Monthly quotas** reset after 30 days
+- **Word/File Limits:** NotebookLM rejects sources >500k words or >200MB. Copy-protected PDFs cannot be imported.
+- **Server-Side Enforcement:** Data Tables, Infographics, Slides (limits vary)
+- **Client-Side Validation:** Optional (`enforceQuotas: true`), disabled by default
+- **Plan Selection:** Set during SDK initialization: `plan: 'pro'`
+
+</details>
+
 ## Authentication
 
-### Setup `.env` File
+### Auto-Login (Recommended)
 
-Create a `.env` file in your project root:
+**Method:** Use `auth` config with email/password
+
+```typescript
+const sdk = new NotebookLMClient({
+  auth: {
+    email: process.env.GOOGLE_EMAIL,
+    password: process.env.GOOGLE_PASSWORD,
+    headless: true, // default: true
+  },
+});
+
+await sdk.connect(); // Logs in, extracts credentials, saves to ~/.notebooklm/credentials.json
+```
+
+<details>
+<summary><strong>Environment Variables</strong></summary>
 
 ```bash
 # .env
+
+# Auto-login (recommended)
+GOOGLE_EMAIL="your-email@gmail.com"
+GOOGLE_PASSWORD="your-password"
+
+# Manual credentials (alternative)
 NOTEBOOKLM_AUTH_TOKEN="ACi2F2NZSD7yrNvFMrCkP3vZJY1R:1766720233448"
-NOTEBOOKLM_COOKIES="_ga=GA1.1.1949425436.1764104083; SID=g.a0005AiwX...; __Secure-1PSID=g.a0005AiwX...; APISID=2-7oUEYiopHvktji/Adx9rNhzIF8Oe-MPI; SAPISID=eMePV31yEdEOSnUq/AFdcsHac_J0t3DMBT; ..."
+NOTEBOOKLM_COOKIES="_ga=GA1.1.1949425436.1764104083; SID=g.a0005AiwX...; ..."
+
+# Retry configuration (optional)
+NOTEBOOKLM_MAX_RETRIES=1          # Default: 1
+NOTEBOOKLM_RETRY_DELAY=1000       # Default: 1000ms
+NOTEBOOKLM_RETRY_MAX_DELAY=5000   # Default: 5000ms
 ```
 
-**Getting Credentials:**
+**Important:** Account must NOT have 2FA enabled (or use app-specific passwords)
 
-1. **Auth Token**: Open https://notebooklm.google.com → Developer Tools (F12) → Console → Run: `window.WIZ_global_data.SNlM0e`
-2. **Cookies**: Developer Tools → Network tab → Find any request → Headers → Copy Cookie value
+</details>
 
-### Auto-Refresh
+### Manual Credentials
 
-Auto-refresh keeps your session alive automatically:
+**Method:** Provide `authToken` and `cookies` directly
 
 ```typescript
-// Default: enabled with 10-minute interval
 const sdk = new NotebookLMClient({
   authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
   cookies: process.env.NOTEBOOKLM_COOKIES!,
+  enforceQuotas: true, // optional
+  plan: 'standard', // optional: 'standard' | 'plus' | 'pro' | 'ultra'
+});
+
+await sdk.connect();
+```
+
+<details>
+<summary><strong>Getting Credentials</strong></summary>
+
+1. **Auth Token**: Open https://notebooklm.google.com → DevTools (F12) → Console → Run: `window.WIZ_global_data.SNlM0e`
+2. **Cookies**: DevTools → Network tab → Any request → Headers → Copy Cookie value
+
+</details>
+
+### Auto-Refresh Configuration
+
+**Default:** Enabled with `'auto'` strategy (recommended)
+
+```typescript
+// Default: auto strategy (expiration-based + time-based fallback)
+const sdk = new NotebookLMClient({
+  auth: { email: '...', password: '...' },
   // autoRefresh: true (default)
-})
+});
 
-// Custom interval
-const sdk = new NotebookLMClient({
-  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
-  cookies: process.env.NOTEBOOKLM_COOKIES!,
-  autoRefresh: {
-    enabled: true,
-    interval: 5 * 60 * 1000, // 5 minutes
-  },
-})
+// Time-based (simple, predictable)
+autoRefresh: { strategy: 'time', interval: 10 * 60 * 1000 }
 
-// Disable auto-refresh
-const sdk = new NotebookLMClient({
-  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
-  cookies: process.env.NOTEBOOKLM_COOKIES!,
-  autoRefresh: false,
-})
+// Expiration-based (maximum efficiency)
+autoRefresh: { strategy: 'expiration', refreshAhead: 5 * 60 * 1000 }
+
+// Disable
+autoRefresh: false
 
 // Manual refresh
-await sdk.refreshCredentials()
+await sdk.refreshCredentials();
 ```
+
+<details>
+<summary><strong>Auto-Refresh Details</strong></summary>
+
+- Credentials updated automatically after refresh
+- Cookies kept in sync
+- Runs in background, doesn't block operations
+- See [Auto-Refresh Strategies](#auto-refresh-strategies) in Core Concepts
+
+</details>
+
+### Quota Management
+
+**Method:** `sdk.getUsage()` | `sdk.getRemaining()` | `sdk.getQuotaManager()`
+
+```typescript
+const sdk = new NotebookLMClient({
+  auth: { email: '...', password: '...' },
+  enforceQuotas: true, // Enable client-side validation (disabled by default)
+  plan: 'pro', // Set plan for accurate limits
+});
+
+await sdk.connect();
+
+// Check usage
+const usage = sdk.getUsage();
+const remaining = sdk.getRemaining('chats');
+const limits = sdk.getQuotaManager().getLimits();
+```
+
+<details>
+<summary><strong>Quota Notes</strong></summary>
+
+- **Disabled by default** - enable with `enforceQuotas: true`
+- Throws `RateLimitError` if limit exceeded (when enabled)
+- Server-side enforcement always active (even if client-side disabled)
+- See [Quota Limits](#quota-limits) table in Core Concepts
+
+</details>
 
 ## Notebooks
 
