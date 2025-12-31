@@ -7,7 +7,17 @@ import * as readline from 'readline';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+// Suppress dotenv log messages
+const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+process.stdout.write = (chunk: any, encoding?: any, cb?: any) => {
+  if (typeof chunk === 'string' && chunk.includes('[dotenv@')) {
+    return true; // Suppress dotenv messages
+  }
+  return originalStdoutWrite(chunk, encoding, cb);
+};
 dotenv.config({ path: join(__dirname, '..', '.env') });
+// Restore stdout
+process.stdout.write = originalStdoutWrite;
 
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36';
 
