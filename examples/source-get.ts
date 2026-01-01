@@ -55,7 +55,10 @@ async function main() {
     await sdk.connect(); // Initialize SDK with authentication
 
     const notebookId = process.env.NOTEBOOK_ID || 'your-notebook-id';
-    const sourceId = process.env.SOURCE_ID || 'your-source-id';
+    // Support both SOURCE_ID (singular) and SOURCE_IDS (plural) for consistency
+    // For single source operations, takes first ID if SOURCE_IDS is provided
+    const sourceIdsEnv = process.env.SOURCE_ID || process.env.SOURCE_IDS || '';
+    const sourceId = sourceIdsEnv.split(',')[0].trim() || 'your-source-id';
 
     console.log('=== Getting Source ===\n');
 
@@ -94,7 +97,7 @@ async function main() {
         console.log(`   Metadata:`, sourceData.metadata);
       }
     } else {
-      console.log('2. Set SOURCE_ID in .env to get a specific source');
+      console.log('2. Set SOURCE_ID or SOURCE_IDS in .env to get a specific source');
     }
   } catch (error) {
     handleError(error, 'Failed to get source');

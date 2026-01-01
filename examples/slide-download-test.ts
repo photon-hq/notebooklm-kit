@@ -330,22 +330,22 @@ async function saveImages(
       const sdk = await createSDK();
       await sdk.connect();
       console.log('✓ SDK connected successfully\n');
-      
-      // First verify credentials by trying to list notebooks
-      console.log('=== Verifying Credentials and Listing Notebooks ===\n');
-      let notebooks;
-      try {
+    
+    // First verify credentials by trying to list notebooks
+    console.log('=== Verifying Credentials and Listing Notebooks ===\n');
+    let notebooks;
+    try {
         notebooks = await sdk.notebooks.list();
-        console.log(`✓ Credentials valid. Found ${notebooks.length} notebook(s)\n`);
-      } catch (error: any) {
-        if (error.message?.includes('Permission denied') || error.message?.includes('290')) {
-          throw new Error(
-            'Permission denied: Your credentials may be expired or invalid.\n' +
-            'Please verify your credentials are current and try again.'
-          );
-        }
-        throw error;
+      console.log(`✓ Credentials valid. Found ${notebooks.length} notebook(s)\n`);
+    } catch (error: any) {
+      if (error.message?.includes('Permission denied') || error.message?.includes('290')) {
+        throw new Error(
+          'Permission denied: Your credentials may be expired or invalid.\n' +
+          'Please verify your credentials are current and try again.'
+        );
       }
+      throw error;
+    }
     
     // Prompt user to select a notebook
     if (notebooks.length === 0) {
@@ -414,15 +414,6 @@ async function saveImages(
       [[2], notebookId], // [2] is artifact type filter for SLIDE_DECK
       notebookId
     );
-    
-    // Save the full response for analysis
-    const responseDir = path.join(process.cwd(), 'download testing', 'How to Reverse Engineer and Replicate API and RPC Calls');
-    await fs.mkdir(responseDir, { recursive: true });
-    const responseFilePath = path.join(responseDir, `artifacts-list-response-${selectedArtifact.artifactId}.json`);
-    await fs.writeFile(responseFilePath, JSON.stringify(artifactsListResponse, null, 2));
-    const responseTxtPath = path.join(responseDir, `artifacts-list-response-${selectedArtifact.artifactId}.txt`);
-    await fs.writeFile(responseTxtPath, JSON.stringify(artifactsListResponse));
-    console.log(`✓ Saved full RPC response to: ${responseFilePath}\n`);
     
     // Parse the response - it might be double-encoded JSON (string containing JSON)
     let parsedResponse = artifactsListResponse;
@@ -532,10 +523,9 @@ async function saveImages(
     if (imageUrls.length === 0) {
       console.error('No image URLs found in artifact data.');
       console.error('\nTo debug:');
-      console.error(`1. Check the saved response file: ${responseFilePath}`);
-      console.error(`2. Search for "lh3.googleusercontent.com/notebooklm" in the file`);
-      console.error(`3. The slide deck may not be ready or the format may have changed.`);
-      throw new Error('No image URLs found in artifact data. See saved response files for debugging.');
+      console.error(`1. The slide deck may not be ready or the format may have changed.`);
+      console.error(`2. Try checking the artifact state with: await sdk.artifacts.get('${selectedArtifact.artifactId}')`);
+      throw new Error('No image URLs found in artifact data.');
     }
     
     // Remove duplicates and sort
@@ -643,14 +633,8 @@ async function saveImages(
       throw new Error('No images were successfully downloaded');
     }
     
-    console.log(`\n=== Saving Images ===\n`);
-    const outputDir = path.join(process.cwd(), 'downloads', selectedArtifact.artifactId);
-    const savedPaths = await saveImages(images, outputDir, selectedArtifact.title || 'slides');
-    
-    console.log(`\n✓ Successfully downloaded ${images.length} slide(s) to: ${outputDir}`);
-    console.log(`\nNote: To combine images into a PDF, you can use:`);
-    console.log(`  - ImageMagick: convert ${outputDir}/slide_*.png ${outputDir}/slides.pdf`);
-      console.log(`  - Python PIL: python -c "from PIL import Image; import glob; images = [Image.open(f).convert('RGB') for f in sorted(glob.glob('${outputDir}/slide_*.png'))]; images[0].save('${outputDir}/slides.pdf', save_all=True, append_images=images[1:])"`);
+    console.log(`\n✓ Successfully downloaded ${images.length} slide image(s) in memory`);
+    console.log(`\nNote: Images are available in memory. To save them, modify the script to write them to files.`);
       
       // Close browser after all downloads are complete
       if (browser) {

@@ -1802,31 +1802,49 @@ export class ArtifactsService {
     const apiType = this.getApiTypeNumber(artifactType);
     
     // Format source IDs as nested arrays: [[[sourceId1]], [[sourceId2]]]
-    const formattedSourceIds = sourceIds.map(id => [[id]]);
+    // If empty, use null (API will use all sources)
+    const formattedSourceIds = sourceIds.length > 0 ? sourceIds.map(id => [[id]]) : null;
     
     // Build the base structure: [null, null, type, sourceIds, ...nulls, customization]
+    // For Quiz/Flashcards: array should have exactly 10 elements (0-9) per curl request
+    // For Slides/Infographics: array needs 16 elements (0-15) for customization at index 15
+    // For Audio: array needs at least 7 elements (0-6) for customization at index 6
+    // For Video: array needs at least 9 elements (0-8) for customization at index 8
+    const needsExtendedArray = artifactType === ArtifactType.SLIDE_DECK || 
+                               artifactType === ArtifactType.INFOGRAPHIC ||
+                               artifactType === ArtifactType.AUDIO ||
+                               artifactType === ArtifactType.VIDEO;
+    
+    const innerArray: any[] = [
+      null,  // Index 0
+      null,  // Index 1
+      apiType,  // Index 2
+      formattedSourceIds,  // Index 3
+      null,  // Index 4
+      null,  // Index 5
+      null,  // Index 6 (Audio customization goes here)
+      null,  // Index 7
+      null,  // Index 8 (Video customization goes here)
+      null,  // Index 9 (Quiz/Flashcards customization goes here)
+    ];
+    
+    // Extend array for artifacts that need more indices
+    if (needsExtendedArray) {
+      innerArray.push(
+        null,  // Index 10
+        null,  // Index 11
+        null,  // Index 12
+        null,  // Index 13 (Infographic customization goes here)
+        null,  // Index 14
+        null,  // Index 15 (Slides customization goes here)
+      );
+    }
+    
     // Use any[] to avoid TypeScript errors with complex nested structure
     const args: any[] = [
       [2], // Mode
       notebookId,
-      [
-        null,
-        null,
-        apiType,
-        formattedSourceIds,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null, // Index 14
-        null, // Index 15 (for slides/infographics)
-      ],
+      innerArray,
     ];
     
     // Add customization based on artifact type
@@ -1885,7 +1903,7 @@ export class ArtifactsService {
         // Brief (rpcFormat === 2) stays null
       }
       
-      const sourceIdsFlat = formattedSourceIds.map(arr => arr[0]); // Flatten from [[[id]]] to [[id]]
+      const sourceIdsFlat = formattedSourceIds ? formattedSourceIds.map(arr => arr[0]) : []; // Flatten from [[[id]]] to [[id]]
       
       // CRITICAL: Audio customization is at INDEX 6, not 8!
       // Working structure from manual request: [null, [null, null, null, [[id1], [id2]], "en", null, length]]
@@ -1906,7 +1924,7 @@ export class ArtifactsService {
       // Structure from mm2.txt and mm16.txt examples
       // Always set customization array, even if no customization object provided
       const videoCustom = customization as VideoCustomization | undefined;
-      const sourceIdsFlat = formattedSourceIds.map(arr => arr[0]); // Flatten from [[[id]]] to [[id]]
+      const sourceIdsFlat = formattedSourceIds ? formattedSourceIds.map(arr => arr[0]) : []; // Flatten from [[[id]]] to [[id]]
       const format = videoCustom?.format ?? 1; // 1=Explainer, 2=Brief
       const visualStyle = videoCustom?.visualStyle ?? 0; // 0=Auto-select
       
@@ -1932,21 +1950,25 @@ export class ArtifactsService {
       ];
     }
     
-    // Optional customization for other artifacts (only if provided)
-    if (customization) {
+    // Quiz and Flashcards always need customization array set (even with defaults)
       if (artifactType === ArtifactType.QUIZ) {
         // Quiz customization at index 9: [null, [questionCount, null, instructions, null, null, null, null, [difficulty, difficulty]]]
         // Structure from mm11.txt: [null,[2,null,"hi",null,null,null,null,[3,3]]]
-        const quizCustom = customization as QuizCustomization;
-        const questionCount = quizCustom.numberOfQuestions ?? 2; // 1=Fewer, 2=Standard, 3=More
-        const difficulty = quizCustom.difficulty ?? 2; // 1=Easy, 2=Medium, 3=Hard
+      // Note: Index 2 is for instructions (string), not language
+      // ALWAYS set customization array, even if no customization object provided
+      const quizCustom = customization as QuizCustomization | undefined;
+      const questionCount = quizCustom?.numberOfQuestions ?? 2; // 1=Fewer, 2=Standard, 3=More
+      const difficulty = quizCustom?.difficulty ?? 2; // 1=Easy, 2=Medium, 3=Hard
+      
+      // Use instructions at index 2 (not language - Quiz doesn't support language in customization)
+      const instructionsText = instructions || null;
         
         (args[2] as any[])[9] = [
           null,
           [
             questionCount,
             null,
-            quizCustom.language || instructions || null, // Language or instructions at index 2
+          instructionsText, // Instructions at index 2 (curl shows "hi" here, not language)
             null,
             null,
             null,
@@ -1957,23 +1979,31 @@ export class ArtifactsService {
       } else if (artifactType === ArtifactType.FLASHCARDS) {
         // Flashcard customization at index 9: [null, [numberOfCards, null, instructions, null, null, null, [difficulty1, difficulty2]]]
         // Structure from mm13.txt: [null,[1,null,"add a logo at bottom of \"PHOTON\"",null,null,null,[1,2]]]
-        const flashcardCustom = customization as FlashcardCustomization;
-        const numberOfCards = flashcardCustom.numberOfCards ?? 2; // 1=Fewer, 2=Standard, 3=More
-        const difficulty = flashcardCustom.difficulty ?? 2; // 1=Easy, 2=Medium, 3=Hard
+      // ALWAYS set customization array, even if no customization object provided
+      const flashcardCustom = customization as FlashcardCustomization | undefined;
+      const numberOfCards = flashcardCustom?.numberOfCards ?? 2; // 1=Fewer, 2=Standard, 3=More
+      const difficulty = flashcardCustom?.difficulty ?? 2; // 1=Easy, 2=Medium, 3=Hard
+      
+      // Use instructions at index 2 (not language - Flashcards use instructions like Quiz)
+      const instructionsText = instructions || null;
         
         (args[2] as any[])[9] = [
           null,
           [
             numberOfCards,
             null,
-            flashcardCustom.language || instructions || null, // Language or instructions at index 2
+          instructionsText, // Instructions at index 2 (curl shows instructions string here, not language)
             null,
             null,
             null,
             [difficulty, difficulty === 1 ? 2 : difficulty], // Difficulty array - note: [1,2] pattern observed for Easy
           ],
         ];
-      } else if (artifactType === ArtifactType.INFOGRAPHIC) {
+    }
+    
+    // Optional customization for other artifacts (only if provided)
+    if (customization) {
+      if (artifactType === ArtifactType.INFOGRAPHIC) {
         // Infographic customization at index 13: [[language, "en", null, orientation, levelOfDetail]]
         // Structure from mm10.txt: [["hi","en",null,1,1]] or [[null,"en",null,1,3]]
         const infographicCustom = customization as InfographicCustomization;
@@ -1998,7 +2028,7 @@ export class ArtifactsService {
         // - visualStyle: 0=Auto-select, 1=Custom, 2=Classic, 3=Whiteboard, 4=Kawaii, 5=Anime, 6=Watercolour, 7=Anime (alt), 8=Retro print, 9=Heritage, 10=Paper-craft
         // - customStyleDescription: string or null (only when visualStyle=1/Custom)
         const videoCustom = customization as VideoCustomization;
-        const sourceIdsFlat = formattedSourceIds.map(arr => arr[0]); // Flatten from [[[id]]] to [[id]]
+        const sourceIdsFlat = formattedSourceIds ? formattedSourceIds.map(arr => arr[0]) : []; // Flatten from [[[id]]] to [[id]]
         const format = videoCustom.format ?? 1; // 1=Explainer, 2=Brief
         const visualStyle = videoCustom.visualStyle ?? 0; // 0=Auto-select
         

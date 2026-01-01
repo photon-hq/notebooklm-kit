@@ -7,7 +7,10 @@ async function main() {
     await sdk.connect(); // Initialize SDK with authentication
 
     const notebookId = process.env.NOTEBOOK_ID || 'your-notebook-id';
-    const sourceId = process.env.SOURCE_ID || 'your-source-id';
+    // Support both SOURCE_ID (singular) and SOURCE_IDS (plural) for consistency
+    // For single source operations, takes first ID if SOURCE_IDS is provided
+    const sourceIdsEnv = process.env.SOURCE_ID || process.env.SOURCE_IDS || '';
+    const sourceId = sourceIdsEnv.split(',')[0].trim() || 'your-source-id';
 
     console.log('=== Deleting Source ===\n');
 

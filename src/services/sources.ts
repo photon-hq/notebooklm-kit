@@ -535,17 +535,17 @@ export class WebSearchService {
       
       if (isYouTube) {
         // YouTube format: [null, null, null, null, null, null, null, [youtubeUrl], null, null, 1]
-        sourcesToAdd.push([
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
+      sourcesToAdd.push([
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
           [url],
-          null,
-          null,
+        null,
+        null,
           1,
         ]);
       } else {
@@ -562,7 +562,7 @@ export class WebSearchService {
           null,
           null,
           1,
-        ]);
+      ]);
       }
     }
     

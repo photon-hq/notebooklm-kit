@@ -8,7 +8,10 @@ async function main() {
     await sdk.connect(); // Initialize SDK with authentication
 
     const notebookId = process.env.NOTEBOOK_ID || 'your-notebook-id';
-    const sourceIds = process.env.SOURCE_IDS?.split(',') || [];
+    // Support both SOURCE_IDS (plural) and SOURCE_ID (singular) for consistency
+    // Format: SOURCE_IDS=id1,id2,id3 or SOURCE_ID=id1 (comma-separated for multiple)
+    const sourceIdsEnv = process.env.SOURCE_IDS || process.env.SOURCE_ID || '';
+    const sourceIds = sourceIdsEnv.split(',').map(id => id.trim()).filter(id => id.length > 0);
 
     console.log('=== Creating Artifacts ===\n');
 
