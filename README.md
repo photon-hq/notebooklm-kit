@@ -81,7 +81,6 @@ npm run dev
 | Web Search (Advanced) | Multi-step web search workflow | [`sdk.sources.add.web.search()`](#web-search-advanced) → `getResults()` → `addDiscovered()` | [source-web-search-advanced.ts](examples/source-web-search-advanced.ts) |
 | Update Source | Update source metadata | [`sdk.sources.update(notebookId, sourceId, updates)`](#update-source) | [source-update.ts](examples/source-update.ts) |
 | Delete Source | Delete a source from a notebook | [`sdk.sources.delete(notebookId, sourceId)`](#delete-source) | [source-delete.ts](examples/source-delete.ts) |
-| Refresh Source | Re-fetch and reprocess source content | [`sdk.sources.refresh(notebookId, sourceId)`](#refresh-source) | [source-refresh.ts](examples/source-refresh.ts) |
 | Check Status | Check source processing status | [`sdk.sources.status(notebookId)`](#check-processing-status) | [source-status.ts](examples/source-status.ts) |
 
 ### `sdk.artifacts` - Artifact Management
@@ -949,7 +948,7 @@ console.log(`Ready: ${status.readyCount}/${status.totalCount}`)
 
 ## Sources
 
-Examples: [source-list.ts](examples/source-list.ts) | [source-get.ts](examples/source-get.ts) | [source-add-url.ts](examples/source-add-url.ts) | [source-add-text.ts](examples/source-add-text.ts) | [source-add-file.ts](examples/source-add-file.ts) | [source-add-youtube.ts](examples/source-add-youtube.ts) | [source-add-drive.ts](examples/source-add-drive.ts) | [source-add-batch.ts](examples/source-add-batch.ts) | [source-web-search.ts](examples/source-web-search.ts) | [source-web-search-advanced.ts](examples/source-web-search-advanced.ts) | [source-update.ts](examples/source-update.ts) | [source-delete.ts](examples/source-delete.ts) | [source-refresh.ts](examples/source-refresh.ts) | [source-status.ts](examples/source-status.ts)
+Examples: [source-list.ts](examples/source-list.ts) | [source-get.ts](examples/source-get.ts) | [source-add-url.ts](examples/source-add-url.ts) | [source-add-text.ts](examples/source-add-text.ts) | [source-add-file.ts](examples/source-add-file.ts) | [source-add-youtube.ts](examples/source-add-youtube.ts) | [source-add-drive.ts](examples/source-add-drive.ts) | [source-add-batch.ts](examples/source-add-batch.ts) | [source-web-search.ts](examples/source-web-search.ts) | [source-web-search-advanced.ts](examples/source-web-search-advanced.ts) | [source-update.ts](examples/source-update.ts) | [source-delete.ts](examples/source-delete.ts) | [source-status.ts](examples/source-status.ts)
 
 ### List Sources
 
@@ -1527,36 +1526,6 @@ Deletes a source from a notebook.
 **Usage:**
 ```typescript
 await sdk.sources.delete('notebook-id', 'source-id')
-```
-
----
-
-### Refresh Source
-
-**Method:** `sdk.sources.refresh(notebookId, sourceId)`
-
-**Parameters:**
-- `notebookId: string` - The notebook ID (required)
-- `sourceId: string` - The source ID (required)
-
-**Returns:** `Promise<void>`
-
-**Description:**
-Re-fetches and reprocesses source content. Useful when the source content has been updated externally.
-
-<details>
-<summary><strong>Deprecated</strong></summary>
-
-This method is deprecated and may not work correctly. The RPC structure is not fully validated.
-
-</details>
-
-**Usage:**
-```typescript
-await sdk.sources.refresh('notebook-id', 'source-id')
-
-// Check when refresh is complete
-const status = await sdk.sources.status('notebook-id')
 ```
 
 ---

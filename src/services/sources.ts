@@ -822,10 +822,14 @@ export class AddSourcesService {
     
     this.quota?.checkQuota('addSource', notebookId);
     
+    // Google Drive format: [fileId, mimeType, 1, title] at index 0
+    // Structure: [[fileId, mimeType, 1, title], null, null, null, null, null, null, null, null, null, 1]
     const driveArgs: any[] = [fileId];
     if (mimeType) {
       driveArgs.push(mimeType);
     }
+    // Always add 1 after fileId (and mimeType if present)
+    driveArgs.push(1);
     if (options.title) {
       driveArgs.push(options.title);
     }
@@ -835,11 +839,17 @@ export class AddSourcesService {
       [
         [
           [
-            null,
-            null,
-            null,
-            driveArgs,
-            5,
+            driveArgs,  // Index 0: [fileId, mimeType?, 1, title?]
+            null,       // Index 1
+            null,       // Index 2
+            null,       // Index 3
+            null,       // Index 4
+            null,       // Index 5
+            null,       // Index 6
+            null,       // Index 7
+            null,       // Index 8
+            null,       // Index 9
+            1,          // Index 10
           ],
         ],
         notebookId,
@@ -908,19 +918,28 @@ export class AddSourcesService {
           1,
         ]);
       } else if (source.type === 'gdrive') {
-        const driveArgs: any[] = [source.fileId];
-        if (source.mimeType) {
-          driveArgs.push(source.mimeType);
-        }
-        if (source.title) {
-          driveArgs.push(source.title);
-        }
+        // Google Drive format: [fileId, mimeType, 1, title] at index 0
+        // Structure: [[fileId, mimeType, 1, title], null, null, null, null, null, null, null, null, null, 1]
+        // Based on curl: ["1kVJu1NZmhCHoQRWS1RmldOkC4n4f6WNST_N4upJuba4","application/vnd.google-apps.document",1,"Test Document"]
+        // Always include all 4 elements: fileId, mimeType (or null), 1, title (or null)
+        const driveArgs: any[] = [
+          source.fileId,
+          source.mimeType || null,  // Always include mimeType position (null if not provided)
+          1,
+          source.title || null,     // Always include title position (null if not provided)
+        ];
         sourcesToAdd.push([
-          null,
-          null,
-          null,
-          driveArgs,
-          5,
+          driveArgs,  // Index 0: [fileId, mimeType, 1, title]
+          null,       // Index 1
+          null,       // Index 2
+          null,       // Index 3
+          null,       // Index 4
+          null,       // Index 5
+          null,       // Index 6
+          null,       // Index 7
+          null,       // Index 8
+          null,       // Index 9
+          1,          // Index 10
         ]);
       } else if (source.type === 'youtube') {
         const youtubeUrl = this.isYouTubeURL(source.urlOrId) 
@@ -942,9 +961,29 @@ export class AddSourcesService {
       }
     }
     
+    // Check if all sources are Google Drive - they require a different RPC structure
+    const allGDrive = sources.every(s => s.type === 'gdrive');
+    
+    let rpcArgs: any[];
+    if (allGDrive) {
+      // Google Drive sources require extended RPC structure:
+      // Wrap the entire sourcesToAdd array in an extra array layer
+      // [[sourcesToAdd], notebookId, [2], [1, null, ..., null, [1]]]
+      // Based on curl: [[source1, source2, source3]], notebookId, [2], [1, null, ..., null, [1]]
+      rpcArgs = [
+        [sourcesToAdd], // Wrap sourcesToAdd in an extra array layer
+        notebookId,
+        [2],
+        [1, null, null, null, null, null, null, null, null, null, [1]]
+      ];
+    } else {
+      // For mixed or non-GDrive sources, use standard structure
+      rpcArgs = [sourcesToAdd, notebookId];
+    }
+    
     const response = await this.rpc.call(
       RPC.RPC_ADD_SOURCES,
-      [sourcesToAdd, notebookId],
+      rpcArgs,
       notebookId
     );
     
@@ -2430,7 +2469,6 @@ export class SourcesService {
    * WORKFLOW USAGE:
    * - Updates source properties like title, metadata, etc.
    * - This updates the source information, not the content itself
-   * - To refresh content, use `refresh()` instead
    * - Returns immediately (no waiting required)
    * 
    * **Common Updates:**
@@ -2476,53 +2514,6 @@ export class SourcesService {
     await this.rpc.call(
       RPC.RPC_MUTATE_SOURCE,
       args,
-      notebookId
-    );
-  }
-  
-  /**
-   * Refresh a source (re-fetch and reprocess content)
-   * 
-   * @deprecated This method is deprecated and may not work correctly. The RPC structure is not fully validated.
-   * 
-   * WORKFLOW USAGE:
-   * - Re-fetches source content from the original URL/file
-   * - Useful when the source content has been updated externally
-   * - Returns immediately after refresh is queued
-   * - Use `pollProcessing()` to check when refresh is complete
-   * - Processing status will show as "processing" until refresh completes
-   * 
-   * **When to use:**
-   * - Source URL content has been updated
-   * - Google Drive file has been modified
-   * - You want to ensure source content is up-to-date
-   * - Use `checkFreshness()` first to see if refresh is needed
-   * 
-   * @param notebookId - The notebook ID
-   * @param sourceId - The source ID to refresh
-   * 
-   * @example
-   * ```typescript
-   * // Check if refresh is needed first (optional)
-   * const freshness = await client.sources.checkFreshness('source-id');
-   * if (!freshness.isFresh) {
-   *   // Refresh the source
-   *   await client.sources.refresh('notebook-id', 'source-id');
-   *   
-   *   // Wait for refresh to complete
-   *   let status;
-   *   do {
-   *     status = await client.sources.pollProcessing('notebook-id');
-   *     await new Promise(r => setTimeout(r, 2000));
-   *   } while (!status.allReady);
-   * }
-   * ```
-   */
-  async refresh(notebookId: string, sourceId: string): Promise<void> {
-    console.warn('⚠️  sources.refresh() is deprecated and may not work correctly. The RPC structure is not fully validated.');
-    await this.rpc.call(
-      RPC.RPC_REFRESH_SOURCE,
-      [sourceId],
       notebookId
     );
   }
