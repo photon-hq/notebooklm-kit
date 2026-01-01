@@ -223,9 +223,9 @@ async function main() {
   } finally {
     rl.close();
     if (sdk) {
-      sdk.dispose();
+  sdk.dispose();
     }
-    process.exit(0);
+  process.exit(0);
   }
 }
 

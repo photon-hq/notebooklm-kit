@@ -170,7 +170,7 @@ async function main() {
     const sourceIds = await sdk.sources.add.batch(notebookId, {
       sources: [{
         type: 'gdrive',
-        fileId: fileId,
+      fileId: fileId,
         title: title,
         mimeType: mimeType,
       }],
@@ -205,8 +205,8 @@ async function main() {
     rl.close();
     handleError(error, 'Failed to add Google Drive source');
   } finally {
-    sdk.dispose();
-    process.exit(0);
+  sdk.dispose();
+  process.exit(0);
   }
 }
 

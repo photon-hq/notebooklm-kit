@@ -313,9 +313,9 @@ export async function getCredentials(
   // This allows saved credentials to be reused without re-authenticating
   // Skip if FORCE_REAUTH=true is set
   if (process.env.FORCE_REAUTH !== 'true') {
-    const savedCredentials = await loadCredentials();
+  const savedCredentials = await loadCredentials();
     if (savedCredentials && savedCredentials.authToken && savedCredentials.cookies) {
-      return savedCredentials;
+    return savedCredentials;
     }
   }
   

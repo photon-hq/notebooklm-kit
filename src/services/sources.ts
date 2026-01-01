@@ -314,10 +314,15 @@ export class WebSearchService {
   }> {
     const response = await this.rpc.call(
       RPC.RPC_GET_SEARCH_RESULTS,
-      [notebookId],
+      [null, null, notebookId],
       notebookId
     );
     
+    // Response structure: [[[sessionId, [notebookId, [query, type], mode, [webSources]], ...]]]
+    // Example: [[["0057e489-...", ["notebook-id", ["query", 1], 1, [["url", "title", "description", 1], ...]], ...]]]
+    // Web sources are at session[1][3] (index 3 of the metadata array, which is the 4th element)
+    
+    // Handle JSON string response
     let data = response;
     if (typeof response === 'string') {
       try {
@@ -327,47 +332,65 @@ export class WebSearchService {
       }
     }
     
+    // Extract the sessions array
+    // Response might be: [[sessions]] or [sessions] or sessions
+    let sessions: any[] = [];
+    if (Array.isArray(data)) {
+      if (data.length > 0 && Array.isArray(data[0])) {
+        // Check if first element is an array of sessions
+        if (data[0].length > 0 && Array.isArray(data[0][0])) {
+          sessions = data[0]; // [[[session], ...]]
+        } else {
+          sessions = data; // [[session], ...]
+        }
+      } else {
+        sessions = data; // [session, ...]
+      }
+    }
+    
     const web: DiscoveredWebSource[] = [];
     const drive: DiscoveredDriveSource[] = [];
     
-    // Response structure: [[sessionId, metadata], ...]
-    // metadata[3] contains web sources
-    if (!Array.isArray(data)) {
-      return { web, drive };
-    }
-    
-    for (const session of data) {
+    for (const session of sessions) {
       if (!Array.isArray(session) || session.length < 2) {
         continue;
       }
       
+      // session[0] = sessionId
+      // session[1] = [notebookId, [query, type], mode, [webSources]]
+      // Example: ["9c40da15-...", ["nit kkr", 1], 1, [[["https://...", "title", ...], ...]]]
       const currentSessionId = session[0];
       
-      // Filter by sessionId if provided
+      // Filter by sessionId if provided (normalize both to strings for comparison)
       if (sessionId) {
         const normalizedSessionId = String(sessionId).trim();
         const normalizedCurrentId = String(currentSessionId || '').trim();
         if (normalizedSessionId && normalizedCurrentId !== normalizedSessionId) {
-          continue;
+          continue; // Skip sessions that don't match
         }
       }
       
       const metadata = session[1];
       if (Array.isArray(metadata) && metadata.length > 3) {
+        // Web sources are at metadata[3] (index 3, the 4th element)
         const webSources = metadata[3];
         
+        // Skip if webSources is null (search is still in progress)
         if (webSources === null || webSources === undefined) {
           continue;
         }
         
         if (Array.isArray(webSources) && webSources.length > 0) {
+          // Helper function to recursively flatten arrays until we find source arrays
           const flattenSources = (arr: any[]): any[] => {
             const result: any[] = [];
             for (const item of arr) {
               if (Array.isArray(item)) {
+                // Check if this array looks like a source: [url, title, ...]
                 if (item.length >= 2 && typeof item[0] === 'string' && item[0].startsWith('http')) {
                   result.push(item);
                 } else {
+                  // Recursively flatten nested arrays
                   result.push(...flattenSources(item));
                 }
               }
@@ -375,17 +398,39 @@ export class WebSearchService {
             return result;
           };
           
+          // Flatten the webSources array
           const sourcesToProcess = flattenSources(webSources);
           
+          // Process all sources
           for (const source of sourcesToProcess) {
             if (Array.isArray(source) && source.length >= 2) {
+              // Format: [url, title, description, typeCode?, ...]
+              // Check for type indicator in the array - might be at index 3 or later
               const url = source[0];
               const title = source[1];
+              
+              // Check if there's a type code in the array (typically a number)
+              // Common positions: index 2 or 3 might contain type info
+              let detectedType: string | undefined;
+              for (let i = 2; i < Math.min(source.length, 5); i++) {
+                const item = source[i];
+                // Type codes: 9 = YouTube, 1 = URL, etc.
+                if (typeof item === 'number' && item === 9) {
+                  detectedType = 'youtube';
+                  break;
+                } else if (typeof item === 'number' && item === 1) {
+                  detectedType = 'url';
+                  break;
+                }
+              }
+              
+              // Only add if URL exists, is a string, and is a valid URL
               if (url && typeof url === 'string' && url.startsWith('http')) {
                 web.push({
                   url: url,
                   title: (typeof title === 'string' ? title : '') || '',
-                  id: url,
+                  id: url, // Use URL as ID
+                  type: detectedType, // Store detected type
                 });
               }
             } else if (typeof source === 'object' && source && 'url' in source) {
@@ -393,6 +438,7 @@ export class WebSearchService {
                 url: source.url,
                 title: source.title || '',
                 id: source.id || source.url,
+                type: source.type,
               });
             }
           }
@@ -478,20 +524,46 @@ export class WebSearchService {
     const sourcesToAdd: any[] = [];
     
     // Add web sources
+    // Regular URL format: [null, null, [url], null, null, null, null, null, null, null, 1]
+    // URL goes at index 2, not index 7 (index 7 is for YouTube)
     for (const webSource of webSources) {
-      sourcesToAdd.push([
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        [webSource.url || webSource.id], // URL at index 7
-        null,
-        null,
-        1, // Web source type
-      ]);
+      const url = webSource.url || webSource.id;
+      
+      // Use type from response if available, otherwise detect from URL
+      const isYouTube = webSource.type === 'youtube' || 
+                       (url && (url.includes('youtube.com') || url.includes('youtu.be')));
+      
+      if (isYouTube) {
+        // YouTube format: [null, null, null, null, null, null, null, [youtubeUrl], null, null, 1]
+        sourcesToAdd.push([
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          [url],
+          null,
+          null,
+          1,
+        ]);
+      } else {
+        // Regular URL format: [null, null, [url], null, null, null, null, null, null, null, 1]
+        sourcesToAdd.push([
+          null,
+          null,
+          [url], // URL at index 2 for regular URLs
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          1,
+        ]);
+      }
     }
     
     // Add drive sources
@@ -520,31 +592,63 @@ export class WebSearchService {
     );
     
     // Extract source IDs from response
+    // Use same extraction logic as batch() method for consistency
     const sourceIds: string[] = [];
-    const extractIds = (data: any): void => {
-      if (typeof data === 'string' && data.match(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i)) {
-        sourceIds.push(data);
+    const uuidRegex = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+    
+    const extractIds = (data: any, depth: number = 0): void => {
+      // Prevent infinite recursion
+      if (depth > 10) {
+        return;
+      }
+      
+      if (typeof data === 'string') {
+        // Try parsing as JSON string first (might be double-encoded)
+        if (data.trim().startsWith('[') || data.trim().startsWith('{')) {
+          try {
+            const parsed = JSON.parse(data);
+            extractIds(parsed, depth + 1);
+            return;
+          } catch {
+            // Not JSON, continue as regular string
+          }
+        }
+        // Check if it's a UUID
+        if (uuidRegex.test(data.trim())) {
+          sourceIds.push(data.trim());
+        }
       } else if (Array.isArray(data)) {
         for (const item of data) {
-          extractIds(item);
+          extractIds(item, depth + 1);
         }
       } else if (data && typeof data === 'object') {
+        // Check object values and keys
         for (const key in data) {
-          extractIds(data[key]);
+          if (uuidRegex.test(key)) {
+            sourceIds.push(key);
+          }
+          extractIds(data[key], depth + 1);
         }
       }
     };
     
     extractIds(response);
     
+    // Remove duplicates
+    const uniqueIds = Array.from(new Set(sourceIds));
+    
+    // Limit to expected number of sources (to avoid returning extra IDs from nested structures)
+    const expectedCount = totalSources;
+    const limitedIds = uniqueIds.slice(0, expectedCount);
+    
     // Record usage after successful addition
-    if (sourceIds.length > 0) {
-      for (let i = 0; i < sourceIds.length; i++) {
+    if (limitedIds.length > 0) {
+      for (let i = 0; i < limitedIds.length; i++) {
         this.quota?.recordUsage('addSource', notebookId);
       }
     }
     
-    return sourceIds;
+    return limitedIds;
   }
 }
 
@@ -2115,15 +2219,33 @@ export class SourcesService {
           // Process all sources
           for (const source of sourcesToProcess) {
             if (Array.isArray(source) && source.length >= 2) {
-              // Format: [url, title, description, ...]
+              // Format: [url, title, description, typeCode?, ...]
+              // Check for type indicator in the array - might be at index 3 or later
               const url = source[0];
               const title = source[1];
+              
+              // Check if there's a type code in the array (typically a number)
+              // Common positions: index 2 or 3 might contain type info
+              let detectedType: string | undefined;
+              for (let i = 2; i < Math.min(source.length, 5); i++) {
+                const item = source[i];
+                // Type codes: 9 = YouTube, 1 = URL, etc.
+                if (typeof item === 'number' && item === 9) {
+                  detectedType = 'youtube';
+                  break;
+                } else if (typeof item === 'number' && item === 1) {
+                  detectedType = 'url';
+                  break;
+                }
+              }
+              
               // Only add if URL exists, is a string, and is a valid URL
               if (url && typeof url === 'string' && url.startsWith('http')) {
                 web.push({
                   url: url,
                   title: (typeof title === 'string' ? title : '') || '',
                   id: url, // Use URL as ID
+                  type: detectedType, // Store detected type
                 });
               }
             } else if (typeof source === 'object' && source && 'url' in source) {
@@ -2131,6 +2253,7 @@ export class SourcesService {
                 url: source.url,
                 title: source.title || '',
                 id: source.id || source.url,
+                type: source.type,
               });
             }
           }

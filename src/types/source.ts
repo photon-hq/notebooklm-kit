@@ -144,6 +144,7 @@ export interface DiscoveredWebSource {
   url: string; // Source URL
   title: string; // Source title
   id?: string; // Source ID (if available)
+  type?: string; // Source type indicator from API (if available)
 }
 
 /**
