@@ -639,12 +639,12 @@ export class AddSourcesService {
           [
             null,
             null,
-            null,
-            null,
-            null,
-            null,
-            null,
             [url],
+            null,
+            null,
+            null,
+            null,
+            null,
             null,
             null,
             1,
@@ -676,15 +676,19 @@ export class AddSourcesService {
     
     this.quota?.checkQuota('addSource', notebookId);
     
+    // Text format: [null, [title, content], null, 2, ...]
+    // Index 1 = [title, content], Index 3 = type code 2
+    const textData = title ? [title, content] : [null, content];
+    
     const response = await this.rpc.call(
       RPC.RPC_ADD_SOURCES,
       [
         [
           [
             null,
+            textData,
             null,
-            [content],
-            null,
+            2,
             null,
             null,
             null,
@@ -871,25 +875,30 @@ export class AddSourcesService {
     
     for (const source of sources) {
       if (source.type === 'url') {
+        // Always treat as regular URL when type is explicitly 'url'
+        // Regular URL format - URL at index 2
         sourcesToAdd.push([
-          null,
-          null,
-          null,
-          null,
-          null,
           null,
           null,
           [source.url],
           null,
           null,
+          null,
+          null,
+          null,
+          null,
+          null,
           1,
         ]);
       } else if (source.type === 'text') {
+        // Text format: [null, [title, content], null, 2, ...]
+        // Index 1 = [title, content], Index 3 = type code 2
+        const textData = source.title ? [source.title, source.content] : [null, source.content];
         sourcesToAdd.push([
           null,
+          textData,
           null,
-          [source.content],
-          null,
+          2,
           null,
           null,
           null,
@@ -939,32 +948,66 @@ export class AddSourcesService {
       notebookId
     );
     
-    // Extract all source IDs
+    // Extract all source IDs from response
+    // Response can be:
+    // - Array of arrays: [[id1], [id2], ...] 
+    // - Array of IDs: [id1, id2, ...]
+    // - Single ID string
+    // - Nested structure
     const sourceIds: string[] = [];
-    const extractIds = (data: any): void => {
-      if (typeof data === 'string' && data.match(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i)) {
-        sourceIds.push(data);
+    const uuidRegex = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+    
+    const extractIds = (data: any, depth: number = 0): void => {
+      if (depth > 10) return; // Prevent infinite recursion
+      
+      if (typeof data === 'string') {
+        // Try parsing JSON string
+        if ((data.startsWith('[') || data.startsWith('{'))) {
+          try {
+            const parsed = JSON.parse(data);
+            extractIds(parsed, depth + 1);
+            return;
+          } catch {
+            // Not JSON, continue as regular string
+          }
+        }
+        // Check if it's a UUID
+        if (uuidRegex.test(data.trim())) {
+          sourceIds.push(data.trim());
+        }
       } else if (Array.isArray(data)) {
         for (const item of data) {
-          extractIds(item);
+          extractIds(item, depth + 1);
         }
       } else if (data && typeof data === 'object') {
+        // Check object values and keys
         for (const key in data) {
-          extractIds(data[key]);
+          if (uuidRegex.test(key)) {
+            sourceIds.push(key);
+          }
+          extractIds(data[key], depth + 1);
         }
       }
     };
     
     extractIds(response);
     
+    // Remove duplicates
+    const uniqueIds = Array.from(new Set(sourceIds));
+    
+    // Limit to expected number of sources (to avoid returning extra IDs from nested structures)
+    // Since sources are added in order, take the first N where N = number of sources added
+    const expectedCount = sources.length;
+    const limitedIds = uniqueIds.slice(0, expectedCount);
+    
     // Record usage after successful addition
-    if (sourceIds.length > 0) {
-      for (let i = 0; i < sourceIds.length; i++) {
+    if (limitedIds.length > 0) {
+      for (let i = 0; i < limitedIds.length; i++) {
         this.quota?.recordUsage('addSource', notebookId);
       }
     }
     
-    return sourceIds;
+    return limitedIds;
   }
 
   private isYouTubeURL(url: string): boolean {
