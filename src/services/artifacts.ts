@@ -8,6 +8,7 @@ import * as RPC from '../rpc/rpc-methods.js';
 import { NotebookLMError } from '../types/common.js';
 import { APIError } from '../utils/errors.js';
 import { ArtifactType, ArtifactState } from '../types/artifact.js';
+import { NotebookLanguageService } from './notebook-language.js';
 import * as https from 'https';
 import * as http from 'http';
 import { createHash } from 'node:crypto';
@@ -339,6 +340,8 @@ export class ArtifactsService {
   public readonly quiz: QuizService;
   public readonly slide: SlideService;
   
+  private notebookLanguageService: NotebookLanguageService;
+  
   constructor(
     private rpc: RPCClient,
     private quota?: import('../utils/quota.js').QuotaManager
@@ -351,6 +354,24 @@ export class ArtifactsService {
     this.flashcard = new FlashcardService(this);
     this.quiz = new QuizService(this);
     this.slide = new SlideService(this);
+    this.notebookLanguageService = new NotebookLanguageService(this.rpc);
+  }
+  
+  /**
+   * Get the default language for a notebook
+   * Uses the notebook's default output language if available, otherwise falls back to 'en'
+   * 
+   * @param notebookId - The notebook ID
+   * @returns The default language code
+   */
+  private async getDefaultLanguage(notebookId: string): Promise<string> {
+    try {
+      return await this.notebookLanguageService.get(notebookId);
+    } catch (error) {
+      // If we can't get the notebook language, default to 'en'
+      console.warn(`Failed to get notebook language for ${notebookId}, defaulting to 'en':`, error);
+      return 'en';
+    }
   }
   
   /**
@@ -1811,6 +1832,8 @@ export class ArtifactsService {
     const apiType = this.getApiTypeNumber(artifactType);
     
     // Format source IDs as nested arrays: [[[sourceId1]], [[sourceId2]]]
+    // Reference format from mm52.txt: [[["324d7b58-..."],["a0cc9255-..."]]]
+    // For single source: [[["id"]]], for multiple: [[["id1"]],[["id2"]]]
     // If empty, use null (API will use all sources)
     const formattedSourceIds = sourceIds.length > 0 ? sourceIds.map(id => [[id]]) : null;
     
@@ -1857,6 +1880,82 @@ export class ArtifactsService {
       innerArray,
     ];
     
+    // CRITICAL: Handle Quiz and Flashcards FIRST, completely isolated from language logic
+    // This ensures NO language-related code runs for them, not even condition checks
+    // Quiz and Flashcards don't support language customization - they use instructions instead
+    if (artifactType === ArtifactType.QUIZ || artifactType === ArtifactType.FLASHCARDS) {
+      // Handle Quiz
+      if (artifactType === ArtifactType.QUIZ) {
+        const quizCustom = customization as QuizCustomization | undefined;
+        const questionCount = quizCustom?.numberOfQuestions ?? 2;
+        const difficulty = quizCustom?.difficulty ?? 2;
+        const instructionsText = instructions || null;
+        
+        (args[2] as any[])[9] = [
+          null,
+          [
+            questionCount,
+            null,
+            instructionsText,
+            null,
+            null,
+            null,
+            null,
+            [difficulty, 1], // Difficulty array format: [difficulty, 1] - second value is always 1 (same as Flashcards)
+          ],
+        ];
+      }
+      // Handle Flashcards
+      else if (artifactType === ArtifactType.FLASHCARDS) {
+        const flashcardCustom = customization as FlashcardCustomization | undefined;
+        const numberOfCards = flashcardCustom?.numberOfCards ?? 2;
+        const difficulty = flashcardCustom?.difficulty ?? 2;
+        const instructionsText = instructions || null;
+        
+        // Difficulty array format: [difficulty, 1]
+        // IMPORTANT: The second value is always 1, not the difficulty value
+        // Examples from curl references:
+        // - mm52.txt: [1,1] when difficulty=1 (Easy) - format is [1, 1]
+        // - mm56.txt: [3,1] when difficulty=3 (Hard) - format is [3, 1]
+        // This format is critical - using [difficulty, difficulty] will cause API errors
+        const flashcardCustomArray = [
+          numberOfCards,
+          null,
+          instructionsText,
+          null,
+          null,
+          null,
+          [difficulty, 1], // Format: [difficulty, 1] - second value is always 1
+        ];
+        
+        (args[2] as any[])[9] = [
+          null,
+          flashcardCustomArray,
+        ];
+      }
+      
+      // Make RPC call immediately - NO language logic touched
+      const response = await this.rpc.call(
+        RPC.RPC_CREATE_VIDEO_OVERVIEW,
+        args,
+        notebookId
+      );
+      
+      return this.parseArtifactResponse(response);
+    }
+    
+    // For all other artifact types, handle language logic
+    const needsLanguage = artifactType === ArtifactType.SLIDE_DECK ||
+                         artifactType === ArtifactType.AUDIO ||
+                         artifactType === ArtifactType.VIDEO ||
+                         artifactType === ArtifactType.REPORT ||
+                         artifactType === ArtifactType.INFOGRAPHIC;
+    
+    let defaultLanguage: string = 'en';
+    if (needsLanguage) {
+      defaultLanguage = await this.getDefaultLanguage(notebookId);
+    }
+    
     // Add customization based on artifact type
     // Note: Slide decks, Audio, and Video ALWAYS need customization array set, even with defaults
     if (artifactType === ArtifactType.SLIDE_DECK) {
@@ -1869,7 +1968,7 @@ export class ArtifactsService {
       
       (args[2] as any[])[13] = [[
         instructions || null, // Description/instructions
-        slideCustom?.language || 'en', // Language (default: 'en')
+        slideCustom?.language || defaultLanguage, // Language (default: notebook's default language)
         format, // Format (2=presenter, 3=detailed deck)
         length, // Length (1=short, 2=default, 3=long)
       ]];
@@ -1928,7 +2027,7 @@ export class ArtifactsService {
           length, // Index 1: Length (1=Short, 2=Default, 3=Long, or null for Brief)
           null, // Index 2: Placeholder
           sourceIdsFlat, // Index 3: [[id1], [id2]] format
-          audioCustom?.language || 'en', // Index 4: Language
+          audioCustom?.language || defaultLanguage, // Index 4: Language (default: notebook's default language)
           null, // Index 5: Placeholder
           rpcFormat, // Index 6: Format (1=Deep dive, 2=Brief, 3=Critique, 4=Debate)
         ],
@@ -1945,7 +2044,7 @@ export class ArtifactsService {
       // Build the customization array
       const customArray: any[] = [
         [sourceIdsFlat], // IMPORTANT: Wrap in extra array! [[["id1"], ["id2"]]] format
-        videoCustom?.language || 'en',
+        videoCustom?.language || defaultLanguage, // Language (default: notebook's default language)
         videoCustom?.focus || null, // "What should the AI hosts focus on?"
         null, // Placeholder
         format,
@@ -1962,60 +2061,7 @@ export class ArtifactsService {
         null,
         customArray,
       ];
-    }
-    
-    // Quiz and Flashcards always need customization array set (even with defaults)
-      if (artifactType === ArtifactType.QUIZ) {
-        // Quiz customization at index 9: [null, [questionCount, null, instructions, null, null, null, null, [difficulty, difficulty]]]
-        // Structure from mm11.txt: [null,[2,null,"hi",null,null,null,null,[3,3]]]
-      // Note: Index 2 is for instructions (string), not language
-      // ALWAYS set customization array, even if no customization object provided
-      const quizCustom = customization as QuizCustomization | undefined;
-      const questionCount = quizCustom?.numberOfQuestions ?? 2; // 1=Fewer, 2=Standard, 3=More
-      const difficulty = quizCustom?.difficulty ?? 2; // 1=Easy, 2=Medium, 3=Hard
-      
-      // Use instructions at index 2 (not language - Quiz doesn't support language in customization)
-      const instructionsText = instructions || null;
-        
-        (args[2] as any[])[9] = [
-          null,
-          [
-            questionCount,
-            null,
-          instructionsText, // Instructions at index 2 (curl shows "hi" here, not language)
-            null,
-            null,
-            null,
-            null,
-            [difficulty, difficulty], // Difficulty array
-          ],
-        ];
-      } else if (artifactType === ArtifactType.FLASHCARDS) {
-        // Flashcard customization at index 9: [null, [numberOfCards, null, instructions, null, null, null, [difficulty1, difficulty2]]]
-        // Structure from mm52.txt (more recent, same notebook ID): [null,[1,null,"ji",null,null,null,[1,1]]]
-        // Structure from mm13.txt: [null,[1,null,"add a logo at bottom of \"PHOTON\"",null,null,null,[1,2]]]
-        // Note: mm52.txt shows [1,1] for difficulty=1, using that as the authoritative format
-      // ALWAYS set customization array, even if no customization object provided
-      const flashcardCustom = customization as FlashcardCustomization | undefined;
-      const numberOfCards = flashcardCustom?.numberOfCards ?? 2; // 1=Fewer, 2=Standard, 3=More
-      const difficulty = flashcardCustom?.difficulty ?? 2; // 1=Easy, 2=Medium, 3=Hard
-      
-      // Use instructions at index 2 (not language - Flashcards use instructions like Quiz)
-      const instructionsText = instructions || null;
-        
-        (args[2] as any[])[9] = [
-          null,
-          [
-            numberOfCards,
-            null,
-          instructionsText, // Instructions at index 2 (curl shows instructions string here, not language)
-            null,
-            null,
-            null,
-            [difficulty, difficulty], // Difficulty array - use [difficulty, difficulty] format to match mm52.txt
-          ],
-        ];
-      } else if (artifactType === ArtifactType.REPORT) {
+    } else if (artifactType === ArtifactType.REPORT) {
         // Report customization at index 7: [null, [title, description, null, sourceIds, language, instructions, format]]
         // Structure from mm54.txt: [null, ["Briefing Doc", "Key insights...", null, [["id"]], "en", "instructions", 2]]
         // Note: sourceIds in customization are DOUBLE-nested [["id"]], not triple-nested
@@ -2024,7 +2070,7 @@ export class ArtifactsService {
         const reportTitle = options.title || 'Report';
         const reportDescription = 'Create a comprehensive report'; // Default description
         const instructionsText = instructions || null;
-        const language = 'en'; // Default language
+        const language = defaultLanguage; // Default language (notebook's default)
         
         // Format: 2 = "Create Your Own" (default format for custom reports)
         const format = 2;
@@ -2057,7 +2103,7 @@ export class ArtifactsService {
         const levelOfDetail = infographicCustom.levelOfDetail ?? 2; // 1=Concise, 2=Standard, 3=Detailed
         
         (args[2] as any[])[14] = [[
-          infographicCustom.language || null, // Primary language
+          infographicCustom.language || defaultLanguage, // Primary language (default: notebook's default language)
           'en', // Secondary language (always "en")
           null,
           orientation, // Orientation/visual style (1=Landscape, 2=Portrait, 3=Square)
@@ -2081,7 +2127,7 @@ export class ArtifactsService {
         // Build the customization array
         const customArray: any[] = [
           sourceIdsFlat, // [[id1], [id2]] format
-          videoCustom.language || 'en',
+          videoCustom.language || defaultLanguage, // Language (default: notebook's default language)
           videoCustom.focus || null, // "What should the AI hosts focus on?"
           null, // Placeholder
           format,
@@ -2101,6 +2147,7 @@ export class ArtifactsService {
       }
     }
     
+    // For all other artifact types (not Quiz/Flashcards), make the RPC call here
     const response = await this.rpc.call(
       RPC.RPC_CREATE_VIDEO_OVERVIEW, // R7cb6c is the same constant
       args,
@@ -5056,7 +5103,21 @@ export async function createReport(
   title?: string;
 }> {
   if (!notebookId) throw new NotebookLMError('Notebook ID is required');
-  const { instructions = '', sourceIds = [], title = 'Briefing Doc', subtitle = 'Key insights and important quotes', language = 'en' } = options;
+  
+  // Get notebook's default language if not specified
+  let language = options.language;
+  if (!language) {
+    try {
+      const { NotebookLanguageService } = await import('./notebook-language.js');
+      const languageService = new NotebookLanguageService(rpc);
+      language = await languageService.get(notebookId);
+    } catch (error) {
+      // If we can't get the notebook language, default to 'en'
+      language = 'en';
+    }
+  }
+  
+  const { instructions = '', sourceIds = [], title = 'Briefing Doc', subtitle = 'Key insights and important quotes' } = options;
   try {
     const formattedSourceIds = sourceIds.map(id => [[id]]);
     const sourceIdsFlat = formattedSourceIds.map(arr => arr[0]);

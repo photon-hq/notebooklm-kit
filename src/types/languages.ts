@@ -142,6 +142,15 @@ export enum NotebookLMLanguage {
   CHEROKEE = 'chr',
   CEBUANO = 'ceb',
   SYRIAC = 'syr',
+  LATIN = 'la',
+  JAVANESE = 'jv',
+  
+  // Language Variants (for specific regions)
+  SPANISH_LATIN_AMERICA = 'es-419',
+  SPANISH_MEXICO = 'es-MX',
+  FRENCH_CANADA = 'fr-CA',
+  ARABIC_EGYPTIAN = 'ar-EG',
+  // Note: CHINESE_HONG_KONG is already defined above
 }
 
 /**
@@ -217,6 +226,13 @@ export const LANGUAGE_INFO: Record<string, LanguageInfo> = {
   [NotebookLMLanguage.SOMALI]: { code: 'so', name: 'Somali', nativeName: 'Soomaali' },
   [NotebookLMLanguage.AMHARIC]: { code: 'am', name: 'Amharic', nativeName: 'አማርኛ' },
   [NotebookLMLanguage.TIGRINYA]: { code: 'ti', name: 'Tigrinya', nativeName: 'ትግርኛ' },
+  [NotebookLMLanguage.LATIN]: { code: 'la', name: 'Latin', nativeName: 'Latina' },
+  [NotebookLMLanguage.JAVANESE]: { code: 'jv', name: 'Javanese', nativeName: 'Jawa' },
+  [NotebookLMLanguage.SPANISH_LATIN_AMERICA]: { code: 'es-419', name: 'Spanish (Latin America)', nativeName: 'Español (Latinoamérica)' },
+  [NotebookLMLanguage.SPANISH_MEXICO]: { code: 'es-MX', name: 'Spanish (Mexico)', nativeName: 'Español (México)' },
+  [NotebookLMLanguage.FRENCH_CANADA]: { code: 'fr-CA', name: 'French (Canada)', nativeName: 'Français (Canada)' },
+  [NotebookLMLanguage.ARABIC_EGYPTIAN]: { code: 'ar-EG', name: 'Arabic (Egyptian Colloquial)', nativeName: 'العربية (العامية المصرية)' },
+  [NotebookLMLanguage.CHINESE_HONG_KONG]: { code: 'zh-HK', name: 'Chinese (Hong Kong)', nativeName: '中文 (香港)' },
 };
 
 /**

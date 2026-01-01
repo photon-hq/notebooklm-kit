@@ -2833,7 +2833,53 @@ await sdk.notes.delete('notebook-id', [
 
 ## Language Support
 
-NotebookLM supports **80+ languages** for artifacts. Use the `NotebookLMLanguage` enum for type safety:
+NotebookLM supports **80+ languages** for artifacts, chat responses, and all notebook operations. 
+
+### Notebook Default Language
+
+Each notebook has a **default output language** that is used for:
+- Artifact creation (audio, video, report, infographics, slide decks)
+- Chat responses
+- All other notebook operations
+
+**If you don't specify a language when creating an artifact, it will use the notebook's default language.**
+
+#### Get Notebook Default Language
+
+```typescript
+// Get the current default language for a notebook
+const language = await sdk.notebookLanguage.get('notebook-id');
+console.log(`Default language: ${language}`); // 'en', 'de', 'ja', etc.
+```
+
+#### Set Notebook Default Language
+
+```typescript
+import { NotebookLMLanguage } from 'notebooklm-kit';
+
+// Set the notebook's default language to German
+await sdk.notebookLanguage.set('notebook-id', NotebookLMLanguage.GERMAN);
+
+// Set to Japanese
+await sdk.notebookLanguage.set('notebook-id', NotebookLMLanguage.JAPANESE);
+
+// Set using language code directly
+await sdk.notebookLanguage.set('notebook-id', 'de');
+```
+
+#### Get Language Information
+
+```typescript
+// Get language info with metadata
+const info = await sdk.notebookLanguage.getInfo('notebook-id');
+console.log(`Language: ${info.language}`); // 'de'
+console.log(`Name: ${info.name}`); // 'German'
+console.log(`Native Name: ${info.nativeName}`); // 'Deutsch'
+```
+
+### Supported Languages
+
+Use the `NotebookLMLanguage` enum for type safety:
 
 ```typescript
 import { NotebookLMLanguage } from 'notebooklm-kit'
@@ -2841,9 +2887,112 @@ import { NotebookLMLanguage } from 'notebooklm-kit'
 NotebookLMLanguage.ENGLISH      // 'en'
 NotebookLMLanguage.HINDI        // 'hi'
 NotebookLMLanguage.SPANISH      // 'es'
-NotebookLMLanguage.FRENCH       // 'fr'
-NotebookLMLanguage.JAPANESE     // 'ja'
-// ... and 75+ more
+NotebookLMLanguage.FRENCH        // 'fr'
+NotebookLMLanguage.GERMAN        // 'de'
+NotebookLMLanguage.JAPANESE      // 'ja'
+NotebookLMLanguage.CHINESE_SIMPLIFIED  // 'zh'
+NotebookLMLanguage.ARABIC        // 'ar'
+NotebookLMLanguage.TURKISH       // 'tr'
+// ... and 70+ more languages
+```
+
+### Artifact Language Support
+
+**Artifacts that support language customization:**
+- ✅ **Audio Overview** - `customization.language`
+- ✅ **Video Overview** - `customization.language`
+- ✅ **Report** - Uses notebook default language automatically
+- ✅ **Infographic** - `customization.language`
+- ✅ **Slide Deck** - `customization.language`
+
+**Artifacts that don't support language customization:**
+- ❌ **Quiz** - Language is set via instructions, not customization
+- ❌ **Flashcards** - Language is set via instructions, not customization
+- ❌ **Mind Map** - No language customization available
+
+### Using Language in Artifacts
+
+#### Option 1: Use Notebook Default (Recommended)
+
+```typescript
+// Set notebook default language once
+await sdk.notebookLanguage.set('notebook-id', NotebookLMLanguage.GERMAN);
+
+// All artifacts will use German by default
+const audio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
+  // No language specified - uses notebook default (German)
+});
+
+const video = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
+  // No language specified - uses notebook default (German)
+});
+```
+
+#### Option 2: Override for Specific Artifacts
+
+```typescript
+// Set notebook default to German
+await sdk.notebookLanguage.set('notebook-id', NotebookLMLanguage.GERMAN);
+
+// Most artifacts use German
+const audio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
+  // Uses German (notebook default)
+});
+
+// But this one uses Japanese
+const video = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
+  customization: {
+    language: NotebookLMLanguage.JAPANESE, // Overrides notebook default
+  },
+});
+```
+
+#### Option 3: Explicit Language for Each Artifact
+
+```typescript
+// Always specify language explicitly
+const audio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
+  customization: {
+    language: NotebookLMLanguage.SPANISH,
+  },
+});
+
+const video = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
+  customization: {
+    language: NotebookLMLanguage.FRENCH,
+  },
+});
+```
+
+### Language Examples
+
+```typescript
+import { NotebookLMLanguage } from 'notebooklm-kit';
+
+// Create artifacts in different languages
+const germanAudio = await sdk.artifacts.create('notebook-id', ArtifactType.AUDIO, {
+  customization: {
+    language: NotebookLMLanguage.GERMAN, // 'de'
+  },
+});
+
+const japaneseVideo = await sdk.artifacts.create('notebook-id', ArtifactType.VIDEO, {
+  customization: {
+    language: NotebookLMLanguage.JAPANESE, // 'ja'
+  },
+});
+
+const hindiSlides = await sdk.artifacts.create('notebook-id', ArtifactType.SLIDE_DECK, {
+  customization: {
+    language: NotebookLMLanguage.HINDI, // 'hi'
+  },
+});
+
+const spanishInfographic = await sdk.artifacts.create('notebook-id', ArtifactType.INFOGRAPHIC, {
+  customization: {
+    language: NotebookLMLanguage.SPANISH, // 'es'
+  },
+});
 ```
 
 ## Advanced Configuration

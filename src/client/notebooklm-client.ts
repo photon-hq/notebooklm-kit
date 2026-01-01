@@ -9,6 +9,7 @@ import { SourcesService } from '../services/sources.js';
 import { NotesService } from '../services/notes.js';
 import { ArtifactsService } from '../services/artifacts.js';
 import { GenerationService } from '../services/generation.js';
+import { NotebookLanguageService } from '../services/notebook-language.js';
 import { AutoRefreshManager, defaultAutoRefreshConfig } from '../auth/refresh.js';
 import { getCredentials, type Credentials } from '../auth/auth.js';
 import { QuotaManager } from '../utils/quota.js';
@@ -74,6 +75,7 @@ export class NotebookLMClient {
   private _notes?: NotesService;
   private _artifacts?: ArtifactsService;
   private _generation?: GenerationService;
+  private _notebookLanguage?: NotebookLanguageService;
   
   /**
    * Notebook operations
@@ -165,6 +167,38 @@ export class NotebookLMClient {
       throw new Error('SDK not initialized. Call await sdk.connect() first.');
     }
     return this._generation;
+  }
+  
+  /**
+   * Notebook language operations
+   * Get and set the notebook's default output language
+   * 
+   * The notebook's default output language is used as the default for:
+   * - Artifact creation (audio, video, report, infographics, slide decks)
+   * - Chat responses
+   * - All other notebook operations
+   * 
+   * @example
+   * ```typescript
+   * import { NotebookLMLanguage } from 'notebooklm-kit';
+   * 
+   * // Get current default language
+   * const language = await sdk.notebookLanguage.get('notebook-id');
+   * 
+   * // Set default language to German
+   * await sdk.notebookLanguage.set('notebook-id', NotebookLMLanguage.GERMAN);
+   * 
+   * // Now all artifacts will default to German unless overridden
+   * const quiz = await sdk.artifacts.create('notebook-id', ArtifactType.QUIZ, {
+   *   // language will default to German
+   * });
+   * ```
+   */
+  get notebookLanguage(): NotebookLanguageService {
+    if (!this._notebookLanguage) {
+      throw new Error('SDK not initialized. Call await sdk.connect() first.');
+    }
+    return this._notebookLanguage;
   }
   
   /**
@@ -287,6 +321,7 @@ export class NotebookLMClient {
     this._notes = new NotesService(this.rpcClient, this.quotaManager);
     this._artifacts = new ArtifactsService(this.rpcClient, this.quotaManager);
     this._generation = new GenerationService(this.rpcClient, this.quotaManager);
+    this._notebookLanguage = new NotebookLanguageService(this.rpcClient);
     
     // Setup auto-refresh if enabled
     if (this.config.autoRefresh !== false) {

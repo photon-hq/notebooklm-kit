@@ -13,6 +13,8 @@ export { SourcesService } from './services/sources.js';
 export { NotesService } from './services/notes.js';
 export { ArtifactsService } from './services/artifacts.js';
 export { GenerationService } from './services/generation.js';
+export { NotebookLanguageService } from './services/notebook-language.js';
+export type { NotebookLanguageInfo } from './services/notebook-language.js';
 // Artifact functions are now in ArtifactsService - use artifacts.get() or artifacts.download() instead
 // Legacy exports below are kept for backward compatibility but will be removed
 export { fetchQuizData } from './services/artifacts.js';
