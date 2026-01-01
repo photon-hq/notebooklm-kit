@@ -27,10 +27,9 @@ import * as readline from 'readline';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
-import { NotebookLMClient } from '../src/client/notebooklm-client.js';
 import { ArtifactType, ArtifactState } from '../src/types/artifact.js';
 import * as RPC from '../src/rpc/rpc-methods.js';
-import { handleError } from './utils.js';
+import { createSDK, handleError } from './utils.js';
 
 // User-Agent header matching browser
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0';
@@ -324,190 +323,29 @@ async function saveImages(
     let browser: Browser | undefined;
     let context: BrowserContext | undefined;
     let page: Page | undefined;
-    let authToken: string;
-    let cookies: string;
     
     try {
-      // Get Google credentials from environment variables or prompt
-      console.log('=== Credentials Configuration ===\n');
-      const googleEmail = process.env.GOOGLE_EMAIL || await question(rl, 'Enter your Google email: ');
-      const googlePassword = process.env.GOOGLE_PASSWORD || await question(rl, 'Enter your Google password: ');
+      // Initialize SDK using credentials from env
+      console.log('=== Initializing SDK ===\n');
+      const sdk = await createSDK();
+      await sdk.connect();
+      console.log('✓ SDK connected successfully\n');
       
-      if (!googleEmail || !googlePassword) {
-        throw new Error('Google email and password are required. Set GOOGLE_EMAIL and GOOGLE_PASSWORD environment variables or enter them when prompted.');
-      }
-    
-      console.log('\n=== Setting up Playwright Browser ===\n');
-    
-    try {
-      // Launch browser and create page
-      browser = await chromium.launch({ headless: false }); // Use headless: false to see the browser for cookie extraction
-      context = await browser.newContext({
-        userAgent: USER_AGENT,
-        viewport: { width: 1920, height: 1080 }
-      });
-      page = await context.newPage();
-      
-      // Set up request interception to capture Cookie headers from network requests
-      let capturedCookieHeader: string | null = null;
-      page.on('request', (request) => {
-        const url = request.url();
-        const method = request.method();
-        
-        // Capture Cookie header from:
-        // 1. batchexecute calls to https://notebooklm.google.com/_/LabsTailwindUi/data/batchexecute
-        // 2. POST requests to https://notebooklm.google.com/
-        const isBatchexecute = url.includes('batchexecute') && url.includes('LabsTailwindUi');
-        const isNotebooklmPost = url.startsWith('https://notebooklm.google.com/') && method === 'POST';
-        
-        if (isBatchexecute || isNotebooklmPost) {
-          const headers = request.headers();
-          const cookieHeader = headers['cookie'] || headers['Cookie'];
-          if (cookieHeader && cookieHeader.length > 100 && !capturedCookieHeader) {
-            capturedCookieHeader = cookieHeader;
-            const source = isBatchexecute ? 'batchexecute request' : 'POST to notebooklm.google.com';
-            console.log(`  ✓ Cookie header captured from ${source}`);
-          }
+      // First verify credentials by trying to list notebooks
+      console.log('=== Verifying Credentials and Listing Notebooks ===\n');
+      let notebooks;
+      try {
+        notebooks = await sdk.notebooks.list();
+        console.log(`✓ Credentials valid. Found ${notebooks.length} notebook(s)\n`);
+      } catch (error: any) {
+        if (error.message?.includes('Permission denied') || error.message?.includes('290')) {
+          throw new Error(
+            'Permission denied: Your credentials may be expired or invalid.\n' +
+            'Please verify your credentials are current and try again.'
+          );
         }
-      });
-      
-      // Authenticate with Google
-      console.log('=== Authenticating with Google ===\n');
-      await authenticateWithGoogle(page, googleEmail, googlePassword);
-      
-      // Navigate to NotebookLM and extract credentials
-      console.log('\n=== Navigating to NotebookLM and Extracting Credentials ===\n');
-      console.log('  Navigating to NotebookLM...');
-      
-      // Use domcontentloaded instead of networkidle to avoid timeout issues
-      await page.goto('https://notebooklm.google.com/', { 
-        waitUntil: 'domcontentloaded',
-        timeout: 60000 
-      });
-      
-      // Wait for the page to be ready and check if we're signed in
-      await page.waitForTimeout(5000); // Give page time to load
-      
-      let currentUrl = page.url();
-      if (currentUrl.includes('accounts.google.com/signin')) {
-        console.log('  ⚠️  Sign-in required, authenticating again...');
-        await authenticateWithGoogle(page, googleEmail, googlePassword);
-        await page.goto('https://notebooklm.google.com/', { 
-          waitUntil: 'domcontentloaded',
-          timeout: 60000 
-        });
-        await page.waitForTimeout(5000);
-        currentUrl = page.url();
+        throw error;
       }
-      
-      if (currentUrl.includes('accounts.google.com/signin')) {
-        throw new Error('Failed to authenticate - still on sign-in page. Please check credentials.');
-      }
-      
-      console.log('  ✓ Successfully navigated to NotebookLM\n');
-      
-      // Wait for WIZ_global_data to be available (with retries)
-      console.log('  Waiting for page to fully load...');
-      let extractedAuthToken: string | null = null;
-      for (let attempt = 0; attempt < 10; attempt++) {
-        extractedAuthToken = await page.evaluate(() => {
-          // @ts-ignore
-          return window.WIZ_global_data?.SNlM0e || null;
-        });
-        
-        if (extractedAuthToken) {
-          break;
-        }
-        
-        console.log(`  Waiting for auth token... (attempt ${attempt + 1}/10)`);
-        await page.waitForTimeout(2000);
-      }
-      
-      if (!extractedAuthToken) {
-        // Try waiting a bit longer and check again
-        await page.waitForTimeout(5000);
-        extractedAuthToken = await page.evaluate(() => {
-          // @ts-ignore
-          return window.WIZ_global_data?.SNlM0e || null;
-        });
-      }
-      
-      if (!extractedAuthToken) {
-        throw new Error('Failed to extract auth token. The page may still be loading or WIZ_global_data is not available.');
-      }
-      
-      authToken = extractedAuthToken;
-      console.log(`  ✓ Auth token extracted (${authToken.substring(0, 50)}...)\n`);
-      
-      // Try to automatically capture cookies from network requests
-      console.log('=== Cookie Configuration ===\n');
-      console.log('Waiting for batchexecute requests...');
-      await page.waitForTimeout(15000); // Wait 15 seconds for batchexecute calls
-      
-      if (capturedCookieHeader) {
-        cookies = capturedCookieHeader;
-        console.log(`  ✓ Cookies automatically captured from network requests (${cookies.length} characters)\n`);
-      } else {
-        // Fall back to manual cookie input
-        console.log('⚠️  Could not automatically capture cookies from network requests.');
-        console.log('Please copy cookies from your browser:\n');
-        console.log('  Instructions:');
-        console.log('    1. The browser window should still be open');
-        console.log('    2. Open Developer Tools (F12)');
-        console.log('    3. Go to the Network tab');
-        console.log('    4. Look for any request to notebooklm.google.com or batchexecute');
-        console.log('    5. Click on the request');
-        console.log('    6. In the Headers section, find the "Cookie" header');
-        console.log('    7. Copy the entire Cookie value (it will be a long string)\n');
-        
-        const manualCookies = await question(rl, 'Paste the Cookie header value here (or press Enter to abort): ');
-        
-        if (!manualCookies || manualCookies.trim().length === 0) {
-          throw new Error('Cookie extraction aborted by user.');
-        }
-        
-        if (manualCookies.trim().length < 100) {
-          console.log('  ⚠️  Warning: Cookie string seems too short. Make sure you copied the complete Cookie header.');
-          const confirm = await question(rl, 'Continue anyway? (y/n): ');
-          if (confirm.toLowerCase() !== 'y') {
-            throw new Error('Cookie extraction cancelled by user.');
-          }
-        }
-        
-        cookies = manualCookies.trim();
-        console.log(`  ✓ Cookies accepted (${cookies.length} characters)\n`);
-      }
-      // Browser stays open for later image downloads
-    } catch (error: any) {
-      if (browser) {
-        await browser.close();
-      }
-      throw error;
-    }
-    
-    // Create NotebookLM client with extracted credentials
-    console.log('\n=== Creating NotebookLM Client ===\n');
-    const client = new NotebookLMClient({
-      authToken,
-      cookies,
-      autoRefresh: false, // Disable auto-refresh for testing
-    });
-    
-    // First verify credentials by trying to list notebooks
-    console.log('=== Verifying Credentials and Listing Notebooks ===\n');
-    let notebooks;
-    try {
-      notebooks = await client.notebooks.list();
-      console.log(`✓ Credentials valid. Found ${notebooks.length} notebook(s)\n`);
-    } catch (error: any) {
-      if (error.message?.includes('Permission denied') || error.message?.includes('290')) {
-        throw new Error(
-          'Permission denied: Your credentials may be expired or invalid.\n' +
-          'Please verify your credentials are current and try again.'
-        );
-      }
-      throw error;
-    }
     
     // Prompt user to select a notebook
     if (notebooks.length === 0) {
@@ -540,7 +378,7 @@ async function saveImages(
     }
     
     console.log('=== Listing Slide Artifacts ===\n');
-    const artifacts = await client.artifacts.list(notebookId);
+    const artifacts = await sdk.artifacts.list(notebookId);
     const slideArtifacts = artifacts.filter(
       a => a.type === ArtifactType.SLIDE_DECK && a.state === ArtifactState.READY
     );
@@ -570,7 +408,7 @@ async function saveImages(
     
     // Use the list response (which was working) to extract slide URLs
     // RPC_GET_ARTIFACT gives 400 errors, so we'll extract from the list response
-    const rpc = await client.getRPCClient();
+    const rpc = await sdk.getRPCClient();
     const artifactsListResponse = await rpc.call(
       RPC.RPC_LIST_ARTIFACTS,
       [[2], notebookId], // [2] is artifact type filter for SLIDE_DECK
@@ -728,12 +566,60 @@ async function saveImages(
       console.log(`  Ends with: ...${firstUrl.substring(Math.max(0, firstUrl.length - 35))}\n`);
     }
     
-    // Use the same browser/page for downloading (already authenticated and has cookies)
-    console.log('\n=== Downloading Images ===\n');
+    // Set up browser for downloading slides (requires authentication)
+    console.log('\n=== Setting up Browser for Slide Download ===\n');
     
-    if (!page) {
-      throw new Error('Browser page is not available for downloading images. This should not happen.');
+    // Get Google credentials for browser login
+    const googleEmail = process.env.GOOGLE_EMAIL;
+    const googlePassword = process.env.GOOGLE_PASSWORD;
+    
+    if (!googleEmail || !googlePassword) {
+      throw new Error('GOOGLE_EMAIL and GOOGLE_PASSWORD environment variables are required for downloading slides.');
     }
+    
+    // Launch browser and create page
+    browser = await chromium.launch({ headless: false });
+    context = await browser.newContext({
+      userAgent: USER_AGENT,
+      viewport: { width: 1920, height: 1080 }
+    });
+    page = await context.newPage();
+    
+    // Authenticate with Google
+    console.log('=== Authenticating with Google ===\n');
+    await authenticateWithGoogle(page, googleEmail, googlePassword);
+    
+    // Navigate to NotebookLM
+    console.log('\n=== Navigating to NotebookLM ===\n');
+    console.log('  Navigating to NotebookLM...');
+    await page.goto('https://notebooklm.google.com/', { 
+      waitUntil: 'domcontentloaded',
+      timeout: 60000 
+    });
+    
+    // Wait for the page to be ready
+    await page.waitForTimeout(5000);
+    
+    let currentUrl = page.url();
+    if (currentUrl.includes('accounts.google.com/signin')) {
+      console.log('  ⚠️  Sign-in required, authenticating again...');
+      await authenticateWithGoogle(page, googleEmail, googlePassword);
+      await page.goto('https://notebooklm.google.com/', { 
+        waitUntil: 'domcontentloaded',
+        timeout: 60000 
+      });
+      await page.waitForTimeout(5000);
+      currentUrl = page.url();
+    }
+    
+    if (currentUrl.includes('accounts.google.com/signin')) {
+      throw new Error('Failed to authenticate - still on sign-in page. Please check credentials.');
+    }
+    
+    console.log('  ✓ Successfully navigated to NotebookLM\n');
+    
+    // Now download images using the authenticated browser
+    console.log('\n=== Downloading Images ===\n');
     
     const images: Buffer[] = [];
     
@@ -772,7 +658,7 @@ async function saveImages(
         console.log('\n✓ Browser closed');
       }
       
-      client.dispose();
+      sdk.dispose();
     } catch (error: any) {
       handleError(error, 'Failed to download slides');
     } finally {
