@@ -7,8 +7,8 @@ async function main() {
     await sdk.connect(); // Initialize SDK with authentication
 
     const notebookId = process.env.NOTEBOOK_ID || 'your-notebook-id';
-    const userEmails = process.env.USER_EMAILS?.split(',') || [];
-    const accessType = process.env.ACCESS_TYPE === '1' ? 1 : 2; // 1=anyone with link, 2=restricted
+    const userEmails = process.env.USER_EMAILS?.split(',').filter(email => email.trim()) || [];
+    const accessType = process.env.ACCESS_TYPE === '1' ? 1 : (userEmails.length > 0 ? 2 : 1); // Default to 1 (anyone with link) if no users
 
     console.log('=== Sharing Artifact/Notebook ===\n');
     console.log(`Notebook ID: ${notebookId}`);
@@ -17,7 +17,7 @@ async function main() {
     // Share with users (if provided)
     if (userEmails.length > 0) {
       console.log('Sharing with users:');
-      userEmails.forEach(email => console.log(`  - ${email}`));
+      userEmails.forEach(email => console.log(`  - ${email.trim()}`));
       console.log();
 
       const result = await sdk.artifacts.share(notebookId, {
@@ -41,11 +41,11 @@ async function main() {
         });
       }
     } else {
-      // Enable link sharing only
-      console.log('Enabling link sharing...\n');
+      // Enable link sharing only (must use accessType=1 when no users)
+      console.log('Enabling link sharing (anyone with link)...\n');
 
       const result = await sdk.artifacts.share(notebookId, {
-        accessType: accessType,
+        accessType: 1, // Must be 1 (anyone with link) when no users provided
       });
 
       console.log('✓ Link sharing enabled\n');

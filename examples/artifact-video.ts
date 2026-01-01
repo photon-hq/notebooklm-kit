@@ -33,22 +33,27 @@ async function main() {
       process.exit(1);
     }
 
-    console.log('✓ Video is ready for download\n');
+    console.log('✓ Video is ready\n');
+    
+    // Get video URL
+    console.log('=== Video URL ===\n');
+    console.log(`Video URL: ${video.videoData}\n`);
 
-    // Download video using get() with outputPath option
+    // Download video using download() method
     console.log('=== Downloading Video ===\n');
     console.log('Downloading video as MP4...\n');
     
-    const downloadedVideo = await sdk.artifacts.get(videoId, notebookId, { 
-      outputPath: outputDir 
-    });
+    const result = await sdk.artifacts.download(videoId, outputDir, notebookId);
 
     console.log(`✓ Video downloaded successfully!`);
-    console.log(`  Saved to: ${downloadedVideo.downloadPath}\n`);
+    console.log(`  Saved to: ${result.filePath}\n`);
 
-    // Alternative: Use download() method
-    console.log('=== Alternative: Using download() Method ===\n');
-    console.log('You can also use the download() method:\n');
+    // Note about get() vs download()
+    console.log('=== Note ===\n');
+    console.log('Use get() to get the video URL:');
+    console.log('  const video = await sdk.artifacts.get(videoId, notebookId);');
+    console.log('  console.log(`Video URL: ${video.videoData}`);\n');
+    console.log('Use download() to download the video file:');
     console.log('  const result = await sdk.artifacts.download(videoId, outputDir, notebookId);');
     console.log('  console.log(`Video saved to: ${result.filePath}`);\n');
 

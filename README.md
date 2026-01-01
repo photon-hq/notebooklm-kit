@@ -91,8 +91,8 @@ npm run dev
 | List Artifacts | List all artifacts in a notebook (with filtering) | [`sdk.artifacts.list()`](#list-artifacts) | [artifact-list.ts](examples/artifact-list.ts) |
 | Get Artifact | Get artifact details (auto-fetches content when ready) | [`sdk.artifacts.get()`](#get-artifact) | [artifact-get.ts](examples/artifact-get.ts) |
 | Download Artifact | Download artifact data to disk (quiz/flashcard JSON, audio file) | [`sdk.artifacts.download()`](#download-artifact) | [artifact-download.ts](examples/artifact-download.ts) |
-| Download Video | Download video artifact as MP4 file | [`sdk.artifacts.get()`](#get-artifact) with `outputPath` or [`sdk.artifacts.download()`](#download-artifact) | [artifact-video.ts](examples/artifact-video.ts) |
-| Download Slides | Download slide deck as PDF or PNG files | [`sdk.artifacts.get()`](#get-artifact) with `outputPath` and `downloadAs` or [`sdk.artifacts.download()`](#download-artifact) | [artifact-slide.ts](examples/artifact-slide.ts) |
+| Download Video | Download video artifact as MP4 file | [`sdk.artifacts.download()`](#download-artifact) | [artifact-video.ts](examples/artifact-video.ts) |
+| Download Slides | Download slide deck as PDF or PNG files | [`sdk.artifacts.download()`](#download-artifact) | [artifact-slide.ts](examples/artifact-slide.ts) |
 | Rename Artifact | Rename an artifact | [`sdk.artifacts.rename()`](#rename-artifact) | [artifact-rename.ts](examples/artifact-rename.ts) |
 | Delete Artifact | Delete an artifact | [`sdk.artifacts.delete()`](#delete-artifact) | [artifact-delete.ts](examples/artifact-delete.ts) |
 | Share Artifact | Share artifact/notebook with users or enable link sharing | [`sdk.artifacts.share()`](#share-artifact) | [artifact-share.ts](examples/artifact-share.ts) |
@@ -1952,10 +1952,11 @@ artifacts.forEach(artifact => {
 
 **Description:**
 Retrieves detailed artifact information. Automatically fetches full content when artifact is `READY`:
-- **Quiz/Flashcards/Audio**: Downloads and returns full data (questions, flashcards array, audio data)
-- **Video**: Downloads video (requires `outputPath` option) - returns download path
-- **Slides**: Downloads slides (requires `outputPath` option) - returns download path
-- **Reports**: Returns content or exports to Google Docs/Sheets if options provided
+- **Quiz/Flashcards**: Returns full data (questions, flashcards array, CSV)
+- **Audio**: Returns audio metadata (use `download()` to get audio file)
+- **Video**: Returns video URL in `videoData` field (use `download()` to download video file)
+- **Slides**: Returns slide image URLs (use `download()` to download slides as PDF/PNG)
+- **Reports**: Returns basic metadata (use `download()` to get report content, or `get()` with export options for Google Docs/Sheets)
 - **Infographics**: Returns image data with dimensions
 - **Mind Maps**: Returns with `experimental: true` flag
 
@@ -1965,28 +1966,22 @@ Retrieves detailed artifact information. Automatically fetches full content when
 |------|---------|---------|
 | Quiz | `QuizData` | Questions, options, correct answers, explanations |
 | Flashcards | `FlashcardData` | Flashcards array, CSV, totalCards |
-| Audio | `AudioArtifact` | Audio data (base64), saveToFile helper |
-| Video | `Artifact` | Download path (`downloadPath` field, requires `outputPath` option) |
-| Slides | `Artifact` | Download path (`downloadPath` field, requires `outputPath` option) |
-| Report | `ReportContent` or `{exportUrl}` | Report content or export URL |
+| Audio | `AudioArtifact` | Audio metadata (use `download()` for audio file) |
+| Video | `Artifact` | Video URL in `videoData` field (use `download()` to download) |
+| Slides | `Artifact` | Slide image URLs in `slideUrls` array (use `download()` to download) |
+| Report | `Artifact` | Basic metadata (artifactId, notebookId, state, title) - use `download()` for content or export options |
 | Infographic | `InfographicImageData` | Image data, dimensions, URL |
 | Mind Map | `Artifact` | Metadata with `experimental: true` |
+
+**Important Notes:**
+- **Videos & Slides**: `get()` returns URLs/links only, not downloaded files. Use `download()` method to actually download files.
+- **Reports**: `get()` returns basic metadata only. Use `download()` to get report content, or use export options below.
+- **Audio**: `get()` may not include audio data. Use `download()` to get the audio file.
 
 **Report Export Options:**
 - `exportToDocs?: boolean` - Export to Google Docs and return export URL
 - `exportToSheets?: boolean` - Export to Google Sheets and return export URL
-- If neither provided, returns report content as text/markdown/HTML/JSON
-
-**Slide Download Options (Required):**
-- `outputPath: string` - Directory path to save downloaded slides (required)
-- `downloadAs?: 'pdf' | 'png'` - Download format: PDF (default) or PNG files
-- PNG files are saved in a subfolder named after the artifact
-- Slides always download - URL option is not available
-
-**Video Download Options (Required):**
-- `outputPath: string` - Directory path to save downloaded video (required)
-- Videos are downloaded as MP4 files
-- Videos always download - URL option is not available
+- If neither provided, returns basic artifact metadata only (use `download()` for content)
 
 <details>
 <summary><strong>Validation</strong></summary>
@@ -2003,9 +1998,10 @@ Retrieves detailed artifact information. Automatically fetches full content when
 - Automatically detects artifact type and fetches appropriate content
 - For `READY` artifacts, returns full data instead of just metadata
 - For `CREATING` or `FAILED` artifacts, returns metadata only
-- Video and slides always download (requires `outputPath` option) - returns download path
+- **Videos & Slides**: Returns URLs only (use `download()` to download files)
+- **Reports**: Returns basic metadata only (use `download()` for content or export options)
 - Quiz and flashcards return full structured data
-- Audio returns data with `saveToFile()` helper function
+- Audio may not include audio data in `get()` - use `download()` to get audio file
 
 </details>
 
@@ -2032,35 +2028,23 @@ if (flashcards.state === ArtifactState.READY) {
   })
 }
 
-// Download video as MP4
-const video = await sdk.artifacts.get('video-id', 'notebook-id', { 
-  outputPath: './downloads' 
-})
-console.log(`Video saved to: ${video.downloadPath}`)
+// Get video URL (use download() to download file)
+const video = await sdk.artifacts.get('video-id', 'notebook-id')
+console.log(`Video URL: ${video.videoData}`)
+// To download: await sdk.artifacts.download('video-id', './downloads', 'notebook-id')
 
-// Download slide deck as PDF (default)
-const slides = await sdk.artifacts.get('slide-id', 'notebook-id', { 
-  outputPath: './downloads' 
+// Get slide URLs (use download() to download files)
+const slides = await sdk.artifacts.get('slide-id', 'notebook-id')
+console.log(`Slide URLs: ${slides.slideUrls?.length || 0} slides`)
+slides.slideUrls?.forEach((url, i) => {
+  console.log(`Slide ${i + 1}: ${url}`)
 })
-console.log(`PDF saved to: ${slides.downloadPath}`)
+// To download: await sdk.artifacts.download('slide-id', './downloads', 'notebook-id')
 
-// Download slide deck as PNG files
-const slidesPng = await sdk.artifacts.get('slide-id', 'notebook-id', { 
-  downloadAs: 'png', 
-  outputPath: './downloads' 
-})
-console.log(`PNG files saved to: ${slidesPng.downloadPath}`)
-
-// Download video as MP4
-const video = await sdk.artifacts.get('video-id', 'notebook-id', { 
-  outputPath: './downloads' 
-})
-console.log(`Video saved to: ${video.downloadPath}`)
-
-// Get report content
+// Get report metadata (use download() for content or export options)
 const report = await sdk.artifacts.get('report-id', 'notebook-id')
-console.log(`Report: ${report.content?.title}`)
-console.log(`Content: ${report.content?.content}`)
+console.log(`Report: ${report.title} (${report.state})`)
+// To get content: await sdk.artifacts.download('report-id', './downloads', 'notebook-id')
 
 // Export report to Google Docs
 const report = await sdk.artifacts.get('report-id', 'notebook-id', {
@@ -2074,12 +2058,11 @@ const report = await sdk.artifacts.get('report-id', 'notebook-id', {
 })
 console.log(`Sheets URL: ${report.exportUrl}`)
 
-// Get audio with save helper (use audioId from create() or list())
+// Get audio metadata (use download() to get audio file)
 const audioArtifact = await sdk.artifacts.audio.create('notebook-id')
 const audio = await sdk.artifacts.get(audioArtifact.audioId, 'notebook-id')
-if (audio.audioData && audio.saveToFile) {
-  await audio.saveToFile('./audio.mp3')
-}
+console.log(`Audio: ${audio.title} (${audio.state})`)
+// To download: await sdk.artifacts.download(audioArtifact.audioId, './downloads', 'notebook-id')
 ```
 
 ---
@@ -2142,37 +2125,40 @@ const audio = await sdk.artifacts.audio.create('notebook-id')
 const result = await sdk.artifacts.download(audio.audioId, './downloads', 'notebook-id')
 console.log(`Audio saved to: ${result.filePath}`)
 
-// Download video (using get() with outputPath or download() method)
-const video = await sdk.artifacts.get('video-id', 'notebook-id', { outputPath: './downloads' })
-console.log(`Video saved to: ${video.downloadPath}`)
-// Alternative: const result = await sdk.artifacts.download('video-id', './downloads', 'notebook-id')
+// Download video (use download() method)
+const result = await sdk.artifacts.download('video-id', './downloads', 'notebook-id')
+console.log(`Video saved to: ${result.filePath}`)
 
-// Slides: Download using download() or get() with downloadAs option
+// Download slides (use download() method)
 const slidesResult = await sdk.artifacts.download('slide-id', './downloads', 'notebook-id')
 console.log(`Slides saved to: ${slidesResult.filePath}`)
+
+// Download report (use download() method)
+const reportResult = await sdk.artifacts.download('report-id', './downloads', 'notebook-id')
+console.log(`Report saved to: ${reportResult.filePath}`)
 ```
 
 ---
 
 ### Download Video
 
-**Method:** `sdk.artifacts.get(videoId, notebookId, { outputPath })` or `sdk.artifacts.download(videoId, outputPath, notebookId)`
+**Method:** `sdk.artifacts.download(videoId, outputPath, notebookId)`
 
 **Example:** [artifact-video.ts](examples/artifact-video.ts)
 
 **Parameters:**
 - `videoId` (string, required): The video artifact ID
-- `notebookId` (string, required): The notebook ID containing the video
 - `outputPath` (string, required): Directory path to save the downloaded video
+- `notebookId` (string, required): The notebook ID containing the video
 
-**Returns:** 
-- `get()`: Returns `Artifact + { downloadPath: string }` - The artifact with download path
-- `download()`: Returns `{ filePath: string, data: Artifact }` - File path and artifact data
+**Returns:** `{ filePath: string, data: Artifact }` - File path and artifact data
 
 **Description:**
 Downloads a video artifact as an MP4 file. Uses Playwright for authentication and handles the download automatically. The video file is saved with the artifact title as the filename.
 
 **Important Notes:**
+- **Use `get()` to get video URL**: `get()` returns the video URL in `videoData` field, not a downloaded file
+- **Use `download()` to download**: `download()` method downloads the video file to disk
 - Video must be in `READY` state before downloading (check with `get()` first)
 - Requires cookies to be configured in the RPC client
 - Uses Playwright headless browser for authenticated download
@@ -2180,27 +2166,24 @@ Downloads a video artifact as an MP4 file. Uses Playwright for authentication an
 
 **Usage:**
 ```typescript
-// Method 1: Using get() with outputPath option
-const video = await sdk.artifacts.get('video-id', 'notebook-id', { 
-  outputPath: './downloads' 
-})
-console.log(`Video saved to: ${video.downloadPath}`)
+// Get video URL (get() returns URL only)
+const video = await sdk.artifacts.get('video-id', 'notebook-id')
+console.log(`Video URL: ${video.videoData}`)
 
-// Method 2: Using download() method
+// Download video (download() saves file to disk)
 const result = await sdk.artifacts.download('video-id', './downloads', 'notebook-id')
 console.log(`Video saved to: ${result.filePath}`)
 ```
 
 **Example Workflow:**
 ```typescript
-// 1. Check video status
+// 1. Check video status and get URL
 const video = await sdk.artifacts.get('video-id', 'notebook-id')
+console.log(`Video URL: ${video.videoData}`)
 if (video.state === ArtifactState.READY) {
   // 2. Download video
-  const downloaded = await sdk.artifacts.get('video-id', 'notebook-id', { 
-    outputPath: './downloads' 
-  })
-  console.log(`Downloaded: ${downloaded.downloadPath}`)
+  const downloaded = await sdk.artifacts.download('video-id', './downloads', 'notebook-id')
+  console.log(`Downloaded: ${downloaded.filePath}`)
 }
 ```
 
@@ -2208,19 +2191,17 @@ if (video.state === ArtifactState.READY) {
 
 ### Download Slides
 
-**Method:** `sdk.artifacts.get(slideId, notebookId, { outputPath, downloadAs })` or `sdk.artifacts.download(slideId, outputPath, notebookId, { downloadAs })`
+**Method:** `sdk.artifacts.download(slideId, outputPath, notebookId, { downloadAs })`
 
 **Example:** [artifact-slide.ts](examples/artifact-slide.ts)
 
 **Parameters:**
 - `slideId` (string, required): The slide artifact ID
-- `notebookId` (string, required): The notebook ID containing the slides
 - `outputPath` (string, required): Directory path to save the downloaded slides
+- `notebookId` (string, required): The notebook ID containing the slides
 - `downloadAs` (string, optional): Download format - `'pdf'` (default) or `'png'`
 
-**Returns:** 
-- `get()`: Returns `Artifact + { downloadPath: string, downloadFormat: 'pdf' | 'png' }` - The artifact with download path and format
-- `download()`: Returns `{ filePath: string, data: Artifact }` - File path and artifact data
+**Returns:** `{ filePath: string, data: Artifact }` - File path and artifact data
 
 **Description:**
 Downloads a slide deck artifact as PDF (default) or PNG files. Uses Playwright for authentication and handles the download automatically. PDF format saves all slides in a single file, while PNG format saves each slide as a separate image file.
@@ -2238,6 +2219,8 @@ Downloads a slide deck artifact as PDF (default) or PNG files. Uses Playwright f
 - Filenames: `slide_1.png`, `slide_2.png`, etc.
 
 **Important Notes:**
+- **Use `get()` to get slide URLs**: `get()` returns slide image URLs in `slideUrls` array, not downloaded files
+- **Use `download()` to download**: `download()` method downloads the slides to disk
 - Slides must be in `READY` state before downloading (check with `get()` first)
 - Requires cookies to be configured in the RPC client
 - Uses Playwright headless browser for authenticated download
@@ -2246,42 +2229,39 @@ Downloads a slide deck artifact as PDF (default) or PNG files. Uses Playwright f
 
 **Usage:**
 ```typescript
-// Method 1: Using get() with outputPath option
-// Download as PDF (default)
-const slides = await sdk.artifacts.get('slide-id', 'notebook-id', { 
-  outputPath: './downloads' 
+// Get slide URLs (get() returns URLs only)
+const slides = await sdk.artifacts.get('slide-id', 'notebook-id')
+console.log(`Slide URLs: ${slides.slideUrls?.length || 0} slides`)
+slides.slideUrls?.forEach((url, i) => {
+  console.log(`Slide ${i + 1}: ${url}`)
 })
-console.log(`PDF saved to: ${slides.downloadPath}`)
 
-// Download as PNG files
-const slidesPng = await sdk.artifacts.get('slide-id', 'notebook-id', { 
-  outputPath: './downloads',
+// Download as PDF (default) - use download() method
+const result = await sdk.artifacts.download('slide-id', './downloads', 'notebook-id')
+console.log(`PDF saved to: ${result.filePath}`)
+
+// Download as PNG files - use download() method
+const resultPng = await sdk.artifacts.download('slide-id', './downloads', 'notebook-id', { 
   downloadAs: 'png'
 })
-console.log(`PNG files saved to: ${slidesPng.downloadPath}`)
-
-// Method 2: Using download() method (PDF by default)
-const result = await sdk.artifacts.download('slide-id', './downloads', 'notebook-id')
-console.log(`Slides saved to: ${result.filePath}`)
+console.log(`PNG files saved to: ${resultPng.filePath}`)
 ```
 
 **Example Workflow:**
 ```typescript
-// 1. Check slide status
+// 1. Check slide status and get URLs
 const slides = await sdk.artifacts.get('slide-id', 'notebook-id')
+console.log(`Slide URLs: ${slides.slideUrls?.length || 0} slides`)
 if (slides.state === ArtifactState.READY) {
   // 2. Download as PDF (default)
-  const downloaded = await sdk.artifacts.get('slide-id', 'notebook-id', { 
-    outputPath: './downloads' 
-  })
-  console.log(`Downloaded PDF: ${downloaded.downloadPath}`)
+  const downloaded = await sdk.artifacts.download('slide-id', './downloads', 'notebook-id')
+  console.log(`Downloaded PDF: ${downloaded.filePath}`)
   
   // Or download as PNG files
-  const pngSlides = await sdk.artifacts.get('slide-id', 'notebook-id', { 
-    outputPath: './downloads',
+  const pngSlides = await sdk.artifacts.download('slide-id', './downloads', 'notebook-id', { 
     downloadAs: 'png'
   })
-  console.log(`Downloaded PNGs: ${pngSlides.downloadPath}`)
+  console.log(`Downloaded PNGs: ${pngSlides.filePath}`)
 }
 ```
 

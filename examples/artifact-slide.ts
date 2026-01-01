@@ -35,29 +35,47 @@ async function main() {
       process.exit(1);
     }
 
-    console.log('✓ Slides are ready for download\n');
-
-    // Download slides using get() with outputPath option
-    console.log('=== Downloading Slides ===\n');
-    console.log(`Downloading slides as ${downloadFormat.toUpperCase()}...\n`);
+    console.log('✓ Slides are ready\n');
     
-    const downloadedSlides = await sdk.artifacts.get(slideId, notebookId, { 
-      outputPath: outputDir,
-      downloadAs: downloadFormat
-    });
+    // Get slide URLs
+    console.log('=== Slide URLs ===\n');
+    if (slides.slideUrls && slides.slideUrls.length > 0) {
+      console.log(`Found ${slides.slideUrls.length} slide URLs:\n`);
+      slides.slideUrls.slice(0, 3).forEach((url, i) => {
+        console.log(`  Slide ${i + 1}: ${url}`);
+      });
+      if (slides.slideUrls.length > 3) {
+        console.log(`  ... and ${slides.slideUrls.length - 3} more\n`);
+      } else {
+        console.log();
+      }
+    } else {
+      console.log('No slide URLs available\n');
+    }
+
+    // Download slides using download() method
+    console.log('=== Downloading Slides ===\n');
+    console.log('Note: download() method saves slides as PDF by default.\n');
+    console.log('Downloading slides as PDF...\n');
+    
+    const result = await sdk.artifacts.download(slideId, outputDir, notebookId);
 
     console.log(`✓ Slides downloaded successfully!`);
-    console.log(`  Saved to: ${downloadedSlides.downloadPath}`);
-    console.log(`  Format: ${downloadedSlides.downloadFormat || downloadFormat}\n`);
+    console.log(`  Saved to: ${result.filePath}\n`);
 
-    // Alternative: Use download() method
-    console.log('=== Alternative: Using download() Method ===\n');
-    console.log('You can also use the download() method:\n');
-    console.log('  // Download as PDF (default)');
+    // Note about get() vs download()
+    console.log('=== Note ===\n');
+    console.log('Use get() to get slide URLs:');
+    console.log('  const slides = await sdk.artifacts.get(slideId, notebookId);');
+    console.log('  console.log(`Slide URLs: ${slides.slideUrls?.length || 0} slides`);');
+    console.log('  slides.slideUrls?.forEach((url, i) => {');
+    console.log('    console.log(`Slide ${i + 1}: ${url}`);');
+    console.log('  });\n');
+    console.log('Use download() to download slides as PDF:');
     console.log('  const result = await sdk.artifacts.download(slideId, outputDir, notebookId);');
     console.log('  console.log(`Slides saved to: ${result.filePath}`);\n');
-    console.log('  // Download as PNG files');
-    console.log('  // Note: download() uses PDF by default, use get() with downloadAs option for PNG\n');
+    console.log('Note: download() currently only supports PDF format. For PNG format,');
+    console.log('you can download individual slide images from the URLs returned by get().\n');
 
     console.log('=== Format Options ===\n');
     console.log('PDF (default):');
