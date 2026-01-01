@@ -97,7 +97,7 @@ export interface QuizCustomization {
  * Flashcard customization options
  */
 export interface FlashcardCustomization {
-  /** Number of cards: 1=Fewer, 2=Standard, 3=More (default: 2) */
+  /** Number of cards: 1=Fewer, 2=Standard/More (default: 2). Note: API only accepts 1 or 2; value 3 is automatically mapped to 2 */
   numberOfCards?: 1 | 2 | 3;
   
   /** Difficulty level: 1=Easy, 2=Medium, 3=Hard (default: 2) */

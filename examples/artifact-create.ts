@@ -134,7 +134,7 @@ async function main() {
     const flashcards = await sdk.artifacts.create(notebookId, ArtifactType.FLASHCARDS, {
       title: 'Key Terms Flashcards',
       customization: {
-        numberOfCards: 1, // 1=Fewer, 2=Standard, 3=More
+        numberOfCards: 1, // 1=Fewer, 2=Standard/More (API only accepts 1 or 2; 3 is auto-mapped to 2)
         difficulty: 1, // 1=Easy, 2=Medium, 3=Hard
         // language is not supported for Flashcards - use instructions instead
       },

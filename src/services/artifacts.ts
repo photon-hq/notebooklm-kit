@@ -1908,16 +1908,20 @@ export class ArtifactsService {
       // Handle Flashcards
       else if (artifactType === ArtifactType.FLASHCARDS) {
         const flashcardCustom = customization as FlashcardCustomization | undefined;
-        const numberOfCards = flashcardCustom?.numberOfCards ?? 2;
+        let numberOfCards = flashcardCustom?.numberOfCards ?? 2;
         const difficulty = flashcardCustom?.difficulty ?? 2;
         const instructionsText = instructions || null;
         
-        // Difficulty array format: [difficulty, 1]
-        // IMPORTANT: The second value is always 1, not the difficulty value
-        // Examples from curl references:
-        // - mm52.txt: [1,1] when difficulty=1 (Easy) - format is [1, 1]
-        // - mm56.txt: [3,1] when difficulty=3 (Hard) - format is [3, 1]
-        // This format is critical - using [difficulty, difficulty] will cause API errors
+        // Validate numberOfCards: API only accepts 1 (Fewer) or 2 (Standard/More)
+        // numberOfCards: 3 causes "Service unavailable" errors
+        // Map 3 -> 2 to maintain backward compatibility
+        if (numberOfCards === 3) {
+          numberOfCards = 2;
+        }
+        if (numberOfCards !== 1 && numberOfCards !== 2) {
+          numberOfCards = 2;
+        }
+        
         const flashcardCustomArray = [
           numberOfCards,
           null,
@@ -1925,7 +1929,7 @@ export class ArtifactsService {
           null,
           null,
           null,
-          [difficulty, 1], // Format: [difficulty, 1] - second value is always 1
+          [difficulty, 1],
         ];
         
         (args[2] as any[])[9] = [
