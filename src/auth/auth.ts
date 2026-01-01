@@ -108,16 +108,23 @@ async function authenticateWithGoogle(page: Page, email: string, password: strin
   await page.fill('input[type="password"]', password);
   await page.click('button:has-text("Next"), #passwordNext, button[type="button"]:has-text("Next")');
   
-  // Wait for authentication to complete
-  await page.waitForTimeout(3000);
+  // Wait for authentication to complete (including 2FA)
+  await page.waitForTimeout(60000); // Increased to 60 seconds to allow time for 2FA
   
   // Check if we're still on sign-in page (2FA or other issues)
   const currentUrl = page.url();
   if (currentUrl.includes('accounts.google.com/signin') || currentUrl.includes('challenge')) {
-    throw new NotebookLMAuthError(
-      'Authentication requires additional steps (2FA, verification, etc.). ' +
-      'Please use manual authentication with NOTEBOOKLM_AUTH_TOKEN and NOTEBOOKLM_COOKIES environment variables instead.'
-    );
+    // Give additional time for 2FA if still on sign-in page
+    console.log('⚠️  Still on sign-in page - waiting additional 30 seconds for 2FA completion...');
+    await page.waitForTimeout(30000);
+    
+    const finalUrl = page.url();
+    if (finalUrl.includes('accounts.google.com/signin') || finalUrl.includes('challenge')) {
+      throw new NotebookLMAuthError(
+        'Authentication requires additional steps (2FA, verification, etc.). ' +
+        'Please use manual authentication with NOTEBOOKLM_AUTH_TOKEN and NOTEBOOKLM_COOKIES environment variables instead.'
+      );
+    }
   }
   
   if (debug) {

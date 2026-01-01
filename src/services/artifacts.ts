@@ -955,10 +955,10 @@ export class ArtifactsService {
    * 
    * **⚠️ IMPORTANT: Sources Required**
    * - **The notebook must have at least one source** before creating artifacts
-   * - If `sourceIds` is omitted, **all sources in the notebook** are used automatically
-   * - If `sourceIds` is provided, **only those specific sources** are used
-   * - **Video artifacts specifically require sources** - always provide `sourceIds` for videos
-   * - **Audio artifacts** work like slides - if `sourceIds` is provided, use those sources; if omitted/empty, use all sources
+   * - `sourceIds` (optional): If provided, only those sources will be used. If omitted or empty, **all sources in the notebook** will be used automatically
+   * - This is a convenience feature - the SDK automatically fetches all sources when `sourceIds` is omitted
+   * - Provide `sourceIds` as an array of source ID strings (e.g., `['source-id-1', 'source-id-2']`) to use only specific sources
+   * - Use `sources.list(notebookId)` to get available source IDs if you want to filter
    * 
    * **Input:**
    * - `notebookId` (string, required): The notebook containing the sources to use
@@ -974,15 +974,10 @@ export class ArtifactsService {
    * - `options` (CreateArtifactOptions, optional): Creation parameters:
    *   - `title` (string, optional): Display name for the artifact
    *   - `instructions` (string, optional): Custom instructions for generation (e.g., "Focus on key concepts")
-   *   - `sourceIds` (string[], optional): Source IDs to use for artifact generation:
-   *     - **For Video**: **Required** - always provide `sourceIds` (e.g., `['source-id-1', 'source-id-2']`)
-   *     - **For Audio**: Optional - omit to use all sources, or specify to use only selected sources (works like slides)
-   *     - **For Quiz**: Optional - omit to use all sources, or specify to use only selected sources
-   *     - **For Flashcards**: Optional - omit to use all sources, or specify to use only selected sources
-   *     - **For Slide Deck**: Optional - omit to use all sources, or specify to use only selected sources
-   *     - **For Infographic**: Optional - omit to use all sources, or specify to use only selected sources
-     *     - **For Report**: Optional - omit to use all sources, or specify to use only selected sources
-     *     - **For Mind Map**: Optional - omit to use all sources, or specify to use only selected sources
+   *   - `sourceIds` (string[], optional): Source IDs to use for artifact generation (e.g., `['source-id-1', 'source-id-2']`)
+   *     - If provided: Only the specified sources will be used
+   *     - If omitted or empty: **All sources in the notebook** will be used automatically (SDK convenience feature)
+   *     - The notebook must have at least one source before creating artifacts
    *   - `customization` (object, optional): Type-specific customization options (see below)
    * 
    * **Customization Options by Type:**
@@ -1071,7 +1066,7 @@ export class ArtifactsService {
    *   - `3` = Whiteboard
    *   - `4` = Kawaii
    *   - `5` = Anime
-   * - `sourceIds` (string[], required for video): Specify sources to include - **video artifacts require sources**
+   * - `sourceIds` (string[], optional): Specify sources to include. If omitted, all sources in the notebook will be used
    * - `instructions` (string, optional): Detailed instructions for video content and style
    * 
    * **Mind Map, Report:**
@@ -1251,6 +1246,20 @@ export class ArtifactsService {
       );
     }
     
+    // If sourceIds is omitted or empty, fetch all sources from the notebook
+    let sourceIds = options.sourceIds || [];
+    if (sourceIds.length === 0) {
+      sourceIds = await this.getAllSourceIds(notebookId);
+      if (sourceIds.length === 0) {
+        throw new NotebookLMError(
+          'No sources found in notebook. Please add sources before creating artifacts.'
+        );
+      }
+    }
+    
+    // Update options with resolved sourceIds
+    options = { ...options, sourceIds };
+    
     // Handle quota checks for quota-tracked artifact types
     const quotaType = this.getQuotaType(type);
     if (quotaType) {
@@ -1262,11 +1271,11 @@ export class ArtifactsService {
     // Mind Map uses yyryJe (RPC_ACT_ON_SOURCES) with special structure
     if (type === ArtifactType.MIND_MAP) {
       artifact = await this.createMindMap(notebookId, options);
-    } else if (type === ArtifactType.AUDIO || type === ArtifactType.VIDEO || type === ArtifactType.QUIZ || type === ArtifactType.FLASHCARDS || type === ArtifactType.SLIDE_DECK || type === ArtifactType.INFOGRAPHIC) {
-      // Audio, Video, Quiz, Flashcards, Slides, and Infographics all use R7cb6c
+    } else if (type === ArtifactType.AUDIO || type === ArtifactType.VIDEO || type === ArtifactType.QUIZ || type === ArtifactType.FLASHCARDS || type === ArtifactType.SLIDE_DECK || type === ArtifactType.INFOGRAPHIC || type === ArtifactType.REPORT) {
+      // Audio, Video, Quiz, Flashcards, Slides, Infographics, and Reports all use R7cb6c
       artifact = await this.createR7cb6cArtifact(notebookId, type, options);
     } else {
-      // Other artifacts use xpWGLf (Report)
+      // Other artifacts use xpWGLf
       artifact = await this.createStandardArtifact(notebookId, type, options);
     }
     
@@ -1538,7 +1547,7 @@ export class ArtifactsService {
       case ArtifactType.AUDIO:
         return 1;
       case ArtifactType.REPORT:
-        return 1;
+        return 2;
       case ArtifactType.MIND_MAP:
         return 0;
       default:
@@ -1810,6 +1819,7 @@ export class ArtifactsService {
     // For Slides/Infographics: array needs 16 elements (0-15) for customization at index 15
     // For Audio: array needs at least 7 elements (0-6) for customization at index 6
     // For Video: array needs at least 9 elements (0-8) for customization at index 8
+    // For Report: array needs exactly 8 elements (0-7) for customization at index 7 (NOT extended!)
     const needsExtendedArray = artifactType === ArtifactType.SLIDE_DECK || 
                                artifactType === ArtifactType.INFOGRAPHIC ||
                                artifactType === ArtifactType.AUDIO ||
@@ -1823,7 +1833,7 @@ export class ArtifactsService {
       null,  // Index 4
       null,  // Index 5
       null,  // Index 6 (Audio customization goes here)
-      null,  // Index 7
+      null,  // Index 7 (Report customization goes here)
       null,  // Index 8 (Video customization goes here)
       null,  // Index 9 (Quiz/Flashcards customization goes here)
     ];
@@ -1834,9 +1844,9 @@ export class ArtifactsService {
         null,  // Index 10
         null,  // Index 11
         null,  // Index 12
-        null,  // Index 13 (Infographic customization goes here)
+        null,  // Index 13 (Slides customization goes here)
         null,  // Index 14
-        null,  // Index 15 (Slides customization goes here)
+        null,  // Index 15
       );
     }
     
@@ -1850,14 +1860,14 @@ export class ArtifactsService {
     // Add customization based on artifact type
     // Note: Slide decks, Audio, and Video ALWAYS need customization array set, even with defaults
     if (artifactType === ArtifactType.SLIDE_DECK) {
-      // Slides customization at index 15: [[instructions, language, format, length]]
-      // Structure from mm9.txt: [[null,"en",1,3]]
+      // Slides customization at index 13: [[instructions, language, format, length]]
+      // Structure from mm4.txt and mm6.txt: [[null,"en",2,3]] or [["something something","en",2,3]]
       // Always set customization array, even if no customization object provided
       const slideCustom = customization as SlideDeckCustomization | undefined;
       const format = slideCustom?.format ?? 2; // 2=Presenter, 3=Detailed deck
       const length = slideCustom?.length ?? 2; // 1=Short, 2=Default, 3=Long
       
-      (args[2] as any[])[15] = [[
+      (args[2] as any[])[13] = [[
         instructions || null, // Description/instructions
         slideCustom?.language || 'en', // Language (default: 'en')
         format, // Format (2=presenter, 3=detailed deck)
@@ -1905,18 +1915,22 @@ export class ArtifactsService {
       
       const sourceIdsFlat = formattedSourceIds ? formattedSourceIds.map(arr => arr[0]) : []; // Flatten from [[[id]]] to [[id]]
       
-      // CRITICAL: Audio customization is at INDEX 6, not 8!
-      // Working structure from manual request: [null, [null, null, null, [[id1], [id2]], "en", null, length]]
+      // Audio customization at index 6: [null, [instructions, length, null, sourceIdsFlat, language, null, format]]
+      // Structure from mm3.txt and mm53.txt:
+      // - mm3.txt (Deep dive): [null, [null, 2, null, [[id1], [id2]], "en", null, 1]]
+      // - mm3.txt (Brief): [null, [null, null, null, [[id1], [id2]], "en", null, 2]]
+      // - mm53.txt (Brief with instructions): [null, ["instructions", null, null, [[id]], "en", null, 2]]
+      // Format: 1=Deep dive, 2=Brief, 3=Critique, 4=Debate
       (args[2] as any[])[6] = [
         null,
         [
-          null,
-          null,
-          null,
-          sourceIdsFlat, // [[id1], [id2]] format - pass sourceIds here too
-          audioCustom?.language || 'en', // Language
-          null,
-          length, // Length (1=Short, 2=Default, 3=Long, or null for Brief)
+          instructions || null, // Index 0: Instructions (optional)
+          length, // Index 1: Length (1=Short, 2=Default, 3=Long, or null for Brief)
+          null, // Index 2: Placeholder
+          sourceIdsFlat, // Index 3: [[id1], [id2]] format
+          audioCustom?.language || 'en', // Index 4: Language
+          null, // Index 5: Placeholder
+          rpcFormat, // Index 6: Format (1=Deep dive, 2=Brief, 3=Critique, 4=Debate)
         ],
       ];
     } else if (artifactType === ArtifactType.VIDEO) {
@@ -1978,7 +1992,9 @@ export class ArtifactsService {
         ];
       } else if (artifactType === ArtifactType.FLASHCARDS) {
         // Flashcard customization at index 9: [null, [numberOfCards, null, instructions, null, null, null, [difficulty1, difficulty2]]]
+        // Structure from mm52.txt (more recent, same notebook ID): [null,[1,null,"ji",null,null,null,[1,1]]]
         // Structure from mm13.txt: [null,[1,null,"add a logo at bottom of \"PHOTON\"",null,null,null,[1,2]]]
+        // Note: mm52.txt shows [1,1] for difficulty=1, using that as the authoritative format
       // ALWAYS set customization array, even if no customization object provided
       const flashcardCustom = customization as FlashcardCustomization | undefined;
       const numberOfCards = flashcardCustom?.numberOfCards ?? 2; // 1=Fewer, 2=Standard, 3=More
@@ -1996,7 +2012,37 @@ export class ArtifactsService {
             null,
             null,
             null,
-            [difficulty, difficulty === 1 ? 2 : difficulty], // Difficulty array - note: [1,2] pattern observed for Easy
+            [difficulty, difficulty], // Difficulty array - use [difficulty, difficulty] format to match mm52.txt
+          ],
+        ];
+      } else if (artifactType === ArtifactType.REPORT) {
+        // Report customization at index 7: [null, [title, description, null, sourceIds, language, instructions, format]]
+        // Structure from mm54.txt: [null, ["Briefing Doc", "Key insights...", null, [["id"]], "en", "instructions", 2]]
+        // Note: sourceIds in customization are DOUBLE-nested [["id"]], not triple-nested
+        // Note: Reports use index 7, NOT index 8! Array should be length 8 (0-7), not extended
+        // ALWAYS set customization array, even if no customization object provided
+        const reportTitle = options.title || 'Report';
+        const reportDescription = 'Create a comprehensive report'; // Default description
+        const instructionsText = instructions || null;
+        const language = 'en'; // Default language
+        
+        // Format: 2 = "Create Your Own" (default format for custom reports)
+        const format = 2;
+        
+        // SourceIds in customization need to be DOUBLE-nested: [["id"]] format (not triple!)
+        // formattedSourceIds is [[[id]]], we need to flatten one level to [[id]]
+        const sourceIdsDouble = formattedSourceIds ? formattedSourceIds.map(arr => arr[0]) : [];
+        
+        (args[2] as any[])[7] = [
+          null,
+          [
+            reportTitle, // Index 0: Title
+            reportDescription, // Index 1: Description
+            null, // Index 2: Placeholder
+            sourceIdsDouble, // Index 3: SourceIds in [["id"]] format (double-nested)
+            language, // Index 4: Language
+            instructionsText, // Index 5: Instructions
+            format, // Index 6: Format (2 = "Create Your Own")
           ],
         ];
     }
@@ -2004,13 +2050,13 @@ export class ArtifactsService {
     // Optional customization for other artifacts (only if provided)
     if (customization) {
       if (artifactType === ArtifactType.INFOGRAPHIC) {
-        // Infographic customization at index 13: [[language, "en", null, orientation, levelOfDetail]]
-        // Structure from mm10.txt: [["hi","en",null,1,1]] or [[null,"en",null,1,3]]
+        // Infographic customization at index 14: [[language, "en", null, orientation, levelOfDetail]]
+        // Structure from mm10.txt: [["hi","en",null,1,1]] - customization is at index 14 (array length 15, last element)
         const infographicCustom = customization as InfographicCustomization;
         const orientation = infographicCustom.orientation ?? 1; // 1=Landscape, 2=Portrait, 3=Square
         const levelOfDetail = infographicCustom.levelOfDetail ?? 2; // 1=Concise, 2=Standard, 3=Detailed
         
-        (args[2] as any[])[13] = [[
+        (args[2] as any[])[14] = [[
           infographicCustom.language || null, // Primary language
           'en', // Secondary language (always "en")
           null,
@@ -2172,16 +2218,21 @@ export class ArtifactsService {
   ): Promise<Artifact> {
     const { title, instructions = '', sourceIds, customization } = options;
     
+    // Convert artifact type enum to API type number
+    const apiType = this.getApiTypeNumber(artifactType);
+    
     // Build artifact creation arguments
     const args: any[] = [
       notebookId,
-      artifactType,
+      apiType,
       title || '',
       instructions,
     ];
     
-    // Add source IDs if specified
-    if (sourceIds && sourceIds.length > 0) {
+    // Add source IDs if specified (only for certain artifact types)
+    // Note: Reports and Mind Maps may not accept sourceIds in xpWGLf RPC
+    // Only include sourceIds if provided and artifact type supports it
+    if (artifactType !== ArtifactType.REPORT && sourceIds && sourceIds.length > 0) {
       args.push(sourceIds);
     }
     
@@ -2305,6 +2356,69 @@ export class ArtifactsService {
     }
   }
   
+  /**
+   * Helper function to fetch all source IDs from a notebook
+   * Used when sourceIds is omitted/empty - automatically uses all sources
+   */
+  private async getAllSourceIds(notebookId: string): Promise<string[]> {
+    try {
+      // Call RPC_GET_PROJECT to get notebook data (includes sources)
+      // Same RPC call that SourcesService.list() uses
+      const response = await this.rpc.call(
+        RPC.RPC_GET_PROJECT,
+        [notebookId, null, [2], null, 0],
+        notebookId
+      );
+      
+      // Parse response to extract source IDs
+      let parsedResponse = response;
+      if (typeof response === 'string') {
+        parsedResponse = JSON.parse(response);
+      }
+      
+      if (!Array.isArray(parsedResponse) || parsedResponse.length === 0) {
+        return [];
+      }
+      
+      let data = parsedResponse;
+      
+      // Handle nested array structure
+      if (Array.isArray(parsedResponse[0])) {
+        data = parsedResponse[0];
+      }
+      
+      // Sources are in data[1]
+      if (!Array.isArray(data[1])) {
+        return [];
+      }
+      
+      const sourceIds: string[] = [];
+      
+      for (const sourceData of data[1]) {
+        if (!Array.isArray(sourceData) || sourceData.length === 0) {
+          continue;
+        }
+        
+        // Extract source ID from [0][0] or [0]
+        let sourceId: string | undefined;
+        if (Array.isArray(sourceData[0]) && sourceData[0].length > 0) {
+          sourceId = sourceData[0][0];
+        } else if (typeof sourceData[0] === 'string') {
+          sourceId = sourceData[0];
+        }
+        
+        if (sourceId && typeof sourceId === 'string') {
+          sourceIds.push(sourceId);
+        }
+      }
+      
+      return sourceIds;
+    } catch (error) {
+      // If we can't fetch sources, return empty array (will throw error in create())
+      return [];
+    }
+  }
+  
   // ========================================================================
   // Response parsers
   // ========================================================================
@@ -2380,6 +2494,16 @@ export class ArtifactsService {
         // If first element is an array, unwrap it
         if (Array.isArray(data[0])) {
           data = data[0];
+        }
+        
+        // Check if this is a Mind Map response (structure: [jsonString, null, [ids...]])
+        // Mind Maps use yyryJe RPC and have a unique structure
+        if (data.length >= 3 && 
+            typeof data[0] === 'string' && 
+            data[0].startsWith('{') && 
+            data[1] === null && 
+            Array.isArray(data[2])) {
+          return this.parseMindMapResponse(data);
         }
         
         const artifact = this.parseArtifactData(data);
@@ -2524,6 +2648,62 @@ export class ArtifactsService {
     }
     
     return null;
+  }
+  
+  /**
+   * Parse Mind Map creation response
+   * Structure: [jsonString, null, [artifactId, ...otherIds...]]
+   * Example: ["{\n\"name\": \"...\",\n\"children\": [...]}", null, ["id1", "id2", 123]]
+   */
+  private parseMindMapResponse(data: any[]): Artifact {
+    const artifact: Artifact = {
+      artifactId: '',
+      type: ArtifactType.MIND_MAP,
+      state: ArtifactState.READY, // Mind Maps are returned immediately
+    };
+    
+    // Parse the JSON string at index 0
+    if (data[0] && typeof data[0] === 'string') {
+      try {
+        const mindMapData = JSON.parse(data[0]);
+        
+        // Extract title from the "name" field in the JSON
+        if (mindMapData && typeof mindMapData === 'object' && mindMapData.name) {
+          artifact.title = mindMapData.name;
+        }
+        
+        // Store the full mind map data in a custom field
+        // Note: The Artifact interface might need to be extended, but for now we'll store it
+        // The user can access the full structure via get() later
+        (artifact as any).mindMapData = mindMapData;
+      } catch (e) {
+        // If JSON parsing fails, use the raw string
+        // Try to extract name from the string if it's in there
+        const nameMatch = data[0].match(/"name":\s*"([^"]+)"/);
+        if (nameMatch && nameMatch[1]) {
+          artifact.title = nameMatch[1];
+        }
+      }
+    }
+    
+    // Extract artifact ID from index 2 (array of IDs)
+    // The first ID in the array is typically the artifact ID
+    if (data[2] && Array.isArray(data[2]) && data[2].length > 0) {
+      const id = data[2][0];
+      if (typeof id === 'string') {
+        artifact.artifactId = id;
+      } else {
+        // Fallback: convert to string
+        artifact.artifactId = String(id);
+      }
+    }
+    
+    // If no artifactId was found, generate one or use a placeholder
+    if (!artifact.artifactId) {
+      artifact.artifactId = `mindmap-${Date.now()}`;
+    }
+    
+    return artifact;
   }
   
   private parseAudioCreateResponse(response: any, notebookId: string): Artifact {

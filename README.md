@@ -1580,7 +1580,7 @@ Examples: [artifact-create.ts](examples/artifact-create.ts) | [artifact-create-s
 - `options: CreateArtifactOptions`
   - `title?: string` - Artifact title (optional)
   - `instructions?: string` - Instructions for generation (optional)
-  - `sourceIds?: string[]` - Specific source IDs (optional, uses all if not provided)
+  - `sourceIds?: string[]` - Source IDs to use (optional - automatically uses all sources if omitted)
   - `customization?: object` - Type-specific customization options (optional)
 
 **Returns:** `Promise<Artifact>` (or `Promise<VideoOverview>` / `Promise<AudioOverview>` for video/audio)
@@ -1692,7 +1692,7 @@ customization: {
 | `length` | `1`, `2`, `3` | **1** = Short (2-5 minutes), **2** = Default (5-10 minutes), **3** = Long (10-15+ minutes) | `2` |
 | `language` | `string` | Language code (e.g., `'en'`, `'hi'`, `'es'`). Use `NotebookLMLanguage` enum for type safety. Supports 80+ languages. | `'en'` |
 
-**Note:** Audio artifacts always use all sources in the notebook. The `sourceIds` option is ignored.
+**Note:** If `sourceIds` is omitted, all sources in the notebook are automatically used.
 
 **Example:**
 ```typescript
@@ -1735,7 +1735,7 @@ customization: {
 **Note:** 
 - All styles except Custom (`1`) support only the `focus` option
 - Custom (`1`) additionally requires `customStyleDescription`
-- Video artifacts **require** `sourceIds` to be provided (cannot use all sources)
+- If `sourceIds` is omitted, all sources in the notebook are automatically used
 
 **Example:**
 ```typescript
@@ -1773,7 +1773,7 @@ customization: {
 **Report** and **Mind Map** artifacts do not support customization options. They only support:
 - `title?: string` - Artifact title (optional)
 - `instructions?: string` - Custom instructions for generation (optional)
-- `sourceIds?: string[]` - Specific source IDs to use (optional, uses all sources if omitted)
+- `sourceIds?: string[]` - Source IDs to use (optional - automatically uses all sources if omitted)
 
 **Example:**
 ```typescript
@@ -1794,13 +1794,11 @@ const mindMap = await sdk.artifacts.mindmap.create('notebook-id', {
 
 </details>
 
-**Source Selection Behavior:**
+**Source Selection:**
 
-| Artifact Type | `sourceIds` Behavior |
-|---------------|---------------------|
-| **Quiz, Flashcards, Slide Deck, Infographic, Report, Mind Map** | Optional - omit to use all sources, or specify to use selected sources |
-| **Audio** | Ignored - always uses all sources in notebook |
-| **Video** | **Required** - must provide `sourceIds` (cannot use all sources) |
+- `sourceIds` is **optional** for all artifact types
+- If omitted or empty, **all sources** in the notebook are automatically used
+- If provided, only the specified sources are used
 
 **Return Fields:**
 - `artifactId: string` - Unique artifact ID (required for other operations)

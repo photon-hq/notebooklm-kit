@@ -42,9 +42,9 @@ function waitForEnter(prompt: string = 'Press Enter to continue...'): Promise<vo
  * Extract credentials from NotebookLM page using browser
  * Opens visible browser, waits for manual login, then extracts cookies and auth token
  */
-async function extractCredentialsFromBrowser(waitSeconds: number = 10, keepOpen: boolean = false): Promise<{ authToken: string; cookies: string; browser?: Browser }> {
+async function extractCredentialsFromBrowser(waitSeconds: number = 60, keepOpen: boolean = false): Promise<{ authToken: string; cookies: string; browser?: Browser }> {
   console.log(`\n🌐 Opening browser (visible mode)...`);
-  console.log(`⏳ You have ${waitSeconds} seconds to manually log in to NotebookLM...\n`);
+  console.log(`⏳ You have ${waitSeconds} seconds to manually log in to NotebookLM (including 2FA)...\n`);
 
   const browser: Browser = await chromium.launch({ headless: false });
   
@@ -121,7 +121,7 @@ async function extractCredentialsFromBrowser(waitSeconds: number = 10, keepOpen:
  * Falls back to manual credentials if provided (NOTEBOOKLM_AUTH_TOKEN, NOTEBOOKLM_COOKIES)
  * Or extracts credentials from visible browser if EXTRACT_COOKIES=true
  */
-export async function createSDK(): Promise<NotebookLMClient> {
+export async function createSDK(config?: { debug?: boolean }): Promise<NotebookLMClient> {
   const googleEmail = process.env.GOOGLE_EMAIL;
   const googlePassword = process.env.GOOGLE_PASSWORD;
   const authToken = process.env.NOTEBOOKLM_AUTH_TOKEN;
@@ -130,7 +130,7 @@ export async function createSDK(): Promise<NotebookLMClient> {
 
   // Option 1: Extract cookies from visible browser
   if (extractCookies) {
-    const waitSeconds = parseInt(process.env.EXTRACT_WAIT_SECONDS || '10', 10);
+    const waitSeconds = parseInt(process.env.EXTRACT_WAIT_SECONDS || '60', 10);
     const keepOpen = process.env.KEEP_BROWSER_OPEN === 'true';
     const credentials = await extractCredentialsFromBrowser(waitSeconds, keepOpen);
     
@@ -143,6 +143,7 @@ export async function createSDK(): Promise<NotebookLMClient> {
       cookies: credentials.cookies,
       autoRefresh: true,
       enforceQuotas: false,
+      debug: config?.debug,
     });
   }
 
@@ -156,6 +157,7 @@ export async function createSDK(): Promise<NotebookLMClient> {
       },
       autoRefresh: true,
       enforceQuotas: false,
+      debug: config?.debug,
     });
   }
 
@@ -166,6 +168,7 @@ export async function createSDK(): Promise<NotebookLMClient> {
       cookies,
       autoRefresh: true,
       enforceQuotas: false,
+      debug: config?.debug,
     });
   }
 

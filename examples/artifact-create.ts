@@ -1,22 +1,76 @@
 import { createSDK, handleError } from './utils.js';
 import { ArtifactType, NotebookLMLanguage } from '../src/types/artifact.js';
+import * as readline from 'readline';
+
+async function promptUser(question: string): Promise<string> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
 
 async function main() {
-  const sdk = await createSDK();
+  const sdk = await createSDK({ debug: true });
 
   try {
     await sdk.connect(); // Initialize SDK with authentication
 
     const notebookId = process.env.NOTEBOOK_ID || 'your-notebook-id';
-    // Support both SOURCE_IDS (plural) and SOURCE_ID (singular) for consistency
-    // Format: SOURCE_IDS=id1,id2,id3 or SOURCE_ID=id1 (comma-separated for multiple)
-    const sourceIdsEnv = process.env.SOURCE_IDS || process.env.SOURCE_ID || '';
-    const sourceIds = sourceIdsEnv.split(',').map(id => id.trim()).filter(id => id.length > 0);
+    
+    // List sources first
+    console.log('=== Listing Sources ===\n');
+    const sources = await sdk.sources.list(notebookId);
+    
+    if (sources.length === 0) {
+      console.error('❌ No sources found in notebook. Please add sources before creating artifacts.');
+      process.exit(1);
+    }
+    
+    console.log(`Found ${sources.length} source(s):\n`);
+    sources.forEach((source, index) => {
+      console.log(`  ${index + 1}. [${source.sourceId}] ${source.title || 'Untitled'} (${source.type}) - ${source.status}`);
+    });
+    console.log();
+    
+    // Ask user to select sources
+    const selection = await promptUser(
+      `Select sources to use (enter numbers separated by commas, e.g., "1,2,3" or "all" for all sources): `
+    );
+    
+    let sourceIds: string[] = [];
+    
+    if (selection.toLowerCase() === 'all' || selection === '') {
+      // Use ALL sources
+      sourceIds = sources.map(s => s.sourceId);
+      console.log(`Using ALL ${sourceIds.length} source(s)\n`);
+    } else {
+      // Parse user selection
+      const selectedIndices = selection
+        .split(',')
+        .map(s => parseInt(s.trim(), 10))
+        .filter(n => !isNaN(n) && n >= 1 && n <= sources.length);
+      
+      if (selectedIndices.length === 0) {
+        console.error('❌ Invalid selection. Please enter valid source numbers or "all".');
+        process.exit(1);
+      }
+      
+      sourceIds = selectedIndices.map(index => sources[index - 1].sourceId);
+      console.log(`Using ${sourceIds.length} selected source(s): ${selectedIndices.join(', ')}\n`);
+    }
 
     console.log('=== Creating Artifacts ===\n');
 
     // 1. Create Quiz
     console.log('1. Creating Quiz...');
+    
     const quiz = await sdk.artifacts.create(notebookId, ArtifactType.QUIZ, {
       title: 'Chapter 1 Quiz',
       instructions: 'Create questions covering key concepts from the sources',
@@ -25,7 +79,7 @@ async function main() {
         difficulty: 2, // 1=Easy, 2=Medium, 3=Hard
         language: NotebookLMLanguage.ENGLISH,
       },
-      sourceIds: sourceIds.length > 0 ? sourceIds : undefined, // Optional: omit to use all sources
+      sourceIds: sourceIds, // Optional: specify sources to use (omits to use all)
     });
     console.log(`   Created: ${quiz.title}`);
     console.log(`   ID: ${quiz.artifactId}`);
@@ -40,6 +94,7 @@ async function main() {
         difficulty: 1, // 1=Easy, 2=Medium, 3=Hard
         language: NotebookLMLanguage.ENGLISH,
       },
+      sourceIds: sourceIds, // Optional: specify sources to use (omits to use all)
     });
     console.log(`   Created: ${flashcards.title}`);
     console.log(`   ID: ${flashcards.artifactId}`);
@@ -55,6 +110,7 @@ async function main() {
         length: 2, // 1=Short, 2=Default, 3=Long
         language: NotebookLMLanguage.ENGLISH,
       },
+      sourceIds: sourceIds, // Optional: specify sources to use (omits to use all)
     });
     console.log(`   Created: ${slides.title}`);
     console.log(`   ID: ${slides.artifactId}`);
@@ -69,6 +125,7 @@ async function main() {
         levelOfDetail: 2, // 1=Concise, 2=Standard, 3=Detailed
         language: NotebookLMLanguage.ENGLISH,
       },
+      sourceIds: sourceIds, // Optional: specify sources to use (omits to use all)
     });
     console.log(`   Created: ${infographic.title}`);
     console.log(`   ID: ${infographic.artifactId}`);
@@ -84,50 +141,46 @@ async function main() {
         length: 2, // 1=Short, 2=Default, 3=Long
         language: NotebookLMLanguage.ENGLISH,
       },
-      // Note: sourceIds is ignored for audio - always uses all sources
+      sourceIds: sourceIds, // Optional: specify sources to use (omits to use all)
     });
     console.log(`   Created: ${audio.title}`);
     console.log(`   ID: ${audio.artifactId}`);
     console.log(`   State: ${audio.state}\n`);
 
-    // 6. Create Video Overview (requires sourceIds)
-    if (sourceIds.length > 0) {
-      console.log('6. Creating Video Overview...');
-      const video = await sdk.artifacts.create(notebookId, ArtifactType.VIDEO, {
-        title: 'Explainer Video',
-        instructions: 'Create an explainer video covering the main topics',
-        sourceIds: sourceIds, // Required for video artifacts
-        customization: {
-          format: 1, // 1=Explainer, 2=Brief
-          visualStyle: 0, // 0=Auto-select, 1=Custom, 2=Classic, 3=Whiteboard, 4=Kawaii, 5=Anime, 6=Watercolour, 7=Anime (alt), 8=Retro print, 9=Heritage, 10=Paper-craft
-          focus: 'Key concepts and main findings',
-          language: NotebookLMLanguage.ENGLISH,
-        },
-      });
-      console.log(`   Created: ${video.title}`);
-      console.log(`   ID: ${video.artifactId}`);
-      console.log(`   State: ${video.state}\n`);
-    } else {
-      console.log('6. Skipping Video (requires SOURCE_IDS in .env)\n');
-    }
+    // 6. Create Video Overview
+    console.log('6. Creating Video Overview...');
+    const video = await sdk.artifacts.create(notebookId, ArtifactType.VIDEO, {
+      title: 'Explainer Video',
+      instructions: 'Create an explainer video covering the main topics',
+      sourceIds: sourceIds, // Optional: specify sources to use (omits to use all)
+      customization: {
+        format: 1, // 1=Explainer, 2=Brief
+        visualStyle: 0, // 0=Auto-select, 1=Custom, 2=Classic, 3=Whiteboard, 4=Kawaii, 5=Anime, 6=Watercolour, 7=Anime (alt), 8=Retro print, 9=Heritage, 10=Paper-craft
+        focus: 'Key concepts and main findings',
+        language: NotebookLMLanguage.ENGLISH,
+      },
+    });
+    console.log(`   Created: ${video.title}`);
+    console.log(`   ID: ${video.artifactId}`);
+    console.log(`   State: ${video.state}\n`);
 
-    // 7. Create Report (no customization)
+    // 7. Create Report
     console.log('7. Creating Report...');
     const report = await sdk.artifacts.create(notebookId, ArtifactType.REPORT, {
       title: 'Research Report',
       instructions: 'Create a comprehensive research report',
-      sourceIds: sourceIds.length > 0 ? sourceIds : undefined,
+      sourceIds: sourceIds, // Optional: specify sources to use (omits to use all)
     });
     console.log(`   Created: ${report.title}`);
     console.log(`   ID: ${report.artifactId}`);
     console.log(`   State: ${report.state}\n`);
 
-    // 8. Create Mind Map (no customization)
+    // 8. Create Mind Map
     console.log('8. Creating Mind Map...');
     const mindMap = await sdk.artifacts.create(notebookId, ArtifactType.MIND_MAP, {
       title: 'Concept Map',
       instructions: 'Create a visual mind map of key concepts',
-      sourceIds: sourceIds.length > 0 ? sourceIds : undefined,
+      sourceIds: sourceIds, // Optional: specify sources to use (omits to use all)
     });
     console.log(`   Created: ${mindMap.title}`);
     console.log(`   ID: ${mindMap.artifactId}`);

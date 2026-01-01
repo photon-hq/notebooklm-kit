@@ -251,6 +251,12 @@ export class BatchExecuteClient {
         const firstResponse = responses[0];
         const apiError = isErrorResponse(firstResponse);
         if (apiError) {
+          if (this.config.debug) {
+            console.log(`[DEBUG] BatchExecute - API error detected: ${apiError.message}`);
+            console.log(`[DEBUG] BatchExecute - Error code: ${(apiError as any).errorCode?.code}`);
+            console.log(`[DEBUG] BatchExecute - Retryable: ${apiError.isRetryable()}`);
+            console.log(`[DEBUG] BatchExecute - Response data:`, JSON.stringify(firstResponse, null, 2));
+          }
           throw apiError;
         }
         
