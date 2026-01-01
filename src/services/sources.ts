@@ -728,7 +728,7 @@ export class AddSourcesService {
    * Add a URL source
    */
   async url(notebookId: string, options: AddSourceFromURLOptions): Promise<string> {
-    const { url } = options;
+    const { url, title } = options;
     
     if (!url || typeof url !== 'string') {
       throw new NotebookLMError('URL is required and must be a string');
@@ -763,6 +763,27 @@ export class AddSourcesService {
     
     if (sourceId) {
       this.quota?.recordUsage('addSource', notebookId);
+    }
+    
+    // If a custom title was provided, update the source with it
+    // (The API uses the website's title by default, but we can override it)
+    if (title && typeof title === 'string' && title.trim().length > 0) {
+      try {
+        // RPC structure for updating source title: [null, ["sourceId"], [[["title"]]]]
+        await this.rpc.call(
+          RPC.RPC_MUTATE_SOURCE,
+          [
+            null,
+            [sourceId],
+            [[[title.trim()]]],
+          ],
+          notebookId
+        );
+      } catch (error) {
+        // If update fails, log a warning but don't fail the whole operation
+        // The source was still added successfully, just without the custom title
+        console.warn(`Warning: Failed to update source title: ${(error as Error).message}`);
+      }
     }
     
     return sourceId;
