@@ -61,7 +61,7 @@ npm run dev
 | List Notebooks | List all your notebooks (recently viewed) | [`sdk.notebooks.list()`](#list-notebooks) | [notebook-list.ts](examples/notebook-list.ts) |
 | Get Notebook | Get full details of a specific notebook | [`sdk.notebooks.get(notebookId)`](#get-notebook) | [notebook-get.ts](examples/notebook-get.ts) |
 | Create Notebook | Create a new notebook (auto-generates title if empty) | [`sdk.notebooks.create(options)`](#create-notebook) | [notebook-create.ts](examples/notebook-create.ts) |
-| Update Notebook | Update notebook title, description, or emoji | [`sdk.notebooks.update(notebookId, options)`](#update-notebook) | [notebook-update.ts](examples/notebook-update.ts) |
+| Update Notebook | Update notebook title or emoji | [`sdk.notebooks.update(notebookId, options)`](#update-notebook) | [notebook-update.ts](examples/notebook-update.ts) |
 | Delete Notebook | Delete one or more notebooks | [`sdk.notebooks.delete(notebookIds)`](#delete-notebook) | [notebook-delete.ts](examples/notebook-delete.ts) |
 | Share Notebook | Share notebook with users or enable link sharing | [`sdk.notebooks.share(notebookId, options)`](#share-notebook) | [notebook-share.ts](examples/notebook-share.ts) |
 
@@ -592,7 +592,6 @@ const notebook = await sdk.notebooks.create({
 - `notebookId: string` - The notebook ID (required, automatically trimmed)
 - `options: UpdateNotebookOptions`
   - `title?: string` - New title (optional)
-  - `description?: string` - New description (optional)
   - `emoji?: string` - New emoji (optional)
   - `metadata?: Record<string, any>` - Other metadata updates (optional)
 
@@ -642,15 +641,9 @@ const updated = await sdk.notebooks.update('notebook-id', {
   emoji: '⭐',
 })
 
-// Update description only
-const updated = await sdk.notebooks.update('notebook-id', {
-  description: 'New description',
-})
-
 // Update all fields
 const updated = await sdk.notebooks.update('notebook-id', {
   title: 'New Title',
-  description: 'New Description',
   emoji: '🎯',
 })
 ```
