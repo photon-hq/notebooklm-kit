@@ -12,7 +12,7 @@ async function main() {
 
     // Add YouTube video by URL
     const sourceId1 = await sdk.sources.add.youtube(notebookId, {
-      urlOrId: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      urlOrId: 'https://www.youtube.com/watch?v=Ec08db2hP10&list=RDEc08db2hP10',
     });
     console.log(`Added YouTube video (URL)`);
     console.log(`Source ID: ${sourceId1}\n`);
