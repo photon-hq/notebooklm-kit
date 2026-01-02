@@ -2154,14 +2154,15 @@ console.log(`Report saved to: ${reportResult.filePath}`)
 **Returns:** `{ filePath: string, data: Artifact }` - File path and artifact data
 
 **Description:**
-Downloads a video artifact as an MP4 file. Uses Playwright for authentication and handles the download automatically. The video file is saved with the artifact title as the filename.
+Downloads a video artifact as an MP4 file. Uses Playwright for authentication and Node's native http/https for reliable download with real-time progress tracking. The video file is saved with the artifact title as the filename.
 
 **Important Notes:**
 - **Use `get()` to get video URL**: `get()` returns the video URL in `videoData` field, not a downloaded file
 - **Use `download()` to download**: `download()` method downloads the video file to disk
 - Video must be in `READY` state before downloading (check with `get()` first)
-- Requires cookies to be configured in the RPC client
-- Uses Playwright headless browser for authenticated download
+- Requires `GOOGLE_EMAIL` and `GOOGLE_PASSWORD` environment variables for authentication
+- Uses Playwright for authentication and Node's http/https for reliable streaming download
+- Shows real-time download progress (percentage and progress bar)
 - Video is saved as `<artifact-title>.mp4` in the specified output directory
 
 **Usage:**
