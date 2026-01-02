@@ -209,31 +209,59 @@ function generateAuthHeader(cookies: string): string | null {
  */
 /**
  * Authenticate with Google using Playwright
+ * Waits for 2FA completion without navigating away
  */
 async function authenticateWithGoogle(page: Page, email: string, password: string): Promise<void> {
   console.log('  Authenticating with Google...');
   
   // Navigate to Google sign-in
   await page.goto('https://accounts.google.com/signin', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(2000);
   
   // Enter email
   await page.fill('input[type="email"]', email);
   await page.click('button:has-text("Next"), #identifierNext');
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(3000);
   
   // Enter password
   await page.fill('input[type="password"]', password);
   await page.click('button:has-text("Next"), #passwordNext');
   
   // Wait for authentication to complete (may redirect to Google home or show 2FA)
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(5000);
   
   // Check if we're still on a sign-in page (might need 2FA)
-  const currentUrl = page.url();
+  let currentUrl = page.url();
   if (currentUrl.includes('accounts.google.com/signin')) {
     console.log('  ⚠️  Still on sign-in page - you may need to complete 2FA manually');
-    console.log('  Waiting 30 seconds for manual completion...');
-    await page.waitForTimeout(30000);
+    console.log('  Waiting 60 seconds for manual 2FA completion...');
+    console.log('  Please complete 2FA in the browser window (do not close it)...');
+    
+    // Wait for 2FA - check periodically if we've moved off the sign-in page
+    let waitedTime = 0;
+    const maxWaitTime = 60000; // 60 seconds
+    const checkInterval = 5000; // Check every 5 seconds
+    
+    while (waitedTime < maxWaitTime) {
+      await page.waitForTimeout(checkInterval);
+      waitedTime += checkInterval;
+      currentUrl = page.url();
+      
+      // If we're no longer on the sign-in page, authentication is complete
+      if (!currentUrl.includes('accounts.google.com/signin')) {
+        console.log(`  ✓ Authentication complete after ${waitedTime / 1000} seconds`);
+        return;
+      }
+    }
+    
+    // After 60 seconds, check one more time
+    currentUrl = page.url();
+    if (currentUrl.includes('accounts.google.com/signin')) {
+      console.log('  ⚠️  Still on sign-in page after 60 seconds');
+      console.log('  Waiting additional 30 seconds...');
+      await page.waitForTimeout(30000);
+      currentUrl = page.url();
+    }
   }
   
   console.log('  ✓ Authentication complete');
@@ -362,12 +390,13 @@ async function saveImages(
     let notebookId: string;
     const selectionNum = parseInt(notebookSelection, 10);
     if (!isNaN(selectionNum) && selectionNum >= 1 && selectionNum <= notebooks.length) {
-      notebookId = notebooks[selectionNum - 1].projectId;
-      console.log(`✓ Selected notebook: ${notebooks[selectionNum - 1].title || 'Untitled'}\n`);
+      notebookId = notebooks[selectionNum - 1].projectId.trim();
+      console.log(`✓ Selected notebook: ${notebooks[selectionNum - 1].title || 'Untitled'}`);
+      console.log(`  Notebook ID: ${notebookId}\n`);
     } else {
       // Treat as notebook ID
       notebookId = notebookSelection.trim();
-      const notebookExists = notebooks.some(n => n.projectId === notebookId);
+      const notebookExists = notebooks.some(n => n.projectId.trim() === notebookId);
       if (!notebookExists) {
         console.warn(`⚠ Warning: Notebook ID "${notebookId}" not found in your notebooks.`);
         const continueAnyway = await question(rl, 'Continue anyway? (y/n): ');
@@ -378,7 +407,26 @@ async function saveImages(
     }
     
     console.log('=== Listing Slide Artifacts ===\n');
-    const artifacts = await sdk.artifacts.list(notebookId);
+    console.log(`Fetching artifacts for notebook: ${notebookId}\n`);
+    
+    let artifacts;
+    try {
+      artifacts = await sdk.artifacts.list(notebookId);
+    } catch (error: any) {
+      console.error(`\n✗ Error listing artifacts: ${error.message}`);
+      if (error.message?.includes('Not found') || error.message?.includes('404')) {
+        console.error(`\nThe notebook "${notebookId}" may not exist, or you may not have access to it.`);
+        console.error(`\nPlease verify:`);
+        console.error(`  1. The notebook ID is correct: ${notebookId}`);
+        console.error(`  2. You have access to this notebook`);
+        console.error(`  3. The notebook exists in your account`);
+        console.error(`\nYou can try:`);
+        console.error(`  - Use the second notebook ID from the list above`);
+        console.error(`  - Or set NOTEBOOK_ID environment variable directly`);
+        throw new Error(`Notebook not found or access denied: ${notebookId}`);
+      }
+      throw error;
+    }
     const slideArtifacts = artifacts.filter(
       a => a.type === ArtifactType.SLIDE_DECK && a.state === ArtifactState.READY
     );
@@ -575,38 +623,14 @@ async function saveImages(
     });
     page = await context.newPage();
     
-    // Authenticate with Google
+    // Authenticate with Google (this will handle 2FA and wait)
     console.log('=== Authenticating with Google ===\n');
     await authenticateWithGoogle(page, googleEmail, googlePassword);
     
-    // Navigate to NotebookLM
-    console.log('\n=== Navigating to NotebookLM ===\n');
-    console.log('  Navigating to NotebookLM...');
-    await page.goto('https://notebooklm.google.com/', { 
-      waitUntil: 'domcontentloaded',
-      timeout: 60000 
-    });
+    // Wait a bit after authentication to ensure session is established
+    await page.waitForTimeout(2000);
     
-    // Wait for the page to be ready
-    await page.waitForTimeout(5000);
-    
-    let currentUrl = page.url();
-    if (currentUrl.includes('accounts.google.com/signin')) {
-      console.log('  ⚠️  Sign-in required, authenticating again...');
-      await authenticateWithGoogle(page, googleEmail, googlePassword);
-      await page.goto('https://notebooklm.google.com/', { 
-        waitUntil: 'domcontentloaded',
-        timeout: 60000 
-      });
-      await page.waitForTimeout(5000);
-      currentUrl = page.url();
-    }
-    
-    if (currentUrl.includes('accounts.google.com/signin')) {
-      throw new Error('Failed to authenticate - still on sign-in page. Please check credentials.');
-    }
-    
-    console.log('  ✓ Successfully navigated to NotebookLM\n');
+    console.log('  ✓ Authentication complete, ready to download images\n');
     
     // Now download images using the authenticated browser
     console.log('\n=== Downloading Images ===\n');
@@ -634,15 +658,23 @@ async function saveImages(
     }
     
     console.log(`\n✓ Successfully downloaded ${images.length} slide image(s) in memory`);
-    console.log(`\nNote: Images are available in memory. To save them, modify the script to write them to files.`);
+    
+    // Save images to files
+    console.log('\n=== Saving Images ===\n');
+    const outputDir = process.env.OUTPUT_DIR || './downloads';
+    const sanitizedTitle = (selectedArtifact.title || 'slides').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const slideOutputDir = path.join(outputDir, sanitizedTitle);
+    
+    const savedPaths = await saveImages(images, slideOutputDir, selectedArtifact.title || 'slides');
+    console.log(`\n✓ Successfully saved ${savedPaths.length} slide image(s) to: ${slideOutputDir}`);
       
-      // Close browser after all downloads are complete
-      if (browser) {
-        await browser.close();
-        console.log('\n✓ Browser closed');
-      }
-      
-      sdk.dispose();
+    // Close browser after all downloads are complete
+    if (browser) {
+      await browser.close();
+      console.log('\n✓ Browser closed');
+    }
+    
+    sdk.dispose();
     } catch (error: any) {
       handleError(error, 'Failed to download slides');
     } finally {
