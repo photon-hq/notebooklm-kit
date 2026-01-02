@@ -52,6 +52,81 @@ npm run dev
 
 </details>
 
+## Quick Start
+
+### 1. Install the package
+
+```bash
+npm install notebooklm-kit
+```
+
+### 2. Set up authentication
+
+Create a `.env` file in your **project root** directory:
+
+```bash
+# .env file location: /path/to/your-project/.env
+# (NOT in node_modules/, NOT in src/, NOT in subdirectories)
+
+# Option 1: Manual credentials (recommended for production)
+NOTEBOOKLM_AUTH_TOKEN="your_auth_token_here"
+NOTEBOOKLM_COOKIES="your_cookie_string_here"
+
+# Option 2: Auto-login with email/password (requires no 2FA)
+GOOGLE_EMAIL="your-email@gmail.com"
+GOOGLE_PASSWORD="your-password"
+```
+
+**Important:** The `.env` file must be in the **project root** (where your `package.json` is located).
+
+**Getting credentials manually:**
+1. Open https://notebooklm.google.com in your browser
+2. Open DevTools (F12) → **Network** tab
+3. Find any request to `notebooklm.google.com`
+4. Copy the **Cookie** header value → `NOTEBOOKLM_COOKIES`
+5. In **Console** tab, run: `window.WIZ_global_data.SNlM0e`
+6. Copy the result → `NOTEBOOKLM_AUTH_TOKEN`
+
+### 3. Use the SDK
+
+```typescript
+import { NotebookLMClient } from 'notebooklm-kit';
+import dotenv from 'dotenv';
+
+dotenv.config(); // Load .env file from project root
+
+async function main() {
+  const sdk = new NotebookLMClient({
+    // Credentials are automatically loaded from .env file
+    // Priority: NOTEBOOKLM_AUTH_TOKEN/NOTEBOOKLM_COOKIES > GOOGLE_EMAIL/GOOGLE_PASSWORD
+  });
+
+  try {
+    await sdk.connect();
+
+    // List notebooks
+    const notebooks = await sdk.notebooks.list();
+    console.log(`Found ${notebooks.length} notebooks`);
+
+    // Create a notebook
+    const notebook = await sdk.notebooks.create({
+      title: 'My Research',
+      emoji: '📚',
+    });
+    console.log(`Created: ${notebook.title}`);
+
+  } catch (error) {
+    console.error('Error:', error);
+  } finally {
+    sdk.dispose();
+  }
+}
+
+main();
+```
+
+**Note:** The SDK automatically loads credentials from environment variables. See [SDK Initialization](#sdk-initialization) for all configuration options. For working examples, see the [`examples/`](examples/) directory.
+
 ## Features
 
 ### `sdk.notebooks` - Notebook Management
@@ -123,22 +198,43 @@ npm run dev
 
 **Methods:** `sdk.connect()` | `sdk.dispose()`
 
-**Connect:**
+**Basic Usage:**
 ```typescript
+import { NotebookLMClient } from 'notebooklm-kit';
+import dotenv from 'dotenv';
+
+dotenv.config(); // Load .env from project root
+
 const sdk = new NotebookLMClient({
-  auth: { email: '...', password: '...' },
-  // or
-  authToken: '...',
-  cookies: '...',
+  // Credentials loaded automatically from environment variables:
+  // NOTEBOOKLM_AUTH_TOKEN, NOTEBOOKLM_COOKIES
+  // or GOOGLE_EMAIL, GOOGLE_PASSWORD
 });
 
-await sdk.connect(); // Initialize SDK, authenticate, start auto-refresh
-// Now you can use sdk.notebooks, sdk.sources, etc.
+try {
+  await sdk.connect(); // Initialize SDK, authenticate, start auto-refresh
+  
+  // Now you can use sdk.notebooks, sdk.sources, etc.
+  const notebooks = await sdk.notebooks.list();
+  
+} finally {
+  sdk.dispose(); // Always cleanup
+}
 ```
 
-**Dispose:**
+**Explicit Credentials:**
 ```typescript
-await sdk.dispose(); // Stop auto-refresh, clean up resources
+const sdk = new NotebookLMClient({
+  authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
+  cookies: process.env.NOTEBOOKLM_COOKIES!,
+  // or
+  auth: {
+    email: process.env.GOOGLE_EMAIL!,
+    password: process.env.GOOGLE_PASSWORD!,
+  },
+});
+
+await sdk.connect();
 ```
 
 <details>
@@ -184,55 +280,16 @@ try {
 
 </details>
 
-### Authentication
+### Authentication Overview
 
-| Concept | Format | Details |
-|---------|--------|---------|
-| **Auth Token** | `"tokenValue:timestamp"` | Format: `ACi2F2NZSD7yrNvFMrCkP3vZJY1R:1766720233448`<br>Expires: 1 hour after timestamp<br>Extract: `window.WIZ_global_data.SNlM0e` in NotebookLM console |
-| **Cookies** | Semicolon-separated string | `_ga=...; SID=...; SAPISID=...; ...`<br>Long-lived (2+ years for SAPISID)<br>Critical cookie: `SAPISID` (for refresh) |
-| **Auto-Login** | Email + Password | Uses Playwright visible browser<br>Extracts auth token automatically<br>Prompts for cookies manually<br>Saves to `credentials.json` in project root |
-| **Saved Credentials** | `credentials.json` | Automatically saved after manual cookie entry<br>Reused on subsequent runs<br>Located in project root for easy access |
+Authentication is handled automatically when you call `sdk.connect()`. Credentials are resolved in this priority order:
 
-<details>
-<summary><strong>Credential Refresh Endpoint</strong></summary>
+1. Provided in config (`authToken`/`cookies`)
+2. Environment variables (`NOTEBOOKLM_AUTH_TOKEN`/`NOTEBOOKLM_COOKIES`)
+3. Saved credentials (`credentials.json` in project root)
+4. Auto-login (if `auth.email`/`auth.password` provided)
 
-**URL:** `https://signaler-pa.clients6.google.com/punctual/v1/refreshCreds`
-
-**Method:** POST
-
-**Headers:**
-- `Authorization: SAPISIDHASH <timestamp>_<hash>`
-- `Cookie: <full cookie string>`
-- `Content-Type: application/json+protobuf`
-
-**SAPISIDHASH:** `SHA1(timestamp + " " + SAPISID + " " + origin)`<br>
-**Origin:** `https://notebooklm.google.com`
-
-**Purpose:** Extends session validity without re-authentication
-
-</details>
-
-<details>
-<summary><strong>Auto-Refresh Strategies</strong></summary>
-
-| Strategy | Description | When to Use | Default |
-|----------|-------------|-------------|---------|
-| **auto** | Expiration-based + time-based fallback | Most use cases (recommended) | ✅ Yes |
-| **time** | Fixed interval refresh | Testing, simple scenarios | 10 min |
-| **expiration** | Only when token expires | Maximum efficiency, production | 5 min before expiry |
-
-```typescript
-// Auto (default - recommended)
-autoRefresh: { strategy: 'auto' }
-
-// Time-based
-autoRefresh: { strategy: 'time', interval: 10 * 60 * 1000 }
-
-// Expiration-based
-autoRefresh: { strategy: 'expiration', refreshAhead: 5 * 60 * 1000 }
-```
-
-</details>
+See the [Authentication](#authentication) section for detailed setup instructions and all configuration options.
 
 ### Quota Limits
 
@@ -283,29 +340,34 @@ await sdk.connect(); // Logs in, extracts auth token, prompts for cookies, saves
 ```
 
 <details>
-<summary><strong>Environment Variables</strong></summary>
+<summary><strong>Environment Variables (.env file)</strong></summary>
+
+**File Location:** Create `.env` in your **project root** directory (same directory as `package.json`).
 
 ```bash
-# .env
+# .env file location: /path/to/your-project/.env
 
-# Auto-login (recommended)
-GOOGLE_EMAIL="your-email@gmail.com"
-GOOGLE_PASSWORD="your-password"
-
-# Manual credentials (alternative)
+# Option 1: Manual credentials (recommended for production)
 NOTEBOOKLM_AUTH_TOKEN="ACi2F2NZSD7yrNvFMrCkP3vZJY1R:1766720233448"
 NOTEBOOKLM_COOKIES="_ga=GA1.1.1949425436.1764104083; SID=g.a0005AiwX...; ..."
 
-# Retry configuration (optional)
+# Option 2: Auto-login with email/password (requires no 2FA)
+GOOGLE_EMAIL="your-email@gmail.com"
+GOOGLE_PASSWORD="your-password"
+
+# Optional: Retry configuration
 NOTEBOOKLM_MAX_RETRIES=1          # Default: 1
 NOTEBOOKLM_RETRY_DELAY=1000       # Default: 1000ms
 NOTEBOOKLM_RETRY_MAX_DELAY=5000   # Default: 5000ms
 
-# Force re-authentication (optional)
-FORCE_REAUTH=true                 # Force re-authentication, ignore saved credentials
+# Optional: Force re-authentication (ignore saved credentials)
+FORCE_REAUTH=true
 ```
 
-**Important:** Account must NOT have 2FA enabled (or use app-specific passwords)
+**Important:**
+- `.env` file must be in the **project root** (not in subdirectories)
+- Account must NOT have 2FA enabled (or use app-specific passwords)
+- The `.env` file is automatically ignored by git (see `.gitignore`)
 
 </details>
 
