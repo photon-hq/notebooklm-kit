@@ -46,8 +46,26 @@ Alternatively, you can run `npm install` (which will automatically run `postinst
 
 **Requirements:** Node.js >=18.0.0
 
+## Available Scripts
+
+When working with the repository, you can use the following npm scripts:
+
+| Script | Description |
+|--------|-------------|
+| `npm install` | Install dependencies and automatically build (runs `postinstall`) |
+| `npm run setup` | Full setup: install dependencies, Playwright, and build |
+| `npm run build` | Compile TypeScript to JavaScript |
+| `npm run build:dev` | Build only (no reinstall) |
+| `npm run dev` | Watch mode (auto-rebuild on file changes) |
+| `npm run clean` | Remove compiled `dist/` directory |
+
 <details>
 <summary><strong>Development</strong></summary>
+
+**First-time setup:**
+```bash
+npm run setup
+```
 
 **Build only (no reinstall):**
 ```bash
@@ -57,6 +75,11 @@ npm run build:dev
 **Watch mode (auto-rebuild):**
 ```bash
 npm run dev
+```
+
+**Clean build:**
+```bash
+npm run clean && npm run build
 ```
 
 </details>
@@ -102,7 +125,8 @@ GOOGLE_PASSWORD="your-password"
 import { NotebookLMClient } from 'notebooklm-kit';
 import dotenv from 'dotenv';
 
-dotenv.config(); // Load .env file from project root
+// Load .env file from project root (automatically detected)
+dotenv.config();
 
 async function main() {
   const sdk = new NotebookLMClient({
@@ -134,7 +158,20 @@ async function main() {
 main();
 ```
 
-**Note:** The SDK automatically loads credentials from environment variables. See [SDK Initialization](#sdk-initialization) for all configuration options. For working examples, see the [`examples/`](examples/) directory.
+**Note:** The SDK automatically loads credentials from environment variables. See [SDK Initialization](#sdk-initialization) for all configuration options.
+
+### Running Examples
+
+The repository includes working examples in the [`examples/`](examples/) directory. To run them:
+
+1. **Set up your `.env` file** in the project root (see [Authentication](#2-set-up-authentication) above)
+2. **Run any example** using `tsx`:
+   ```bash
+   npx tsx examples/notebook-list.ts
+   npx tsx examples/chat-basic.ts
+   ```
+
+**Note:** The examples automatically detect and load the `.env` file from the project root, regardless of where you run them from.
 
 ## Features
 
