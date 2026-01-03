@@ -1,12 +1,51 @@
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
+import { existsSync } from 'node:fs';
 import { NotebookLMClient } from '../src/index.js';
 import { chromium, Browser } from 'playwright';
 import * as readline from 'readline';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+/**
+ * Find project root directory by looking for package.json
+ * Works regardless of where the script is executed from
+ * Always returns the directory containing package.json
+ */
+function findProjectRoot(): string {
+  let currentDir = dirname(fileURLToPath(import.meta.url));
+  
+  // Walk up the directory tree to find project root (package.json)
+  let root = currentDir;
+  const maxDepth = 10; // Prevent infinite loops
+  let depth = 0;
+  
+  while (depth < maxDepth) {
+    // Check for package.json in current directory
+    if (existsSync(join(root, 'package.json'))) {
+      return root;
+    }
+    
+    const parent = resolve(root, '..');
+    // If we've reached the filesystem root, stop
+    if (parent === root) {
+      break;
+    }
+    root = parent;
+    depth++;
+  }
+  
+  // Fallback: if we're in examples/, assume parent is root
+  if (currentDir.endsWith('examples')) {
+    return resolve(currentDir, '..');
+  }
+  
+  // Last resort: return current directory
+  return currentDir;
+}
+
+const projectRoot = findProjectRoot();
+const envPath = join(projectRoot, '.env');
+
 // Suppress dotenv log messages
 const originalStdoutWrite = process.stdout.write.bind(process.stdout);
 process.stdout.write = (chunk: any, encoding?: any, cb?: any) => {
@@ -15,7 +54,9 @@ process.stdout.write = (chunk: any, encoding?: any, cb?: any) => {
   }
   return originalStdoutWrite(chunk, encoding, cb);
 };
-dotenv.config({ path: join(__dirname, '..', '.env') });
+
+// Load .env from project root (always)
+dotenv.config({ path: envPath });
 // Restore stdout
 process.stdout.write = originalStdoutWrite;
 

@@ -20,7 +20,7 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 | **[`sdk.notebooks`](#sdknotebooks---notebook-management)** | Notebook management | `list()`, `create()`, `get()`, `update()`, `delete()`, `share()` |
 | **[`sdk.sources`](#sdksources---source-management)** | Add & manage sources | `list()`, `get()`, `add.url()`, `add.text()`, `add.youtube()`, `add.web.searchAndWait()`, `update()`, `delete()`, `status()` |
 | **[`sdk.artifacts`](#sdkartifacts---artifact-management)** | Generate study materials | `create()`, `list()`, `get()`, `download()`, `delete()`, `rename()`, `share()` |
-| **[`sdk.generation`](#sdkgeneration---generation--chat)** | Chat & content generation | `chat()`, `setChatConfig()`, `generateDocumentGuides()`, `deleteChatHistory()` |
+| **[`sdk.generation`](#sdkgeneration---generation--chat)** | Chat & content generation | `chat()`, `chatStream()`, `setChatConfig()`, `generateDocumentGuides()`, `deleteChatHistory()` |
 | **[`sdk.notes`](#sdknotes---notes-management)** | Manage notes | `create()`, `list()`, `update()`, `delete()` |
 
 ## Installation
@@ -32,8 +32,17 @@ npm install notebooklm-kit
 
 **From GitHub:**
 ```bash
-git clone https://github.com/photon-hq/notebooklm-kit.git && cd notebooklm-kit && npm install
+git clone https://github.com/photon-hq/notebooklm-kit.git
+cd notebooklm-kit
+npm run setup
 ```
+
+The `setup` script will:
+1. Install all dependencies
+2. Install Playwright Chromium browser
+3. Build the TypeScript project
+
+Alternatively, you can run `npm install` (which will automatically run `postinstall` to build).
 
 **Requirements:** Node.js >=18.0.0
 
@@ -77,7 +86,7 @@ GOOGLE_EMAIL="your-email@gmail.com"
 GOOGLE_PASSWORD="your-password"
 ```
 
-**Important:** The `.env` file must be in the **project root** (where your `package.json` is located).
+**Important:** The `.env` file must be in the **project root** (where your `package.json` is located). The SDK automatically finds the `.env` file in the project root, regardless of where your script is executed from.
 
 **Getting credentials manually:**
 1. Open https://notebooklm.google.com in your browser
@@ -176,9 +185,10 @@ main();
 
 | Feature | Description | Method | Example |
 |---------|-------------|--------|---------|
-| Chat | Chat with notebook content (with source selection & conversation history) | [`sdk.generation.chat(notebookId, prompt, options?)`](#chat) | [chat-basic.ts](examples/chat-basic.ts) |
-| Chat with Sources | Chat with specific sources | [`sdk.generation.chat(notebookId, prompt, { sourceIds })`](#chat) | [chat-with-sources.ts](examples/chat-with-sources.ts) |
-| Chat Conversation | Chat with conversation history | [`sdk.generation.chat(notebookId, prompt, { conversationHistory })`](#chat) | [chat-conversation.ts](examples/chat-conversation.ts) |
+| Chat (Non-streaming) | Chat with notebook content - returns complete response | [`sdk.generation.chat(notebookId, prompt, options?)`](#chat) | [chat-basic.ts](examples/chat-basic.ts) |
+| Chat Stream | Chat with real-time streaming response chunks | [`sdk.generation.chatStream(notebookId, prompt, options?)`](#chat-stream) | [chat-basic.ts](examples/chat-basic.ts) |
+| Chat with Sources | Chat with specific sources (interactive or command-line selection) | [`sdk.generation.chat(notebookId, prompt, { sourceIds })`](#chat) | [chat-with-sources.ts](examples/chat-with-sources.ts) |
+| Chat Conversation | Multi-turn conversations with history tracking | [`sdk.generation.chat(notebookId, prompt, { conversationHistory })`](#chat) | [chat-conversation.ts](examples/chat-conversation.ts) |
 | Set Chat Config | Configure chat (custom prompt, learning guide, response length) | [`sdk.generation.setChatConfig(notebookId, config)`](#set-chat-configuration) | [generation-set-chat-config.ts](examples/generation-set-chat-config.ts) |
 | Generate Document Guides | Generate document guides for all or specific sources | [`sdk.generation.generateDocumentGuides(notebookId, sourceId?)`](#generate-document-guides) | [generation-document-guides.ts](examples/generation-document-guides.ts) |
 | Delete Chat History | Delete a conversation history | [`sdk.generation.deleteChatHistory(notebookId, conversationId)`](#delete-chat-history) | [generation-delete-chat-history.ts](examples/generation-delete-chat-history.ts) |
@@ -2515,7 +2525,23 @@ const result = await sdk.artifacts.share('notebook-id', {
 
 Examples: [chat-basic.ts](examples/chat-basic.ts) | [chat-with-sources.ts](examples/chat-with-sources.ts) | [chat-conversation.ts](examples/chat-conversation.ts) | [generation-set-chat-config.ts](examples/generation-set-chat-config.ts) | [generation-document-guides.ts](examples/generation-document-guides.ts) | [generation-delete-chat-history.ts](examples/generation-delete-chat-history.ts)
 
-### Chat
+**Key Features:**
+- ✅ **Streaming & Non-streaming modes** - Choose real-time streaming (`chatStream()`) or complete responses (`chat()`)
+- ✅ **Source selection** - Chat with all sources or specific ones (interactive or programmatic)
+- ✅ **Citation extraction** - Automatic citation tracking from responses
+- ✅ **Conversation management** - Track conversations with IDs and history
+- ✅ **Type-safe configuration** - Full TypeScript support with `ChatConfig` interface
+- ✅ **Improved parser** - Based on Python SDK implementation for better reliability
+
+**Choosing Between `chat()` and `chatStream()`:**
+- **Use `chat()`** when you want the complete response at once (simpler, blocking)
+- **Use `chatStream()`** when you want real-time updates (better UX, progressive display)
+- Both methods support the same options (source selection, conversation history, etc.)
+- Both methods extract citations and track conversation metadata
+
+---
+
+### Chat (Non-Streaming)
 
 **Method:** `sdk.generation.chat(notebookId, prompt, options?)`
 
@@ -2523,6 +2549,8 @@ Examples: [chat-basic.ts](examples/chat-basic.ts) | [chat-with-sources.ts](examp
 - [chat-basic.ts](examples/chat-basic.ts) - Basic chat with all sources
 - [chat-with-sources.ts](examples/chat-with-sources.ts) - Chat with specific sources
 - [chat-conversation.ts](examples/chat-conversation.ts) - Chat with conversation history
+
+**Note:** The SDK now uses an improved parser based on the Python SDK implementation, providing better error handling, citation extraction, and streaming support. The chat request format has been restructured to match the official API format for better compatibility.
 
 **Parameters:**
 - `notebookId: string` - The notebook ID (required)
@@ -2532,27 +2560,36 @@ Examples: [chat-basic.ts](examples/chat-basic.ts) | [chat-with-sources.ts](examp
   - `conversationHistory?: Array<{ message: string; role: 'user' | 'assistant' }>` - Conversation history for follow-up messages
   - `conversationId?: string` - Conversation ID for continuing a conversation (auto-generated if not provided)
 
-**Returns:** `Promise<string>` - AI response text
+**Returns:** `Promise<string>` - Complete AI response text
 
 **Description:**
-Chat with your notebook content using AI. Ask questions, get summaries, or have conversations about the content in your notebook. Supports source selection and conversation history for multi-turn conversations.
+Chat with your notebook content using AI. Returns the complete response after all chunks are received. This is the non-streaming mode - use `chatStream()` for real-time streaming responses.
+
+**Features:**
+- ✅ Automatic source detection (uses all sources if none specified)
+- ✅ Source selection support (filter to specific sources)
+- ✅ Conversation history tracking
+- ✅ Citation extraction
+- ✅ Conversation ID management
+- ✅ Type-safe options
 
 <details>
 <summary><strong>Notes</strong></summary>
 
 - Quota is checked before chat (if quota manager is enabled)
 - Usage is recorded after successful chat
-- Response is parsed and returned as plain text
+- Response is aggregated from all streaming chunks and returned as complete text
 - If `sourceIds` is provided, only those sources are used for context
-- If `sourceIds` is omitted, all sources in the notebook are used
+- If `sourceIds` is omitted, all sources in the notebook are automatically fetched and used
 - Conversation ID is auto-generated if not provided
 - Use `conversationHistory` for follow-up messages to maintain context
+- For real-time streaming, use `chatStream()` instead
 
 </details>
 
 **Usage:**
 ```typescript
-// Chat with all sources
+// Chat with all sources (non-streaming)
 const response = await sdk.generation.chat(
   'notebook-id',
   'What are the main findings from the research?'
@@ -2579,6 +2616,139 @@ const response2 = await sdk.generation.chat('notebook-id', 'Tell me more', {
 
 ---
 
+### Chat Stream (Streaming)
+
+**Method:** `sdk.generation.chatStream(notebookId, prompt, options?)`
+
+**Examples:** 
+- [chat-basic.ts](examples/chat-basic.ts) - Streaming chat with all sources
+- [chat-with-sources.ts](examples/chat-with-sources.ts) - Streaming chat with specific sources
+- [chat-conversation.ts](examples/chat-conversation.ts) - Streaming multi-turn conversations
+
+**Parameters:**
+- `notebookId: string` - The notebook ID (required)
+- `prompt: string` - Chat message/prompt (required)
+- `options?: object` - Optional chat options:
+  - `sourceIds?: string[]` - Specific source IDs to query (uses all sources if omitted)
+  - `conversationHistory?: Array<{ message: string; role: 'user' | 'assistant' }>` - Conversation history for follow-up messages
+  - `conversationId?: string` - Conversation ID for continuing a conversation (auto-generated if not provided)
+  - `onChunk?: (chunk: StreamChunk) => void` - Callback function called for each chunk
+  - `showThinking?: boolean` - Whether to include thinking process in output (default: false)
+
+**Returns:** `AsyncGenerator<StreamChunk, void, unknown>` - Async generator yielding stream chunks
+
+**Type Import:**
+```typescript
+import type { StreamChunk } from 'notebooklm-kit';
+```
+
+**Description:**
+Stream chat responses in real-time. Returns an async generator that yields chunks as they arrive from the API. Each chunk contains incremental text updates, allowing you to display responses as they're generated.
+
+**StreamChunk Interface:**
+```typescript
+interface StreamChunk {
+  chunkNumber: number;        // Chunk number (1-based)
+  byteCount: number;          // Byte count for this chunk
+  text: string;              // Full text content from this chunk
+  thinking: string[];         // Thinking headers (bold text)
+  response: string;           // Response text (non-bold)
+  metadata?: [string, string, number]; // [conversationId, messageId, timestamp]
+  messageIds?: [string, string];       // Message IDs for conversation history
+  timestamp?: number;         // Timestamp
+  citations?: number[];      // Citation numbers extracted from text
+  rawData?: any;             // Raw parsed data
+  isError?: boolean;         // Is this an error chunk?
+  errorCode?: number;        // Error code if error
+}
+```
+
+**Features:**
+- ✅ Real-time streaming responses
+- ✅ Citation extraction from each chunk
+- ✅ Conversation metadata tracking
+- ✅ Thinking/response separation
+- ✅ Error detection and handling
+- ✅ Progress callbacks via `onChunk`
+
+<details>
+<summary><strong>Notes</strong></summary>
+
+- Quota is checked before streaming starts (if quota manager is enabled)
+- Usage is recorded after streaming completes
+- Each chunk contains the full text up to that point (not just the delta)
+- Citations are automatically extracted from text using pattern matching
+- Conversation ID and message IDs are available in chunk metadata
+- Use `onChunk` callback for real-time processing
+- Set `showThinking: true` to include thinking process in output
+
+</details>
+
+**Usage:**
+```typescript
+// Basic streaming
+for await (const chunk of sdk.generation.chatStream('notebook-id', 'What is this about?')) {
+  // Print response text as it streams
+  process.stdout.write(chunk.response || chunk.text || '');
+}
+
+// Streaming with callback
+for await (const chunk of sdk.generation.chatStream('notebook-id', 'Explain this', {
+  onChunk: (chunk) => {
+    console.log(`Chunk ${chunk.chunkNumber}: ${chunk.byteCount} bytes`);
+    if (chunk.citations && chunk.citations.length > 0) {
+      console.log(`Citations: ${chunk.citations.join(', ')}`);
+    }
+  }
+})) {
+  process.stdout.write(chunk.response || chunk.text || '');
+}
+
+// Streaming with specific sources
+for await (const chunk of sdk.generation.chatStream(
+  'notebook-id',
+  'Compare these sources',
+  { sourceIds: ['source-id-1', 'source-id-2'] }
+)) {
+  process.stdout.write(chunk.response || chunk.text || '');
+}
+
+// Streaming with conversation history
+for await (const chunk of sdk.generation.chatStream('notebook-id', 'Tell me more', {
+  conversationId: 'conversation-id',
+  conversationHistory: [
+    { message: 'What is this?', role: 'user' },
+    { message: 'Previous response...', role: 'assistant' }
+  ]
+})) {
+  process.stdout.write(chunk.response || chunk.text || '');
+}
+
+// Collect citations and metadata
+const citations = new Set<number>();
+let conversationId: string | undefined;
+
+for await (const chunk of sdk.generation.chatStream('notebook-id', 'What are the key findings?')) {
+  // Track conversation ID
+  if (chunk.metadata && !conversationId) {
+    conversationId = chunk.metadata[0];
+  }
+  
+  // Collect citations
+  if (chunk.citations) {
+    chunk.citations.forEach(citation => citations.add(citation));
+  }
+  
+  // Display response
+  process.stdout.write(chunk.response || chunk.text || '');
+}
+
+console.log(`\nConversation ID: ${conversationId}`);
+console.log(`Citations: [${Array.from(citations).sort((a, b) => a - b).join(', ')}]`);
+```
+
+---
+
 ### Set Chat Configuration
 
 **Method:** `sdk.generation.setChatConfig(notebookId, config)`
@@ -2587,15 +2757,30 @@ const response2 = await sdk.generation.chat('notebook-id', 'Tell me more', {
 
 **Parameters:**
 - `notebookId: string` - The notebook ID (required)
-- `config: object` - Chat configuration:
+- `config: ChatConfig` - Chat configuration object (type-safe):
   - `type: 'default' | 'custom' | 'learning-guide'` - Configuration type (required)
   - `customText?: string` - Custom prompt text (required if type is 'custom')
   - `responseLength: 'default' | 'shorter' | 'longer'` - Response length (required)
 
 **Returns:** `Promise<any>` - Configuration result
 
+**Type Import:**
+```typescript
+import type { ChatConfig } from 'notebooklm-kit';
+```
+
 **Description:**
-Configure chat behavior before sending messages. Set the chat mode (default, custom prompt, or learning guide) and response length. This is optional - you can use chat without setting configuration.
+Configure chat behavior before sending messages. Set the chat mode (default, custom prompt, or learning guide) and response length. This configuration affects all subsequent chat messages until changed. This is optional - you can use chat without setting configuration.
+
+**Configuration Types:**
+- **`default`**: Standard conversational responses - balanced and informative
+- **`custom`**: Responses following a custom instruction/persona (requires `customText`)
+- **`learning-guide`**: Educational responses optimized for learning and understanding
+
+**Response Lengths:**
+- **`default`**: Standard length responses - balanced detail
+- **`shorter`**: Concise, brief responses - quick summaries
+- **`longer`**: Detailed, comprehensive responses - in-depth explanations
 
 **Usage:**
 ```typescript
@@ -2608,7 +2793,7 @@ await sdk.generation.setChatConfig('notebook-id', {
 // Set custom configuration with custom prompt
 await sdk.generation.setChatConfig('notebook-id', {
   type: 'custom',
-  customText: 'respond as phd student',
+  customText: 'respond as a PhD student explaining complex concepts simply',
   responseLength: 'longer'
 })
 
@@ -2617,7 +2802,16 @@ await sdk.generation.setChatConfig('notebook-id', {
   type: 'learning-guide',
   responseLength: 'shorter'
 })
+
+// Example: Configure for academic writing style
+await sdk.generation.setChatConfig('notebook-id', {
+  type: 'custom',
+  customText: 'respond in an academic writing style with citations',
+  responseLength: 'longer'
+})
 ```
+
+**Note:** Configuration persists for the notebook until changed. You can update it anytime by calling `setChatConfig()` again with new values.
 
 ---
 
@@ -2631,21 +2825,39 @@ await sdk.generation.setChatConfig('notebook-id', {
 - `notebookId: string` - The notebook ID (required)
 - `sourceId?: string` - Optional specific source ID to generate guides for (if not provided, generates for all sources)
 
-**Returns:** `Promise<any>` - Document guides (array of guide objects with `content` field)
+**Returns:** `Promise<any>` - Document guides (array of guide objects with structured content)
 
 **Description:**
-Generates document guides for sources in the notebook. These guides provide structured information about each source. Can generate guides for all sources or a specific source.
+Generates document guides for sources in the notebook. These guides provide structured summaries, key information, and insights about each source, making them easier to understand and reference. Guides are automatically generated when sources are added, but you can regenerate them anytime.
+
+**What are Document Guides?**
+Document guides provide:
+- Structured summaries of source content
+- Key topics and themes
+- Important information extraction
+- Quick reference for source understanding
 
 **Usage:**
 ```typescript
 // Generate guides for all sources
 const guides = await sdk.generation.generateDocumentGuides('notebook-id')
-console.log(guides)
+console.log(`Generated ${guides.length} guide(s)`)
 
 // Generate guides for a specific source
 const guides = await sdk.generation.generateDocumentGuides('notebook-id', 'source-id')
 console.log(guides)
+
+// Process guides
+if (Array.isArray(guides)) {
+  guides.forEach((guide, index) => {
+    console.log(`Guide ${index + 1}:`)
+    console.log(`  Title: ${guide.title || 'N/A'}`)
+    console.log(`  Content: ${guide.content || 'N/A'}`)
+  })
+}
 ```
+
+**Note:** Guide generation may take a moment, especially for large sources or multiple sources. Guides are useful for getting quick overviews before diving into full source content.
 
 ---
 
@@ -2662,12 +2874,41 @@ console.log(guides)
 **Returns:** `Promise<any>` - Deletion result
 
 **Description:**
-Delete a conversation history from the notebook. Use this to remove old conversations or clean up chat history.
+Delete a conversation history from the notebook. Use this to remove old conversations or clean up chat history. **This action cannot be undone.**
+
+**Getting Conversation IDs:**
+Conversation IDs are returned in chat responses:
+- From `chatStream()`: Available in `chunk.metadata[0]`
+- From `chat()`: Tracked automatically, can be extracted from response metadata
+- Examples show how to track and use conversation IDs
 
 **Usage:**
 ```typescript
+// Delete a specific conversation
 await sdk.generation.deleteChatHistory('notebook-id', 'conversation-id')
+
+// Example: Track conversation ID and delete later
+let conversationId: string | undefined;
+
+for await (const chunk of sdk.generation.chatStream('notebook-id', 'Hello')) {
+  if (chunk.metadata && !conversationId) {
+    conversationId = chunk.metadata[0];
+  }
+  process.stdout.write(chunk.response || chunk.text || '');
+}
+
+// Later, delete the conversation
+if (conversationId) {
+  await sdk.generation.deleteChatHistory('notebook-id', conversationId);
+  console.log('Conversation deleted');
+}
 ```
+
+**Note:** 
+- ⚠️ This action is permanent and cannot be undone
+- Each conversation has a unique ID that persists across sessions
+- Use conversation IDs to manage multiple parallel conversations
+- Deleting a conversation removes all message history for that conversation
 
 ---
 

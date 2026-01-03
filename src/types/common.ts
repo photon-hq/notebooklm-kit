@@ -1,6 +1,18 @@
 /**
  * Common types used throughout the NotebookLM SDK
+ * 
+ * This file defines TypeScript interfaces for:
+ * - Client configuration
+ * - RPC calls and responses
+ * - Chat configuration and responses
+ * - Source and notebook types
+ * - Error handling
+ * 
+ * Types related to streaming (StreamChunk, StreamingOptions) are defined
+ * in streaming-client.ts for better organization.
  */
+
+import { StreamChunk } from '../utils/streaming-client.js';
 
 /**
  * Configuration for the NotebookLM client
@@ -174,4 +186,93 @@ export class NotebookLMParseError extends NotebookLMError {
     Object.setPrototypeOf(this, NotebookLMParseError.prototype);
   }
 }
+
+/**
+ * Chat configuration options
+ * Maps to NotebookLM API configuration codes
+ */
+export interface ChatConfig {
+  /** Goal type: 'default' | 'custom' | 'learning-guide' */
+  type: 'default' | 'custom' | 'learning-guide';
+  /** Custom goal text (required if type is 'custom') */
+  customText?: string;
+  /** Response length: 'default' | 'shorter' | 'longer' */
+  responseLength: 'default' | 'shorter' | 'longer';
+}
+
+/**
+ * Chat configuration goal codes (internal API values)
+ */
+export enum ChatGoalType {
+  DEFAULT = 1,
+  CUSTOM = 2,
+  LEARNING_GUIDE = 3,
+}
+
+/**
+ * Chat configuration response length codes (internal API values)
+ */
+export enum ChatResponseLength {
+  DEFAULT = 1,
+  LONGER = 4,
+  SHORTER = 5,
+}
+
+/**
+ * Conversation stream for managing chat conversations
+ * Allows multiple parallel conversations within the same notebook
+ */
+export interface ConversationStream {
+  /** Conversation ID (UUID) */
+  conversationId: string;
+  /** Notebook ID */
+  notebookId: string;
+  /** Message history (message IDs from previous turns) */
+  messageHistory: string[];
+}
+
+/**
+ * Chat response with full metadata
+ */
+export interface ChatResponse {
+  /** Full response text */
+  text: string;
+  /** Thinking process steps (bold headers) */
+  thinking: string[];
+  /** Response text (non-bold) */
+  response: string;
+  /** Citation numbers */
+  citations: number[];
+  /** Message IDs for conversation history */
+  messageIds?: [string, string];
+  /** Conversation ID */
+  conversationId: string;
+  /** All chunks received during streaming */
+  chunks?: StreamChunk[];
+}
+
+/**
+ * Full chat response object (non-streaming)
+ * Contains all chunks and raw data for examples to decode
+ */
+export interface ChatResponseData {
+  /** All chunks received during the chat */
+  chunks: StreamChunk[];
+  /** Raw data from the last chunk (contains full response structure) */
+  rawData?: any;
+  /** Processed text (for convenience, but examples should parse rawData) */
+  text?: string;
+  /** Conversation ID */
+  conversationId?: string;
+  /** Message IDs */
+  messageIds?: [string, string];
+  /** Citations */
+  citations: number[];
+}
+
+/**
+ * Stream chunk from chat streaming
+ * Re-exported from streaming-client for convenience
+ */
+export type { StreamChunk } from '../utils/streaming-client.js';
 
