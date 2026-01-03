@@ -12,7 +12,8 @@ import type { Credentials } from './auth.js';
  * Google Signaler API configuration
  */
 const SIGNALER_API_URL = 'https://signaler-pa.clients6.google.com/punctual/v1/refreshCreds';
-const SIGNALER_API_KEY = 'AIzaSyC_pzrI0AjEDXDYcg7kkq3uQEjnXV50pBM';
+// Allow override via environment variable, but use default public Google API key
+const SIGNALER_API_KEY = process.env.NOTEBOOKLM_SIGNALER_API_KEY || 'AIzaSyC_pzrI0AjEDXDYcg7kkq3uQEjnXV50pBM';
 
 /**
  * Refresh client for credential refresh

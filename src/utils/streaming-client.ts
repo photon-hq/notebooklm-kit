@@ -955,14 +955,21 @@ export class StreamingClient {
       // Extract response (non-bold text)
       const response = text.replace(/\*\*[^*]+\*\*/g, '').trim();
       
-      // Extract citations [1], [2], etc.
+      // Extract citations [1], [2], [1, 2], etc.
       const citations: number[] = [];
-      const citationMatches = text.match(/\[(\d+)\]/g);
+      // Match both formats: [1] or [1, 2, 3]
+      const citationMatches = text.match(/\[(\d+(?:\s*,\s*\d+)*)\]/g);
       if (citationMatches) {
         for (const match of citationMatches) {
-          const num = parseInt(match.slice(1, -1), 10);
-          if (!citations.includes(num)) {
-            citations.push(num);
+          // Extract all numbers from the match (handles both [1] and [1, 2, 3])
+          const numbers = match.match(/\d+/g);
+          if (numbers) {
+            for (const numStr of numbers) {
+              const num = parseInt(numStr, 10);
+              if (!isNaN(num) && !citations.includes(num)) {
+                citations.push(num);
+              }
+            }
           }
         }
       }

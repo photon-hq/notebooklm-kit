@@ -193,15 +193,15 @@ async function selectSources(sources: Source[]): Promise<string[]> {
 }
 
 async function main() {
-  // Enable debugging
-  const sdk = await createSDK({ debug: true });
+  // Parse arguments (filter out flags)
+  const args = process.argv.slice(2).filter(arg => !arg.startsWith('--'));
+  const useStreaming = !process.argv.includes('--no-stream');
+  
+  // Only enable debug in streaming mode (cleaner output for --no-stream)
+  const sdk = await createSDK({ debug: useStreaming });
 
   try {
     await sdk.connect();
-
-    // Parse arguments (filter out flags)
-    const args = process.argv.slice(2).filter(arg => !arg.startsWith('--'));
-    const useStreaming = !process.argv.includes('--no-stream');
     
     // List notebooks
     console.log('🔍 Fetching notebooks...');
@@ -325,9 +325,6 @@ async function main() {
       
       console.log('\n💡 Tip: Use --no-stream flag to get complete response at once');
     } else {
-      console.log('📦 Response (non-streaming mode):');
-      console.log('─'.repeat(60));
-      
       // Non-streaming: Get complete response at once
       const startTime = Date.now();
       const responseData: ChatResponseData = await sdk.generation.chat(
@@ -338,43 +335,29 @@ async function main() {
       const duration = Date.now() - startTime;
       
       // Extract text from rawData (the full response structure)
-      console.log('\n🔍 [DEBUG] Extracting text from response data...');
-      console.log('   Chunks received:', responseData.chunks.length);
-      console.log('   Has rawData:', !!responseData.rawData);
-      
       let responseText = '';
       if (responseData.rawData) {
-        responseText = extractTextFromRawData(responseData.rawData, true);
-      } else {
-        console.log('⚠️  [DEBUG] No rawData in response');
+        responseText = extractTextFromRawData(responseData.rawData, false); // Disable debug output
       }
       
       // Fallback to processed text if rawData extraction failed
       if (!responseText && responseData.text) {
-        console.log('💡 [DEBUG] Using fallback processed text, length:', responseData.text.length);
         responseText = responseData.text;
       }
       
-      // Additional debug info
-      console.log('   Extracted text length:', responseText.length);
-      console.log('   Conversation ID:', responseData.conversationId || 'none');
-      console.log('   Citations:', responseData.citations);
-      
-      if (!responseText) {
-        console.log('\n⚠️  [DEBUG] No text extracted! Full response data structure:');
-        console.log(JSON.stringify(responseData, null, 2).substring(0, 1000));
-      }
-      
+      // Display the response
       console.log(responseText || '(No response text extracted)');
-      console.log('─'.repeat(60));
-      console.log(`\n⏱️  Response time: ${duration}ms`);
+      
+      // Display important metadata
+      console.log('\n' + '─'.repeat(60));
       if (responseData.conversationId) {
         console.log(`💬 Conversation ID: ${responseData.conversationId}`);
       }
-      if (responseData.citations.length > 0) {
-        console.log(`📚 Citations: [${responseData.citations.sort((a, b) => a - b).join(', ')}]`);
+      if (responseData.citations && responseData.citations.length > 0) {
+        const sortedCitations = responseData.citations.sort((a, b) => a - b);
+        console.log(`📚 Citations: [${sortedCitations.join(', ')}]`);
       }
-      console.log('💡 Tip: Remove --no-stream flag to see streaming output');
+      console.log(`⏱️  Response time: ${duration}ms`);
     }
   } catch (error) {
     handleError(error, 'Failed to chat');
