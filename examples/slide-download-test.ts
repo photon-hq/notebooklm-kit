@@ -6,7 +6,11 @@
  * 2. Provides interactive selection
  * 3. Extracts image URLs from artifact data
  * 4. Downloads each image (following redirects)
- * 5. Combines images into PDF
+ * 5. Saves as PNG (individual images) or PDF (single file)
+ * 
+ * Environment Variables:
+ *   DOWNLOAD_AS=pdf  - Automatically use PDF format (or 'png' for PNG)
+ *   OUTPUT_DIR=./downloads  - Set output directory
  * 
  * Usage:
  *   
@@ -27,6 +31,7 @@ import * as readline from 'readline';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
+import { PDFDocument } from 'pdf-lib';
 import { ArtifactType, ArtifactState } from '../src/types/artifact.js';
 import * as RPC from '../src/rpc/rpc-methods.js';
 import { createSDK, handleError } from './utils.js';
@@ -319,11 +324,9 @@ async function downloadImageWithPlaywright(
 }
 
 /**
- * Combine images into PDF using a simple approach
- * Note: This requires pdf-lib or similar library, or we can save images separately
- * For now, we'll save images and provide instructions to combine them
+ * Save images as PNG files
  */
-async function saveImages(
+async function saveImagesAsPNG(
   images: Buffer[],
   outputDir: string,
   slideTitle: string
@@ -339,6 +342,77 @@ async function saveImages(
   }
   
   return savedPaths;
+}
+
+/**
+ * Combine images into PDF
+ */
+async function saveImagesAsPDF(
+  images: Buffer[],
+  outputDir: string,
+  slideTitle: string
+): Promise<string[]> {
+  await fs.mkdir(outputDir, { recursive: true });
+  
+  const pdfDoc = await PDFDocument.create();
+  
+  for (let i = 0; i < images.length; i++) {
+    const imageBuffer = images[i];
+    
+    // Determine image type and embed accordingly
+    let image;
+    if (imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50 && imageBuffer[2] === 0x4E && imageBuffer[3] === 0x47) {
+      // PNG
+      image = await pdfDoc.embedPng(imageBuffer);
+    } else if (imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8 && imageBuffer[2] === 0xFF) {
+      // JPEG
+      image = await pdfDoc.embedJpg(imageBuffer);
+    } else {
+      // Try PNG first, fallback to JPEG
+      try {
+        image = await pdfDoc.embedPng(imageBuffer);
+      } catch {
+        image = await pdfDoc.embedJpg(imageBuffer);
+      }
+    }
+    
+    // Create a new page with the image dimensions
+    const page = pdfDoc.addPage([image.width, image.height]);
+    page.drawImage(image, {
+      x: 0,
+      y: 0,
+      width: image.width,
+      height: image.height,
+    });
+    
+    console.log(`  Added slide ${i + 1}/${images.length} to PDF`);
+  }
+  
+  // Save PDF
+  const pdfBytes = await pdfDoc.save();
+  const sanitizedTitle = slideTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  const pdfPath = path.join(outputDir, `${sanitizedTitle}.pdf`);
+  await fs.writeFile(pdfPath, pdfBytes);
+  
+  console.log(`  ✓ PDF saved: ${pdfPath}`);
+  
+  return [pdfPath];
+}
+
+/**
+ * Save images in the requested format (PNG or PDF)
+ */
+async function saveImages(
+  images: Buffer[],
+  outputDir: string,
+  slideTitle: string,
+  format: 'png' | 'pdf' = 'png'
+): Promise<string[]> {
+  if (format === 'pdf') {
+    return await saveImagesAsPDF(images, outputDir, slideTitle);
+  } else {
+    return await saveImagesAsPNG(images, outputDir, slideTitle);
+  }
 }
 
 /**
@@ -451,6 +525,27 @@ async function saveImages(
     
     const selectedArtifact = slideArtifacts[selectedIndex];
     console.log(`\nSelected: ${selectedArtifact.title || 'Untitled'} (${selectedArtifact.artifactId})\n`);
+    
+    // Ask user for format (PNG or PDF), or use DOWNLOAD_AS env var
+    let format: 'png' | 'pdf' = 'png';
+    const downloadAs = process.env.DOWNLOAD_AS?.toLowerCase();
+    if (downloadAs === 'pdf') {
+      format = 'pdf';
+      console.log('✓ Format set to PDF (from DOWNLOAD_AS environment variable)\n');
+    } else if (downloadAs === 'png') {
+      format = 'png';
+      console.log('✓ Format set to PNG (from DOWNLOAD_AS environment variable)\n');
+    } else {
+      const formatChoice = await question(rl, 'Download format - PNG (individual images) or PDF (single file)? [png/pdf]: ');
+      const choice = formatChoice.trim().toLowerCase();
+      if (choice === 'pdf' || choice === 'p') {
+        format = 'pdf';
+        console.log('✓ Selected: PDF\n');
+      } else {
+        format = 'png';
+        console.log('✓ Selected: PNG\n');
+      }
+    }
     
     console.log('=== Extracting Image URLs ===\n');
     
@@ -665,8 +760,12 @@ async function saveImages(
     const sanitizedTitle = (selectedArtifact.title || 'slides').replace(/[^a-z0-9]/gi, '_').toLowerCase();
     const slideOutputDir = path.join(outputDir, sanitizedTitle);
     
-    const savedPaths = await saveImages(images, slideOutputDir, selectedArtifact.title || 'slides');
-    console.log(`\n✓ Successfully saved ${savedPaths.length} slide image(s) to: ${slideOutputDir}`);
+    const savedPaths = await saveImages(images, slideOutputDir, selectedArtifact.title || 'slides', format);
+    if (format === 'pdf') {
+      console.log(`\n✓ Successfully saved PDF with ${images.length} slide(s) to: ${savedPaths[0]}`);
+    } else {
+      console.log(`\n✓ Successfully saved ${savedPaths.length} slide image(s) to: ${slideOutputDir}`);
+    }
       
     // Close browser after all downloads are complete
     if (browser) {
