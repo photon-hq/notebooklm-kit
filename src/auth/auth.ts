@@ -109,7 +109,7 @@ async function authenticateWithGoogle(page: Page, email: string, password: strin
   await page.click('button:has-text("Next"), #passwordNext, button[type="button"]:has-text("Next")');
   
   // Wait for authentication to complete (including 2FA)
-  await page.waitForTimeout(15000); // 15 seconds - reduced from 60 seconds
+  await page.waitForTimeout(3000); // 3 seconds
   
   // Check if we're still on sign-in page (2FA or other issues)
   const currentUrl = page.url();
@@ -190,25 +190,95 @@ async function extractCredentials(page: Page, debug: boolean = false): Promise<C
     throw new NotebookLMAuthError('Failed to extract auth token. The page may still be loading.');
   }
   
-  // COMMENTED OUT: Automatic cookie extraction
-  // Extract cookies from browser context
-  // if (debug) {
-  //   console.log('Extracting cookies...');
-  // }
-  // 
-  // const cookies = await page.context().cookies();
-  // const cookieString = cookies
-  //   .map(cookie => `${cookie.name}=${cookie.value}`)
-  //   .join('; ');
-  // 
-  // if (!cookieString || cookieString.length < 100) {
-  //   throw new NotebookLMAuthError('Failed to extract cookies - cookie string too short or empty');
-  // }
+  // Automatically extract cookies from browser context
+  // Get cookies that would be sent to notebooklm.google.com
+  if (debug) {
+    console.log('Extracting cookies from browser context...');
+  }
   
-  // Return only auth token - cookies will be entered manually
+  let cookieString: string = '';
+  try {
+    // Method 1: Get cookies from the page's document.cookie (JavaScript accessible cookies)
+    let documentCookies = '';
+    try {
+      documentCookies = await page.evaluate(() => document.cookie);
+      if (debug && documentCookies) {
+        console.log(`Document cookies length: ${documentCookies.length}`);
+      }
+    } catch (e) {
+      // Ignore if document.cookie is not accessible
+    }
+    
+    // Method 2: Get cookies from browser context for notebooklm.google.com
+    const contextCookies = await page.context().cookies('https://notebooklm.google.com');
+    
+    if (debug) {
+      console.log(`Found ${contextCookies.length} cookies from context for notebooklm.google.com`);
+    }
+    
+    // Build a map of unique cookies (prefer context cookies as they're more complete)
+    const cookieMap = new Map<string, string>();
+    
+    // First, add cookies from document.cookie if available (these are the ones JavaScript can access)
+    if (documentCookies) {
+      const docCookiePairs = documentCookies.split(';').map(c => c.trim());
+      for (const pair of docCookiePairs) {
+        const [name, ...valueParts] = pair.split('=');
+        if (name && valueParts.length > 0) {
+          cookieMap.set(name.trim(), valueParts.join('='));
+        }
+      }
+    }
+    
+    // Then, add/override with context cookies (these include HttpOnly cookies)
+    for (const cookie of contextCookies) {
+      // Only include cookies that are relevant for notebooklm.google.com
+      const domain = cookie.domain || '';
+      if (domain.includes('notebooklm.google.com') || 
+          domain.includes('.google.com') || 
+          domain === '' ||
+          !domain) {
+        cookieMap.set(cookie.name, cookie.value);
+      }
+    }
+    
+    // Build cookie string
+    cookieString = Array.from(cookieMap.entries())
+      .map(([name, value]) => `${name}=${value}`)
+      .join('; ');
+    
+    if (debug) {
+      console.log(`Extracted ${cookieMap.size} unique cookies (${cookieString.length} characters)`);
+    }
+  } catch (error) {
+    if (debug) {
+      console.warn('Failed to extract cookies automatically:', (error as Error).message);
+    }
+  }
+  
+  // Validate extracted cookies
+  if (!cookieString || cookieString.length < 100) {
+    if (debug) {
+      console.warn('⚠️  Automatic cookie extraction failed or cookies too short');
+      console.warn(`   Cookie length: ${cookieString.length} (minimum: 100)`);
+      console.log('Falling back to manual cookie input...');
+    }
+    
+    // Fall back to manual input
+    cookieString = await promptForCookies();
+    
+    if (!cookieString || cookieString.length < 100) {
+      throw new NotebookLMAuthError('Invalid cookies - cookie string too short or empty');
+    }
+  } else {
+    if (debug) {
+      console.log('✓ Cookies extracted successfully');
+    }
+  }
+  
   return {
     authToken,
-    cookies: '', // Will be filled manually
+    cookies: cookieString,
   };
 }
 
@@ -264,20 +334,9 @@ export async function autoLogin(config: AuthConfig = {}): Promise<Credentials> {
     // Authenticate with Google
     await authenticateWithGoogle(page, email, password, debug);
     
-    // Extract auth token from NotebookLM
-    const partialCredentials = await extractCredentials(page, debug);
-    
-    // Prompt for cookies manually
-    const cookies = await promptForCookies();
-    
-    if (!cookies || cookies.length < 100) {
-      throw new NotebookLMAuthError('Invalid cookies - cookie string too short or empty');
-    }
-    
-    const credentials: Credentials = {
-      authToken: partialCredentials.authToken,
-      cookies: cookies,
-    };
+    // Extract both auth token and cookies from NotebookLM automatically
+    // Falls back to manual input if automatic extraction fails
+    const credentials = await extractCredentials(page, debug);
     
     // Save credentials for future use
     await saveCredentials(credentials);
