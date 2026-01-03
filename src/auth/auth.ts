@@ -109,14 +109,14 @@ async function authenticateWithGoogle(page: Page, email: string, password: strin
   await page.click('button:has-text("Next"), #passwordNext, button[type="button"]:has-text("Next")');
   
   // Wait for authentication to complete (including 2FA)
-  await page.waitForTimeout(60000); // Increased to 60 seconds to allow time for 2FA
+  await page.waitForTimeout(15000); // 15 seconds - reduced from 60 seconds
   
   // Check if we're still on sign-in page (2FA or other issues)
   const currentUrl = page.url();
   if (currentUrl.includes('accounts.google.com/signin') || currentUrl.includes('challenge')) {
     // Give additional time for 2FA if still on sign-in page
-    console.log('⚠️  Still on sign-in page - waiting additional 30 seconds for 2FA completion...');
-    await page.waitForTimeout(30000);
+    console.log('⚠️  Still on sign-in page - waiting additional 10 seconds for 2FA completion...');
+    await page.waitForTimeout(10000); // 10 seconds - reduced from 30 seconds
     
     const finalUrl = page.url();
     if (finalUrl.includes('accounts.google.com/signin') || finalUrl.includes('challenge')) {
@@ -257,7 +257,7 @@ export async function autoLogin(config: AuthConfig = {}): Promise<Credentials> {
     
     const context = await browser.newContext({
       userAgent: USER_AGENT,
-      viewport: { width: 1920, height: 1080 }
+      viewport: { width: 1280, height: 800 }
     });
     const page = await context.newPage();
     

@@ -619,7 +619,7 @@ async function saveImages(
     browser = await chromium.launch({ headless: false });
     context = await browser.newContext({
       userAgent: USER_AGENT,
-      viewport: { width: 1920, height: 1080 }
+      viewport: { width: 1280, height: 800 }
     });
     page = await context.newPage();
     

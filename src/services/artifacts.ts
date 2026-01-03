@@ -4786,7 +4786,7 @@ async function downloadVideoWithPlaywright(videoUrl: string, cookies: string): P
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     userAgent: USER_AGENT,
-    viewport: { width: 1920, height: 1080 }
+    viewport: { width: 1280, height: 800 }
   });
   
   try {
@@ -4839,7 +4839,7 @@ async function downloadSlideImages(imageUrls: string[], cookies: string): Promis
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     userAgent: USER_AGENT,
-    viewport: { width: 1920, height: 1080 }
+    viewport: { width: 1280, height: 800 }
   });
   
   try {
