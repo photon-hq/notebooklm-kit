@@ -20,7 +20,6 @@
   "scripts": {
     "postinstall": "npx playwright install chromium && npm run build",
     "setup": "npm install && npx playwright install chromium && npm run build",
-    "install": "npm install",
     "build": "tsc",
     "build:dev": "tsc",
     "dev": "tsc --watch",
