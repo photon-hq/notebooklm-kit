@@ -1,13 +1,23 @@
 # Dependencies
 node_modules/
+.pnp
+.pnp.js
 
 # Build output
 dist/
+build/
+*.tsbuildinfo
 
 # Environment variables
 .env
 .env.local
 .env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Credentials (contains sensitive auth data)
+credentials.json
 
 # IDE
 .vscode/
@@ -15,10 +25,19 @@ dist/
 *.swp
 *.swo
 *~
+.project
+.classpath
+.settings/
 
 # OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
 
 # Logs
 logs/
@@ -26,19 +45,27 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # Testing
 coverage/
 .nyc_output/
+*.lcov
+.jest/
 
 # Temp files
 *.tmp
 *.temp
+.cache/
+.turbo/
 
 # RPC directory
 rpc/
 test/
 nlm/
 
-# Credentials (contains sensitive auth data)
-credentials.json
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/

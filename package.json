@@ -2,31 +2,6 @@
   "name": "notebooklm-kit",
   "version": "2.1.1",
   "description": "TypeScript SDK for NotebookLM API",
-  "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts",
-      "require": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
-  "scripts": {
-    "postinstall": "npx playwright install chromium && npm run build",
-    "setup": "npm install && npx playwright install chromium && npm run build",
-    "install": "npm install",
-    "build": "tsc",
-    "build:dev": "tsc",
-    "dev": "tsc --watch",
-    "clean": "rm -rf dist",
-    "prepublishOnly": "npm run clean && npm run build"
-  },
   "keywords": [
     "notebooklm",
     "google",
@@ -42,25 +17,60 @@
     "quiz",
     "mind-map"
   ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/photon-hq/notebooklm-kit"
-  },
   "author": "photon-hq",
   "license": "MIT",
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "tsx": "^4.21.0",
-    "typescript": "^5.7.0"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/photon-hq/notebooklm-kit.git"
   },
+  "homepage": "https://github.com/photon-hq/notebooklm-kit#readme",
+  "bugs": {
+    "url": "https://github.com/photon-hq/notebooklm-kit/issues"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "sideEffects": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "engines": {
     "node": ">=18.0.0"
   },
   "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
     "access": "public"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "postinstall": "npx playwright install chromium && npm run build",
+    "setup": "npm install && npx playwright install chromium && npm run build",
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "type-check": "tsc --noEmit",
+    "prepublishOnly": "npm run clean && npm run type-check && npm run build"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
     "playwright": "^1.57.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0"
   }
 }
