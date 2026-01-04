@@ -22,7 +22,7 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 | **[`sdk.notebooks`](#sdknotebooks---notebook-management)** | Notebook management | `list()`, `create()`, `get()`, `update()`, `delete()`, `share()` |
 | **[`sdk.sources`](#sdksources---source-management)** | Add & manage sources | `list()`, `get()`, `add.url()`, `add.text()`, `add.youtube()`, `add.web.searchAndWait()`, `update()`, `delete()`, `status()` |
 | **[`sdk.artifacts`](#sdkartifacts---artifact-management)** | Generate study materials | `create()`, `list()`, `get()`, `download()`, `delete()`, `rename()`, `share()` |
-| **[`sdk.generation`](#sdkgeneration---generation--chat)** | Chat & content generation | `chat()`, `chatStream()`, `setChatConfig()`, `generateDocumentGuides()`, `deleteChatHistory()` |
+| **[`sdk.generation`](#sdkgeneration---generation--chat)** | Chat & content generation | `chat()`, `chatStream()`, `setChatConfig()`, `deleteChatHistory()` |
 | **[`sdk.notes`](#sdknotes---notes-management)** | Manage notes | `create()`, `list()`, `update()`, `delete()` |
 
 ## Installation
@@ -238,10 +238,8 @@ npx tsx examples/chat-basic.ts <notebook-id> "What are the key findings?" --no-s
 |---------|-------------|--------|---------|
 | Chat (Non-streaming) | Chat with notebook content - returns complete response | [`sdk.generation.chat(notebookId, prompt, options?)`](#chat) | [chat-basic.ts](examples/chat-basic.ts) |
 | Chat Stream | Chat with real-time streaming response chunks | [`sdk.generation.chatStream(notebookId, prompt, options?)`](#chat-stream) | [chat-basic.ts](examples/chat-basic.ts) |
-| Chat with Sources | Chat with specific sources (interactive or command-line selection) | [`sdk.generation.chat(notebookId, prompt, { sourceIds })`](#chat) | [chat-with-sources.ts](examples/chat-with-sources.ts) |
 | Chat Conversation | Multi-turn conversations with history tracking | [`sdk.generation.chat(notebookId, prompt, { conversationHistory })`](#chat) | [chat-conversation.ts](examples/chat-conversation.ts) |
 | Set Chat Config | Configure chat (custom prompt, learning guide, response length) | [`sdk.generation.setChatConfig(notebookId, config)`](#set-chat-configuration) | [generation-set-chat-config.ts](examples/generation-set-chat-config.ts) |
-| Generate Document Guides | Generate document guides for all or specific sources | [`sdk.generation.generateDocumentGuides(notebookId, sourceId?)`](#generate-document-guides) | [generation-document-guides.ts](examples/generation-document-guides.ts) |
 | Delete Chat History | Delete a conversation history | [`sdk.generation.deleteChatHistory(notebookId, conversationId)`](#delete-chat-history) | [generation-delete-chat-history.ts](examples/generation-delete-chat-history.ts) |
 
 ### `sdk.notes` - Notes Management
@@ -2574,7 +2572,7 @@ const result = await sdk.artifacts.share('notebook-id', {
 
 ## Generation & Chat
 
-Examples: [chat-basic.ts](examples/chat-basic.ts) | [chat-with-sources.ts](examples/chat-with-sources.ts) | [chat-conversation.ts](examples/chat-conversation.ts) | [generation-set-chat-config.ts](examples/generation-set-chat-config.ts) | [generation-document-guides.ts](examples/generation-document-guides.ts) | [generation-delete-chat-history.ts](examples/generation-delete-chat-history.ts)
+Examples: [chat-basic.ts](examples/chat-basic.ts) | [chat-conversation.ts](examples/chat-conversation.ts) | [generation-set-chat-config.ts](examples/generation-set-chat-config.ts) | [generation-delete-chat-history.ts](examples/generation-delete-chat-history.ts)
 
 **Key Features:**
 - ✅ **Streaming & Non-streaming modes** - Choose real-time streaming (`chatStream()`) or complete responses (`chat()`)
@@ -2605,7 +2603,6 @@ Examples: [chat-basic.ts](examples/chat-basic.ts) | [chat-with-sources.ts](examp
 
 **Examples:** 
 - [chat-basic.ts](examples/chat-basic.ts) - Basic chat with all sources
-- [chat-with-sources.ts](examples/chat-with-sources.ts) - Chat with specific sources
 - [chat-conversation.ts](examples/chat-conversation.ts) - Chat with conversation history
 
 **Note:** The SDK now uses an improved parser based on the Python SDK implementation, providing better error handling, citation extraction, and streaming support. The chat request format has been restructured to match the official API format for better compatibility.
@@ -2710,7 +2707,6 @@ console.log(response2.text)
 
 **Examples:** 
 - [chat-basic.ts](examples/chat-basic.ts) - Streaming chat with all sources
-- [chat-with-sources.ts](examples/chat-with-sources.ts) - Streaming chat with specific sources
 - [chat-conversation.ts](examples/chat-conversation.ts) - Streaming multi-turn conversations
 
 **Parameters:**
@@ -2974,50 +2970,6 @@ await sdk.generation.setChatConfig('notebook-id', {
 **Note:** Configuration persists for the notebook until changed. You can update it anytime by calling `setChatConfig()` again with new values.
 
 ---
-
-### Generate Document Guides
-
-**Method:** `sdk.generation.generateDocumentGuides(notebookId, sourceId?)`
-
-**Example:** [generation-document-guides.ts](examples/generation-document-guides.ts)
-
-**Parameters:**
-- `notebookId: string` - The notebook ID (required)
-- `sourceId?: string` - Optional specific source ID to generate guides for (if not provided, generates for all sources)
-
-**Returns:** `Promise<any>` - Document guides (array of guide objects with structured content)
-
-**Description:**
-Generates document guides for sources in the notebook. These guides provide structured summaries, key information, and insights about each source, making them easier to understand and reference. Guides are automatically generated when sources are added, but you can regenerate them anytime.
-
-**What are Document Guides?**
-Document guides provide:
-- Structured summaries of source content
-- Key topics and themes
-- Important information extraction
-- Quick reference for source understanding
-
-**Usage:**
-```typescript
-// Generate guides for all sources
-const guides = await sdk.generation.generateDocumentGuides('notebook-id')
-console.log(`Generated ${guides.length} guide(s)`)
-
-// Generate guides for a specific source
-const guides = await sdk.generation.generateDocumentGuides('notebook-id', 'source-id')
-console.log(guides)
-
-// Process guides
-if (Array.isArray(guides)) {
-  guides.forEach((guide, index) => {
-    console.log(`Guide ${index + 1}:`)
-    console.log(`  Title: ${guide.title || 'N/A'}`)
-    console.log(`  Content: ${guide.content || 'N/A'}`)
-  })
-}
-```
-
-**Note:** Guide generation may take a moment, especially for large sources or multiple sources. Guides are useful for getting quick overviews before diving into full source content.
 
 ---
 

@@ -125,9 +125,6 @@ export const RPC_EXPORT_REPORT = 'Krh3pd';
 // NotebookLM Service - Generation Operations
 // ============================================================================
 
-/** Generate document guides (uses [project_id]) */
-export const RPC_GENERATE_DOCUMENT_GUIDES = 'tr032e';
-
 /** Generate notebook guide */
 export const RPC_GENERATE_NOTEBOOK_GUIDE = 'VfAZjd';
 

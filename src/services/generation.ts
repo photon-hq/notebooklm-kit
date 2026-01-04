@@ -39,41 +39,6 @@ export class GenerationService {
     (rpcConfig as any).batchClient = this.rpc.getBatchClient();
     this.streamingClient = new StreamingClient(rpcConfig);
   }
-  
-  /**
-   * Generate document guides
-   * 
-   * @param notebookId - The notebook ID
-   * @param sourceId - Optional specific source ID to generate guides for (if not provided, generates for all sources)
-   * 
-   * @example
-   * ```typescript
-   * // Generate guides for all sources in the notebook
-   * const guides = await client.generation.generateDocumentGuides('notebook-id');
-   * 
-   * // Generate guides for a specific source
-   * const guides = await client.generation.generateDocumentGuides('notebook-id', 'source-id');
-   * ```
-   */
-  async generateDocumentGuides(notebookId: string, sourceId?: string): Promise<any> {
-    let request: any[];
-    
-    if (sourceId) {
-      // Format for specific source: [[[["sourceId"]]]]
-      request = [[[[sourceId]]]];
-    } else {
-      // Format for all sources: [notebookId]
-      request = [notebookId];
-    }
-    
-    const response = await this.rpc.call(
-      RPC.RPC_GENERATE_DOCUMENT_GUIDES,
-      request,
-      notebookId
-    );
-    
-    return response;
-  }
 
   /**
    * Set chat configuration
