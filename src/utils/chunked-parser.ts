@@ -30,7 +30,6 @@ export class ChunkedResponseParser {
     try {
       const projects = this.parseStandardJSON();
       if (projects.length >= 0) { // Allow empty arrays
-        this.logDebug(`Successfully parsed ${projects.length} projects using standard JSON method`);
         return projects;
       }
     } catch (error) {
@@ -164,16 +163,47 @@ export class ChunkedResponseParser {
       const directParse = JSON.parse(this.raw.trim());
       if (Array.isArray(directParse)) {
         // This is a direct JSON array - parse it directly
-        this.logDebug('Response is a direct JSON array, parsing directly');
-        // Handle triple-nested structure: [[[notebook1], [notebook2], ...]]
+        // Handle different nesting structures:
+        // - [[[notebook]]] - single notebook triple-nested
+        // - [[[notebook1], [notebook2], ...]] - multiple notebooks triple-nested
+        // - [[notebook1], [notebook2], ...] - multiple notebooks double-nested
         let projectsData = directParse;
+        
+        // Check if triple-nested: [[[notebook(s)]]]
         if (Array.isArray(directParse) && directParse.length === 1 && Array.isArray(directParse[0])) {
-          projectsData = directParse[0];
+          const innerArray = directParse[0];
+          
+          // Check if inner array contains a single notebook or multiple notebooks
+          // Single notebook: [["title", [sources], "id", "emoji", null]]
+          // Multiple notebooks: [[["title1", ...], ["title2", ...], ...]]
+          if (innerArray.length === 1 && Array.isArray(innerArray[0])) {
+            // Check if this is a notebook array (has structure [title, sources, id, emoji])
+            const firstItem = innerArray[0];
+            if (Array.isArray(firstItem) && firstItem.length >= 3) {
+              const hasTitle = typeof firstItem[0] === 'string';
+              const hasSourcesOrId = Array.isArray(firstItem[1]) || firstItem[1] === null;
+              const hasId = typeof firstItem[2] === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(firstItem[2]);
+              
+              if (hasTitle && (hasSourcesOrId || hasId)) {
+                // This is a single notebook: wrap it in an array for consistent processing
+                projectsData = [firstItem];
+              } else {
+                // This might be an array of notebooks
+                projectsData = innerArray;
+              }
+            } else {
+              projectsData = innerArray;
+            }
+          } else {
+            // Multiple items in inner array - could be notebooks or sources
+            projectsData = innerArray;
+          }
         }
         return this.parseProjectsArray(projectsData);
       }
-    } catch {
+    } catch (error) {
       // Not a direct JSON array, continue with chunked parsing
+      this.logDebug(`Direct JSON parse failed: ${(error as Error).message}`);
     }
     
     // Look for chunk containing "wrb.fr" with project list RPCs
@@ -269,27 +299,44 @@ export class ChunkedResponseParser {
       return /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(str);
     };
     
-    // Handle triple-nested structure: [[[notebook1], [notebook2], ...]]
-    // wXbhsf returns: [[[title, [sources...], notebook_id, emoji, ...], ...]]
+    // Handle different structures:
+    // - [[notebook]] - single notebook double-nested (from parseStandardJSON)
+    // - [[notebook1], [notebook2], ...] - multiple notebooks double-nested
+    // - [notebook] - single notebook array directly (edge case)
     let notebooksArray = projectsData;
-    if (Array.isArray(projectsData) && projectsData.length === 1 && Array.isArray(projectsData[0])) {
-      // Triple-nested: use the inner array
-      notebooksArray = projectsData[0];
+    
+    // Check if projectsData is a direct notebook array (not wrapped in another array)
+    // This should only happen in edge cases, not from parseStandardJSON
+    if (Array.isArray(projectsData) && projectsData.length >= 3) {
+      const firstIsString = typeof projectsData[0] === 'string';
+      const secondIsArrayOrNull = Array.isArray(projectsData[1]) || projectsData[1] === null;
+      const thirdIsUUID = typeof projectsData[2] === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(projectsData[2]);
+      
+      // Only wrap if:
+      // 1. It looks like a notebook array (title, sources/id, id)
+      // 2. AND the first element is NOT an array (if first element is array, it's already wrapped)
+      // 3. AND projectsData.length is small (if it's large, it's likely already an array of notebooks)
+      if (firstIsString && (secondIsArrayOrNull || thirdIsUUID) && 
+          !Array.isArray(projectsData[0]) && projectsData.length < 10) {
+        this.logDebug('Detected direct notebook array (not wrapped), wrapping it');
+        notebooksArray = [projectsData];
+      }
     }
     
     // Case 1: notebooksArray is an array of notebook arrays
     if (Array.isArray(notebooksArray)) {
-      this.logDebug(`Processing ${notebooksArray.length} items in notebooks array`);
-      for (const item of notebooksArray) {
+      for (let i = 0; i < notebooksArray.length; i++) {
+        const item = notebooksArray[i];
         if (!Array.isArray(item) || item.length < 3) {
-          this.logDebug(`Skipping item: not array or too short (len=${item.length})`);
+          this.logDebug(`Skipping item ${i}: not array or too short (len=${Array.isArray(item) ? item.length : typeof item})`);
           continue;
         }
         
         // wXbhsf structure: [title, [sources...] or null, notebook_id, emoji, ...]
         // CRITICAL: Skip if this looks like a source array (nested inside notebook)
         // Sources have structure: [[source_id], source_title, ...] where source_id is at index 0
-        // Notebooks have structure: [title, [sources...], notebook_id, emoji] where title is at index 0
+        // OR: [source_title, ..., source_id, ...] where source_id is at a later index
+        // Notebooks have structure: [title, [sources...] or null, notebook_id, emoji] where title is at index 0
         const firstElement = item[0];
         
         // If first element is an array containing a UUID (source ID), this is a source, skip it
@@ -304,6 +351,7 @@ export class ChunkedResponseParser {
         const emoji = item[3];
         
         // Pattern 1: [title, [sources...] or null, notebook_id, emoji] - wXbhsf format
+        // This is the PRIMARY pattern for notebooks - they MUST have sources array or null at index 1
         // Validate: 
         // - index 0 (title) must be a string (can be empty)
         // - index 1 (sourcesOrId) must be an array (sources) OR null
@@ -331,31 +379,72 @@ export class ChunkedResponseParser {
             sourceCount,
           };
           
-          this.logDebug(`Extracted notebook: ${project.title} (${possibleId}) with ${sourceCount} sources`);
           projects.push(project);
           continue; // Skip to next item
         }
         
         // Pattern 2: [title, ..., projectId, emoji] - simpler format (no nested sources, sourcesOrId is not an array)
-        // Only use this if pattern 1 didn't match and index 1 is NOT an array or null
+        // CRITICAL: This pattern is DEPRECATED and should rarely match
+        // The API should primarily return Pattern 1 (with sources array or null)
+        // Only accept Pattern 2 if:
+        // 1. Index 1 is NOT an array and NOT null (different from notebook pattern)
+        // 2. AND the title doesn't look like a source (URLs, file extensions, malformed JSON)
+        // 3. AND we have strong indicators it's a notebook (emoji at index 3, proper title length)
+        // 4. AND the title is not empty and looks like a real notebook title
         if (typeof title === 'string' && !Array.isArray(sourcesOrId) && sourcesOrId !== null && isUUIDLike(possibleId)) {
+          const titleStr = String(title).trim();
+          
+          // STRICT filtering to exclude sources:
+          // - Sources often have URLs as titles (start with http:// or https://)
+          // - Sources often have file extensions in titles
+          // - Sources might have malformed titles (like the ones in the terminal output)
+          // - Sources might have very short or very long titles
+          const looksLikeSource = 
+            !titleStr || // Empty title
+            titleStr.startsWith('http://') || 
+            titleStr.startsWith('https://') ||
+            /\.(pdf|png|jpg|jpeg|mp3|mp4|txt|doc|docx)$/i.test(titleStr) ||
+            titleStr.length > 200 || // Very long titles are likely sources
+            titleStr.length < 3 || // Very short titles are suspicious
+            /^[,\[\]]/.test(titleStr) || // Starts with JSON-like characters (malformed)
+            /\]\]/.test(titleStr) || // Contains closing brackets (malformed JSON)
+            /^\[null/.test(titleStr) || // Starts with [null (malformed JSON)
+            /null,/.test(titleStr); // Contains null, (malformed JSON)
+          
+          if (looksLikeSource) {
+            this.logDebug(`Skipping source: title looks like a source (${titleStr.substring(0, 50)}...)`);
+            continue;
+          }
+          
+          // Additional checks for notebook indicators:
+          // - Must have at least 4 elements (title, something, id, emoji)
+          // - Should have an emoji at index 3 (notebooks typically have emojis)
+          if (item.length < 4) {
+            this.logDebug(`Skipping item: too short to be a notebook (len=${item.length})`);
+            continue;
+          }
+          
+          // If no emoji and title is suspicious, skip it
+          if (!emoji || (typeof emoji !== 'string')) {
+            this.logDebug(`Skipping item: no emoji indicator, likely a source`);
+            continue;
+          }
+          
           // No sources in this format
           const project: any = {
-            title: title.trim() || 'Untitled notebook',
+            title: titleStr || 'Untitled notebook',
             projectId: possibleId,
             emoji: typeof emoji === 'string' && emoji.trim() ? emoji : '📄',
             sourceCount: 0,
           };
           
-          this.logDebug(`Extracted notebook (pattern 2): ${project.title} (${possibleId}) with 0 sources`);
+          this.logDebug(`Extracted notebook (pattern 2 - rare case): ${project.title} (${possibleId}) with 0 sources`);
           projects.push(project);
         } else {
           this.logDebug(`Skipping item: doesn't match notebook pattern (title=${typeof title}, sourcesOrId=${typeof sourcesOrId}, possibleId=${typeof possibleId})`);
         }
       }
     }
-    
-    this.logDebug(`Total notebooks extracted: ${projects.length}`);
     
     // If no projects found, return empty array (valid empty list)
     return projects;
@@ -473,6 +562,7 @@ export class ChunkedResponseParser {
   
   /**
    * Parse using direct scanning
+   * NOTE: This is a fallback method and should use strict filtering to avoid including sources
    */
   private parseDirectScan(): any[] {
     // Find all UUID patterns
@@ -486,6 +576,8 @@ export class ChunkedResponseParser {
     // Deduplicate
     const uniqueIds = Array.from(new Set(uuidMatches));
     const projects: any[] = [];
+    
+    this.logDebug(`Direct scan: Found ${uniqueIds.length} unique UUIDs, applying strict filtering...`);
     
     for (const id of uniqueIds) {
       const project: any = {
@@ -501,7 +593,7 @@ export class ChunkedResponseParser {
         const beforeText = this.cleanedData.substring(beforeStart, idIndex);
         
         // Look for title in quotes
-        const titlePattern = /"([^"]{3,100})"/g;
+        const titlePattern = /"([^"]{3,200})"/g;
         const titleMatches: string[] = [];
         let titleMatch: RegExpExecArray | null;
         
@@ -530,8 +622,31 @@ export class ChunkedResponseParser {
         project.title = `Notebook ${id.substring(0, 8)}`;
       }
       
+      // Apply the same strict filtering as parseProjectsArray Pattern 2
+      const titleStr = String(project.title).trim();
+      const looksLikeSource = 
+        !titleStr || // Empty title
+        titleStr.startsWith('http://') || 
+        titleStr.startsWith('https://') ||
+        /\.(pdf|png|jpg|jpeg|mp3|mp4|txt|doc|docx)$/i.test(titleStr) ||
+        titleStr.length > 200 || // Very long titles are likely sources
+        titleStr.length < 3 || // Very short titles are suspicious
+        /^[,\[\]]/.test(titleStr) || // Starts with JSON-like characters (malformed)
+        /\]\]/.test(titleStr) || // Contains closing brackets (malformed JSON)
+        /^\[null/.test(titleStr) || // Starts with [null (malformed JSON)
+        /null,/.test(titleStr) || // Contains null, (malformed JSON)
+        titleStr === `Notebook ${id.substring(0, 8)}`; // Generated title (no real title found)
+      
+      if (looksLikeSource) {
+        this.logDebug(`Direct scan: Skipping source ${id}: title looks like a source (${titleStr.substring(0, 50)}...)`);
+        continue;
+      }
+      
+      this.logDebug(`Direct scan: Accepting notebook ${id}: "${titleStr.substring(0, 50)}${titleStr.length > 50 ? '...' : ''}"`);
       projects.push(project);
     }
+    
+    this.logDebug(`Direct scan: Filtered ${uniqueIds.length} UUIDs down to ${projects.length} notebooks`);
     
     return projects;
   }

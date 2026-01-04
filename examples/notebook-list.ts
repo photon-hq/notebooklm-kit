@@ -11,7 +11,8 @@ async function main() {
     console.log(`Found ${notebooks.length} notebooks\n`);
 
     notebooks.slice(0, 10).forEach((notebook, i) => {
-      console.log(`${i + 1}. ${notebook.title}`);
+      const emoji = notebook.emoji || '📄';
+      console.log(`${i + 1}. ${emoji} ${notebook.title}`);
       console.log(`   ID: ${notebook.projectId}`);
       console.log(`   Sources: ${notebook.sourceCount || 0}\n`);
     });
