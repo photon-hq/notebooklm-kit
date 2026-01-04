@@ -586,6 +586,8 @@ export class StreamingClient {
     this.requestCounter++;
 
     const batchClient = (this.config as any).batchClient;
+    // Default fSid value (fallback if not provided via config)
+    // This is a public constant used by Google's streaming API
     let fSid = '-7958112141384765164';
 
     if (batchClient?.config?.urlParams?.['f.sid']) {
