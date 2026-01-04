@@ -3678,3 +3678,425 @@ try {
   }
 }
 ```
+
+## Best Practices
+
+### Resource Management
+
+**Always dispose of the SDK when done** to prevent memory leaks and stop background processes:
+
+```typescript
+import { NotebookLMClient } from 'notebooklm-kit';
+
+async function main() {
+  const sdk = new NotebookLMClient();
+  
+  try {
+    await sdk.connect();
+    // ... use SDK ...
+  } finally {
+    await sdk.dispose(); // Always cleanup
+  }
+}
+```
+
+**Graceful shutdown for long-running applications:**
+
+```typescript
+// Handle process termination gracefully
+process.on('SIGINT', async () => {
+  console.log('Shutting down...');
+  await sdk.dispose();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('Terminating...');
+  await sdk.dispose();
+  process.exit(0);
+});
+```
+
+### Error Handling
+
+**Use specific error types** for better error handling:
+
+```typescript
+import {
+  NotebookLMError,
+  NotebookLMAuthError,
+  RateLimitError,
+  APIError,
+} from 'notebooklm-kit';
+
+try {
+  const notebook = await sdk.notebooks.create({ title: 'My Notebook' });
+} catch (error) {
+  if (error instanceof NotebookLMAuthError) {
+    // Authentication failed - credentials expired or invalid
+    console.error('Please refresh your credentials');
+    // Optionally: Force re-authentication
+    // Set FORCE_REAUTH=true in .env or delete credentials.json
+  } else if (error instanceof RateLimitError) {
+    // Rate limit exceeded - wait before retrying
+    console.error('Rate limit exceeded. Please wait before retrying.');
+    // Implement exponential backoff
+  } else if (error instanceof APIError) {
+    // API error - check error code and message
+    if (error.code === 143) {
+      console.error('Resource not found');
+    } else if (error.isRetryable()) {
+      // Retry transient errors
+      console.error('Transient error, will retry:', error.message);
+    } else {
+      console.error('API error:', error.message);
+    }
+  } else if (error instanceof NotebookLMError) {
+    // Generic NotebookLM error
+    console.error('NotebookLM error:', error.message);
+  } else {
+    // Unexpected error
+    console.error('Unexpected error:', error);
+  }
+}
+```
+
+**Retry logic for transient errors:**
+
+```typescript
+async function createNotebookWithRetry(title: string, maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await sdk.notebooks.create({ title });
+    } catch (error) {
+      if (error instanceof APIError && error.isRetryable() && attempt < maxRetries - 1) {
+        const delay = Math.pow(2, attempt) * 1000; // Exponential backoff
+        console.log(`Retry ${attempt + 1}/${maxRetries} after ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error; // Re-throw if not retryable or max retries reached
+    }
+  }
+}
+```
+
+### Credential Management
+
+**Use saved credentials** for faster startup (credentials are automatically saved after first auto-login):
+
+```typescript
+// First run: Auto-login saves credentials to credentials.json
+const sdk = new NotebookLMClient({
+  auth: {
+    email: process.env.GOOGLE_EMAIL!,
+    password: process.env.GOOGLE_PASSWORD!,
+  },
+});
+
+await sdk.connect(); // Saves credentials for future use
+
+// Subsequent runs: Credentials loaded automatically from credentials.json
+// No need to provide email/password again
+const sdk2 = new NotebookLMClient();
+await sdk2.connect(); // Uses saved credentials
+```
+
+**Force re-authentication when needed:**
+
+```typescript
+// Option 1: Set environment variable
+// FORCE_REAUTH=true
+
+// Option 2: Delete credentials.json file
+// rm credentials.json
+
+// Option 3: Explicitly provide new credentials
+const sdk = new NotebookLMClient({
+  auth: {
+    email: process.env.GOOGLE_EMAIL!,
+    password: process.env.GOOGLE_PASSWORD!,
+  },
+});
+```
+
+### Quota Management
+
+**Check quota before operations** to avoid rate limit errors:
+
+```typescript
+// Check remaining quota
+const remainingChats = sdk.getRemaining('chats');
+if (remainingChats <= 0) {
+  console.warn('No chat quota remaining. Please wait or upgrade plan.');
+  return;
+}
+
+// Use chat
+const response = await sdk.generation.chat(notebookId, 'Your question');
+```
+
+**Monitor usage:**
+
+```typescript
+const usage = sdk.getUsage();
+console.log(`Notebooks: ${usage.notebooks.used}/${usage.notebooks.limit}`);
+console.log(`Chats: ${usage.chats.used}/${usage.chats.limit}`);
+console.log(`Sources: ${usage.sources.used}/${usage.sources.limit}`);
+```
+
+### Source Processing
+
+**Wait for sources to process** before creating artifacts:
+
+```typescript
+// Add source
+const sourceId = await sdk.sources.add.url(notebookId, {
+  url: 'https://example.com/article',
+});
+
+// Wait for processing to complete
+let status = await sdk.sources.status(notebookId);
+while (status.sources.find(s => s.sourceId === sourceId)?.state !== 'READY') {
+  await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+  status = await sdk.sources.status(notebookId);
+}
+
+// Now create artifact (source is ready)
+const quiz = await sdk.artifacts.create(notebookId, ArtifactType.QUIZ);
+```
+
+### Artifact State Checking
+
+**Check artifact state** before downloading or using:
+
+```typescript
+// Create artifact
+const artifact = await sdk.artifacts.create(notebookId, ArtifactType.QUIZ);
+
+// Wait for artifact to be ready
+let currentArtifact = artifact;
+while (currentArtifact.state !== ArtifactState.READY) {
+  if (currentArtifact.state === ArtifactState.FAILED) {
+    throw new Error('Artifact generation failed');
+  }
+  
+  await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+  currentArtifact = await sdk.artifacts.get(artifact.artifactId, notebookId);
+}
+
+// Now download or use the artifact
+const quizData = await sdk.artifacts.download(artifact.artifactId, './downloads', notebookId);
+```
+
+### Async/Await Patterns
+
+**Use async/await consistently** for better error handling:
+
+```typescript
+// ✅ Good: Proper async/await
+async function processNotebook(notebookId: string) {
+  try {
+    const sources = await sdk.sources.list(notebookId);
+    const artifacts = await sdk.artifacts.list(notebookId);
+    return { sources, artifacts };
+  } catch (error) {
+    console.error('Failed to process notebook:', error);
+    throw error;
+  }
+}
+
+// ❌ Avoid: Mixing promises and async/await
+function processNotebookBad(notebookId: string) {
+  sdk.sources.list(notebookId).then(sources => {
+    // Error handling is harder here
+  });
+}
+```
+
+### Connection Lifecycle
+
+**Connect once, reuse the SDK instance:**
+
+```typescript
+// ✅ Good: Connect once, reuse
+const sdk = new NotebookLMClient();
+await sdk.connect();
+
+// Use SDK multiple times
+const notebooks = await sdk.notebooks.list();
+const sources = await sdk.sources.list(notebookId);
+const artifacts = await sdk.artifacts.list(notebookId);
+
+await sdk.dispose(); // Cleanup when done
+
+// ❌ Avoid: Connecting multiple times
+// Don't call connect() multiple times - reuse the same instance
+```
+
+### Debug Mode
+
+**Enable debug mode for troubleshooting:**
+
+```typescript
+// In development
+const sdk = new NotebookLMClient({
+  debug: process.env.NODE_ENV === 'development',
+});
+
+// Or via environment variable
+// NOTEBOOKLM_DEBUG=true
+
+// Debug mode shows:
+// - RPC call details
+// - Authentication flow
+// - Auto-refresh operations
+// - Error details
+// - Response parsing
+```
+
+### Batch Operations
+
+**Use batch operations** when adding multiple sources:
+
+```typescript
+// ✅ Good: Batch add sources
+await sdk.sources.add.batch(notebookId, {
+  sources: [
+    { type: 'url', url: 'https://example.com/1' },
+    { type: 'url', url: 'https://example.com/2' },
+    { type: 'url', url: 'https://example.com/3' },
+  ],
+});
+
+// ❌ Avoid: Adding sources one by one
+// This is slower and uses more API calls
+```
+
+### Streaming Responses
+
+**Use streaming for long responses** to show progress:
+
+```typescript
+// Stream chat response for better UX
+const stream = await sdk.generation.chatStream(notebookId, 'Long question...');
+
+for await (const chunk of stream) {
+  if (chunk.type === 'content') {
+    process.stdout.write(chunk.content); // Show progress
+  } else if (chunk.type === 'citations') {
+    console.log('\nCitations:', chunk.citations);
+  }
+}
+```
+
+### Environment Variables
+
+**Use environment variables** for configuration:
+
+```typescript
+// ✅ Good: Use .env file
+// .env
+NOTEBOOKLM_AUTH_TOKEN=...
+NOTEBOOKLM_COOKIES=...
+NOTEBOOKLM_DEBUG=true
+
+// ❌ Avoid: Hardcoding credentials
+const sdk = new NotebookLMClient({
+  authToken: 'hardcoded-token', // Don't do this!
+});
+```
+
+### Recommended Patterns
+
+**Complete example with best practices:**
+
+```typescript
+import { NotebookLMClient, ArtifactType, ArtifactState } from 'notebooklm-kit';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+async function main() {
+  const sdk = new NotebookLMClient({
+    debug: process.env.NOTEBOOKLM_DEBUG === 'true',
+  });
+
+  try {
+    await sdk.connect();
+
+    // Check quota before operations
+    const remaining = sdk.getRemaining('chats');
+    if (remaining <= 0) {
+      console.warn('No chat quota remaining');
+      return;
+    }
+
+    // Create notebook
+    const notebook = await sdk.notebooks.create({
+      title: 'Research Project',
+      emoji: '📚',
+    });
+
+    // Add source and wait for processing
+    const sourceId = await sdk.sources.add.url(notebook.projectId, {
+      url: 'https://example.com/article',
+    });
+
+    // Wait for source to be ready
+    let status = await sdk.sources.status(notebook.projectId);
+    while (status.sources.find(s => s.sourceId === sourceId)?.state !== 'READY') {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      status = await sdk.sources.status(notebook.projectId);
+    }
+
+    // Create artifact and wait for completion
+    const artifact = await sdk.artifacts.create(
+      notebook.projectId,
+      ArtifactType.QUIZ,
+      {
+        customization: {
+          numberOfQuestions: 10,
+          difficulty: 2,
+        },
+      }
+    );
+
+    // Wait for artifact to be ready
+    let currentArtifact = artifact;
+    while (currentArtifact.state !== ArtifactState.READY) {
+      if (currentArtifact.state === ArtifactState.FAILED) {
+        throw new Error('Artifact generation failed');
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      currentArtifact = await sdk.artifacts.get(
+        artifact.artifactId,
+        notebook.projectId
+      );
+    }
+
+    // Download artifact
+    const quizData = await sdk.artifacts.download(
+      artifact.artifactId,
+      './downloads',
+      notebook.projectId
+    );
+
+    console.log('Success!', quizData);
+
+  } catch (error) {
+    console.error('Error:', error);
+    process.exit(1);
+  } finally {
+    await sdk.dispose(); // Always cleanup
+  }
+}
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\nShutting down...');
+  process.exit(0);
+});
+
+main();
+```
