@@ -30,7 +30,7 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 </thead>
 <tbody>
 <tr>
-<td colspan="3" style="padding-top: 40px; padding-bottom: 40px;"><strong style="font-size: 1.2em;"><a href="#notebooks">Notebook Management</a></strong> <small><code>list()</code>, <code>create()</code>, <code>get()</code>, <code>update()</code>, <code>delete()</code>, <code>share()</code></small></td>
+<td colspan="3" style="padding-top: 60px; padding-bottom: 60px;"><strong style="font-size: 1.2em;"><a href="#notebooks">Notebook Management</a></strong> <small><code>list()</code>, <code>create()</code>, <code>get()</code>, <code>update()</code>, <code>delete()</code>, <code>share()</code></small></td>
 </tr>
 <tr>
 <td>List Notebooks</td>
@@ -63,7 +63,7 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 <td><a href="examples/notebook-share.ts">notebook-share.ts</a></td>
 </tr>
 <tr>
-<td colspan="3" style="padding-top: 40px; padding-bottom: 40px;"><strong style="font-size: 1.2em;"><a href="#sources">Source Management</a></strong> <small><code>list()</code>, <code>get()</code>, <code>add.url()</code>, <code>add.text()</code>, <code>add.youtube()</code>, <code>add.file()</code>, <code>add.drive()</code>, <code>add.batch()</code>, <code>add.web.searchAndWait()</code>, <code>update()</code>, <code>delete()</code>, <code>status()</code></small></td>
+<td colspan="3" style="padding-top: 60px; padding-bottom: 60px;"><strong style="font-size: 1.2em;"><a href="#sources">Source Management</a></strong> <small><code>list()</code>, <code>get()</code>, <code>add.url()</code>, <code>add.text()</code>, <code>add.youtube()</code>, <code>add.file()</code>, <code>add.drive()</code>, <code>add.batch()</code>, <code>add.web.searchAndWait()</code>, <code>update()</code>, <code>delete()</code>, <code>status()</code></small></td>
 </tr>
 <tr>
 <td>List Sources</td>
@@ -131,7 +131,7 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 <td><a href="examples/source-status.ts">source-status.ts</a></td>
 </tr>
 <tr>
-<td colspan="3" style="padding-top: 40px; padding-bottom: 40px;"><strong style="font-size: 1.2em;"><a href="#artifacts">Artifact Generation</a></strong> <small><code>create()</code>, <code>list()</code>, <code>get()</code>, <code>download()</code>, <code>rename()</code>, <code>delete()</code>, <code>share()</code></small></td>
+<td colspan="3" style="padding-top: 60px; padding-bottom: 60px;"><strong style="font-size: 1.2em;"><a href="#artifacts">Artifact Generation</a></strong> <small><code>create()</code>, <code>list()</code>, <code>get()</code>, <code>download()</code>, <code>rename()</code>, <code>delete()</code>, <code>share()</code></small></td>
 </tr>
 <tr>
 <td>Create Artifact</td>
@@ -184,7 +184,7 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 <td><a href="examples/artifact-share.ts">artifact-share.ts</a></td>
 </tr>
 <tr>
-<td colspan="3" style="padding-top: 40px; padding-bottom: 40px;"><strong style="font-size: 1.2em;"><a href="#generation--chat">Chat & Generation</a></strong> <small><code>chat()</code>, <code>chatStream()</code>, <code>setChatConfig()</code></small></td>
+<td colspan="3" style="padding-top: 60px; padding-bottom: 60px;"><strong style="font-size: 1.2em;"><a href="#generation--chat">Chat & Generation</a></strong> <small><code>chat()</code>, <code>chatStream()</code>, <code>setChatConfig()</code></small></td>
 </tr>
 <tr>
 <td>Chat</td>
@@ -202,7 +202,7 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 <td><a href="examples/generation-set-chat-config.ts">generation-set-chat-config.ts</a></td>
 </tr>
 <tr>
-<td colspan="3" style="padding-top: 40px; padding-bottom: 40px;"><strong style="font-size: 1.2em;"><a href="#notes">Notes Management</a></strong> <small><code>list()</code>, <code>create()</code>, <code>update()</code>, <code>delete()</code></small></td>
+<td colspan="3" style="padding-top: 60px; padding-bottom: 60px;"><strong style="font-size: 1.2em;"><a href="#notes">Notes Management</a></strong> <small><code>list()</code>, <code>create()</code>, <code>update()</code>, <code>delete()</code></small></td>
 </tr>
 <tr>
 <td>List Notes</td>
