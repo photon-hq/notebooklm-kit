@@ -21,49 +21,212 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 
 ## Features
 
-| Feature | Method | Example |
-|---------|--------|---------|
-| **[Notebook Management](#notebooks)**<br><small>`list()`, `create()`, `get()`, `update()`, `delete()`, `share()`</small> | | |
-| List Notebooks | `sdk.notebooks.list()` | [notebook-list.ts](examples/notebook-list.ts) |
-| Create Notebook | `sdk.notebooks.create()` | [notebook-create.ts](examples/notebook-create.ts) |
-| Get Notebook | `sdk.notebooks.get()` | [notebook-get.ts](examples/notebook-get.ts) |
-| Update Notebook | `sdk.notebooks.update()` | [notebook-update.ts](examples/notebook-update.ts) |
-| Delete Notebook | `sdk.notebooks.delete()` | [notebook-delete.ts](examples/notebook-delete.ts) |
-| Share Notebook | `sdk.notebooks.share()` | [notebook-share.ts](examples/notebook-share.ts) |
-| **[Source Management](#sources)**<br><small>`list()`, `get()`, `add.url()`, `add.text()`, `add.youtube()`, `add.file()`, `add.drive()`, `add.batch()`, `add.web.searchAndWait()`, `update()`, `delete()`, `status()`</small> | | |
-| List Sources | `sdk.sources.list()` | [source-list.ts](examples/source-list.ts) |
-| Add URL Source | `sdk.sources.add.url()` | [source-add-url.ts](examples/source-add-url.ts) |
-| Add Text Source | `sdk.sources.add.text()` | [source-add-text.ts](examples/source-add-text.ts) |
-| Add YouTube Source | `sdk.sources.add.youtube()` | [source-add-youtube.ts](examples/source-add-youtube.ts) |
-| Add File Source | `sdk.sources.add.file()` | [source-add-file.ts](examples/source-add-file.ts) |
-| Add Drive Source | `sdk.sources.add.drive()` | [source-add-drive.ts](examples/source-add-drive.ts) |
-| Add Batch Sources | `sdk.sources.add.batch()` | [source-add-batch.ts](examples/source-add-batch.ts) |
-| Web Search Source | `sdk.sources.add.web.searchAndWait()` | [source-web-search.ts](examples/source-web-search.ts) |
-| Advanced Web Search | `sdk.sources.add.web.searchAndWait()` | [source-web-search-advanced.ts](examples/source-web-search-advanced.ts) |
-| Get Source | `sdk.sources.get()` | [source-get.ts](examples/source-get.ts) |
-| Update Source | `sdk.sources.update()` | [source-update.ts](examples/source-update.ts) |
-| Delete Source | `sdk.sources.delete()` | [source-delete.ts](examples/source-delete.ts) |
-| Check Source Status | `sdk.sources.status()` | [source-status.ts](examples/source-status.ts) |
-| **[Artifact Generation](#artifacts)**<br><small>`create()`, `list()`, `get()`, `download()`, `rename()`, `delete()`, `share()`</small> | | |
-| Create Artifact | `sdk.artifacts.create()` | [artifact-create.ts](examples/artifact-create.ts) |
-| Create Artifact (Subservices) | `sdk.artifacts.{type}.create()` | [artifact-create-subservices.ts](examples/artifact-create-subservices.ts) |
-| List Artifacts | `sdk.artifacts.list()` | [artifact-list.ts](examples/artifact-list.ts) |
-| Get Artifact | `sdk.artifacts.get()` | [artifact-get.ts](examples/artifact-get.ts) |
-| Download Artifact | `sdk.artifacts.download()` | [artifact-download.ts](examples/artifact-download.ts) |
-| Download Video | `sdk.artifacts.download()` | [artifact-video.ts](examples/artifact-video.ts) |
-| Download Slides | `sdk.artifacts.download()` | [slide-download-test.ts](examples/slide-download-test.ts) |
-| Rename Artifact | `sdk.artifacts.rename()` | [artifact-rename.ts](examples/artifact-rename.ts) |
-| Delete Artifact | `sdk.artifacts.delete()` | [artifact-delete.ts](examples/artifact-delete.ts) |
-| Share Artifact | `sdk.artifacts.share()` | [artifact-share.ts](examples/artifact-share.ts) |
-| **[Chat & Generation](#generation--chat)**<br><small>`chat()`, `chatStream()`, `setChatConfig()`</small> | | |
-| Chat | `sdk.generation.chat()` | [chat-basic.ts](examples/chat-basic.ts) |
-| Stream Chat | `sdk.generation.chatStream()` | [chat-conversation.ts](examples/chat-conversation.ts) |
-| Set Chat Config | `sdk.generation.setChatConfig()` | [generation-set-chat-config.ts](examples/generation-set-chat-config.ts) |
-| **[Notes Management](#notes)**<br><small>`list()`, `create()`, `update()`, `delete()`</small> | | |
-| List Notes | `sdk.notes.list()` | [note-list.ts](examples/note-list.ts) |
-| Create Note | `sdk.notes.create()` | [note-create.ts](examples/note-create.ts) |
-| Update Note | `sdk.notes.update()` | [note-update.ts](examples/note-update.ts) |
-| Delete Note | `sdk.notes.delete()` | [note-delete.ts](examples/note-delete.ts) |
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Method</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="3"><strong><a href="#notebooks">Notebook Management</a></strong><br><small><code>list()</code>, <code>create()</code>, <code>get()</code>, <code>update()</code>, <code>delete()</code>, <code>share()</code></small></td>
+</tr>
+<tr>
+<td>List Notebooks</td>
+<td><code>sdk.notebooks.list()</code></td>
+<td><a href="examples/notebook-list.ts">notebook-list.ts</a></td>
+</tr>
+<tr>
+<td>Create Notebook</td>
+<td><code>sdk.notebooks.create()</code></td>
+<td><a href="examples/notebook-create.ts">notebook-create.ts</a></td>
+</tr>
+<tr>
+<td>Get Notebook</td>
+<td><code>sdk.notebooks.get()</code></td>
+<td><a href="examples/notebook-get.ts">notebook-get.ts</a></td>
+</tr>
+<tr>
+<td>Update Notebook</td>
+<td><code>sdk.notebooks.update()</code></td>
+<td><a href="examples/notebook-update.ts">notebook-update.ts</a></td>
+</tr>
+<tr>
+<td>Delete Notebook</td>
+<td><code>sdk.notebooks.delete()</code></td>
+<td><a href="examples/notebook-delete.ts">notebook-delete.ts</a></td>
+</tr>
+<tr>
+<td>Share Notebook</td>
+<td><code>sdk.notebooks.share()</code></td>
+<td><a href="examples/notebook-share.ts">notebook-share.ts</a></td>
+</tr>
+<tr>
+<td colspan="3"><strong><a href="#sources">Source Management</a></strong><br><small><code>list()</code>, <code>get()</code>, <code>add.url()</code>, <code>add.text()</code>, <code>add.youtube()</code>, <code>add.file()</code>, <code>add.drive()</code>, <code>add.batch()</code>, <code>add.web.searchAndWait()</code>, <code>update()</code>, <code>delete()</code>, <code>status()</code></small></td>
+</tr>
+<tr>
+<td>List Sources</td>
+<td><code>sdk.sources.list()</code></td>
+<td><a href="examples/source-list.ts">source-list.ts</a></td>
+</tr>
+<tr>
+<td>Add URL Source</td>
+<td><code>sdk.sources.add.url()</code></td>
+<td><a href="examples/source-add-url.ts">source-add-url.ts</a></td>
+</tr>
+<tr>
+<td>Add Text Source</td>
+<td><code>sdk.sources.add.text()</code></td>
+<td><a href="examples/source-add-text.ts">source-add-text.ts</a></td>
+</tr>
+<tr>
+<td>Add YouTube Source</td>
+<td><code>sdk.sources.add.youtube()</code></td>
+<td><a href="examples/source-add-youtube.ts">source-add-youtube.ts</a></td>
+</tr>
+<tr>
+<td>Add File Source</td>
+<td><code>sdk.sources.add.file()</code></td>
+<td><a href="examples/source-add-file.ts">source-add-file.ts</a></td>
+</tr>
+<tr>
+<td>Add Drive Source</td>
+<td><code>sdk.sources.add.drive()</code></td>
+<td><a href="examples/source-add-drive.ts">source-add-drive.ts</a></td>
+</tr>
+<tr>
+<td>Add Batch Sources</td>
+<td><code>sdk.sources.add.batch()</code></td>
+<td><a href="examples/source-add-batch.ts">source-add-batch.ts</a></td>
+</tr>
+<tr>
+<td>Web Search Source</td>
+<td><code>sdk.sources.add.web.searchAndWait()</code></td>
+<td><a href="examples/source-web-search.ts">source-web-search.ts</a></td>
+</tr>
+<tr>
+<td>Advanced Web Search</td>
+<td><code>sdk.sources.add.web.searchAndWait()</code></td>
+<td><a href="examples/source-web-search-advanced.ts">source-web-search-advanced.ts</a></td>
+</tr>
+<tr>
+<td>Get Source</td>
+<td><code>sdk.sources.get()</code></td>
+<td><a href="examples/source-get.ts">source-get.ts</a></td>
+</tr>
+<tr>
+<td>Update Source</td>
+<td><code>sdk.sources.update()</code></td>
+<td><a href="examples/source-update.ts">source-update.ts</a></td>
+</tr>
+<tr>
+<td>Delete Source</td>
+<td><code>sdk.sources.delete()</code></td>
+<td><a href="examples/source-delete.ts">source-delete.ts</a></td>
+</tr>
+<tr>
+<td>Check Source Status</td>
+<td><code>sdk.sources.status()</code></td>
+<td><a href="examples/source-status.ts">source-status.ts</a></td>
+</tr>
+<tr>
+<td colspan="3"><strong><a href="#artifacts">Artifact Generation</a></strong><br><small><code>create()</code>, <code>list()</code>, <code>get()</code>, <code>download()</code>, <code>rename()</code>, <code>delete()</code>, <code>share()</code></small></td>
+</tr>
+<tr>
+<td>Create Artifact</td>
+<td><code>sdk.artifacts.create()</code></td>
+<td><a href="examples/artifact-create.ts">artifact-create.ts</a></td>
+</tr>
+<tr>
+<td>Create Artifact (Subservices)</td>
+<td><code>sdk.artifacts.{type}.create()</code></td>
+<td><a href="examples/artifact-create-subservices.ts">artifact-create-subservices.ts</a></td>
+</tr>
+<tr>
+<td>List Artifacts</td>
+<td><code>sdk.artifacts.list()</code></td>
+<td><a href="examples/artifact-list.ts">artifact-list.ts</a></td>
+</tr>
+<tr>
+<td>Get Artifact</td>
+<td><code>sdk.artifacts.get()</code></td>
+<td><a href="examples/artifact-get.ts">artifact-get.ts</a></td>
+</tr>
+<tr>
+<td>Download Artifact</td>
+<td><code>sdk.artifacts.download()</code></td>
+<td><a href="examples/artifact-download.ts">artifact-download.ts</a></td>
+</tr>
+<tr>
+<td>Download Video</td>
+<td><code>sdk.artifacts.download()</code></td>
+<td><a href="examples/artifact-video.ts">artifact-video.ts</a></td>
+</tr>
+<tr>
+<td>Download Slides</td>
+<td><code>sdk.artifacts.download()</code></td>
+<td><a href="examples/slide-download-test.ts">slide-download-test.ts</a></td>
+</tr>
+<tr>
+<td>Rename Artifact</td>
+<td><code>sdk.artifacts.rename()</code></td>
+<td><a href="examples/artifact-rename.ts">artifact-rename.ts</a></td>
+</tr>
+<tr>
+<td>Delete Artifact</td>
+<td><code>sdk.artifacts.delete()</code></td>
+<td><a href="examples/artifact-delete.ts">artifact-delete.ts</a></td>
+</tr>
+<tr>
+<td>Share Artifact</td>
+<td><code>sdk.artifacts.share()</code></td>
+<td><a href="examples/artifact-share.ts">artifact-share.ts</a></td>
+</tr>
+<tr>
+<td colspan="3"><strong><a href="#generation--chat">Chat & Generation</a></strong><br><small><code>chat()</code>, <code>chatStream()</code>, <code>setChatConfig()</code></small></td>
+</tr>
+<tr>
+<td>Chat</td>
+<td><code>sdk.generation.chat()</code></td>
+<td><a href="examples/chat-basic.ts">chat-basic.ts</a></td>
+</tr>
+<tr>
+<td>Stream Chat</td>
+<td><code>sdk.generation.chatStream()</code></td>
+<td><a href="examples/chat-conversation.ts">chat-conversation.ts</a></td>
+</tr>
+<tr>
+<td>Set Chat Config</td>
+<td><code>sdk.generation.setChatConfig()</code></td>
+<td><a href="examples/generation-set-chat-config.ts">generation-set-chat-config.ts</a></td>
+</tr>
+<tr>
+<td colspan="3"><strong><a href="#notes">Notes Management</a></strong><br><small><code>list()</code>, <code>create()</code>, <code>update()</code>, <code>delete()</code></small></td>
+</tr>
+<tr>
+<td>List Notes</td>
+<td><code>sdk.notes.list()</code></td>
+<td><a href="examples/note-list.ts">note-list.ts</a></td>
+</tr>
+<tr>
+<td>Create Note</td>
+<td><code>sdk.notes.create()</code></td>
+<td><a href="examples/note-create.ts">note-create.ts</a></td>
+</tr>
+<tr>
+<td>Update Note</td>
+<td><code>sdk.notes.update()</code></td>
+<td><a href="examples/note-update.ts">note-update.ts</a></td>
+</tr>
+<tr>
+<td>Delete Note</td>
+<td><code>sdk.notes.delete()</code></td>
+<td><a href="examples/note-delete.ts">note-delete.ts</a></td>
+</tr>
+</tbody>
+</table>
 
 ## Installation
 
@@ -490,7 +653,7 @@ When using auto-login with email/password:
 
 **Default:** Enabled with `'auto'` strategy (recommended)
 
-```typescript
+```typescriptimproved
 // Default: auto strategy (expiration-based + time-based fallback)
 const sdk = new NotebookLMClient({
   auth: { email: '...', password: '...' },
