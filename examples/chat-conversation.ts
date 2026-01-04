@@ -209,9 +209,16 @@ async function main() {
     const citations1 = new Set<number>();
     
     if (useStreaming) {
-      // Streaming mode
-      let lastWrittenLength1 = 0;
+      // Streaming mode - use same logic as chat-basic.ts
+      let lastDisplayedLength = 0;
+      let bufferedThinkingContent: string | null = null;
+      let bufferedThinkingLength = 0;
+      let hasSeenRevision = false;
+      let chunkCount = 0;
+      
       for await (const chunk of sdk.generation.chatStream(notebookId, message1, chatOptions)) {
+        chunkCount++;
+        
         // Track conversation ID from first message
         if (chunk.metadata && !conversationId) {
           conversationId = chunk.metadata[0];
@@ -222,13 +229,97 @@ async function main() {
           chunk.citations.forEach(citation => citations1.add(citation));
         }
         
-        const textToWrite = chunk.response || chunk.text || '';
-        if (textToWrite.length > lastWrittenLength1) {
-          const newText = textToWrite.substring(lastWrittenLength1);
-          process.stdout.write(newText);
-          lastWrittenLength1 = textToWrite.length;
-          response1 = textToWrite; // Keep full response for conversation history
+        // Each chunk.text contains the FULL accumulated response so far (snapshot-based)
+        const chunkText = chunk.text || '';
+        
+        if (chunkText) {
+          // Detect if this chunk contains thinking content (has thinking headers)
+          const hasThinkingHeaders = /\*\*[^*]+\*\*\n\n/.test(chunkText);
+          
+          // Check if this is a revision (text length decreased significantly)
+          const isRevision = chunkText.length < lastDisplayedLength;
+          const isBufferedRevision = bufferedThinkingContent && chunkText.length < bufferedThinkingLength;
+          
+          if (isRevision || isBufferedRevision) {
+            // API revised the response - discard any buffered thinking content
+            hasSeenRevision = true;
+            
+            // Clear buffer
+            bufferedThinkingContent = null;
+            bufferedThinkingLength = 0;
+            
+            // Remove thinking headers and display the complete revised text
+            const displayText = chunkText.replace(/\*\*[^*]+\*\*\n\n/g, '').replace(/(\n\n)\*\*[^*]+\*\*\n\n/g, '$1');
+            
+            if (displayText.length > 0) {
+              process.stdout.write(displayText);
+            }
+            
+            lastDisplayedLength = chunkText.length;
+            response1 = chunkText; // Keep full response for conversation history
+          } else if (chunkText.length > lastDisplayedLength) {
+            // Normal case: text increased
+            const newText = chunkText.substring(lastDisplayedLength);
+            
+            // Buffer ALL thinking content until we see a revision
+            if (hasThinkingHeaders && !hasSeenRevision) {
+              // Buffer thinking content - don't display it yet
+              bufferedThinkingContent = chunkText;
+              bufferedThinkingLength = chunkText.length;
+              lastDisplayedLength = chunkText.length;
+              response1 = chunkText; // Keep for conversation history
+            } else if (bufferedThinkingContent) {
+              // We have buffered content - check if this is a continuation or revision
+              if (chunkText.length >= bufferedThinkingLength) {
+                // Content is growing - update buffer but still don't display
+                bufferedThinkingContent = chunkText;
+                bufferedThinkingLength = chunkText.length;
+                
+                // After 5 chunks, if no revision came, display the buffered content
+                if (chunkCount >= 5 && !hasSeenRevision) {
+                  const displayText = chunkText.replace(/\*\*[^*]+\*\*\n\n/g, '').replace(/(\n\n)\*\*[^*]+\*\*\n\n/g, '$1');
+                  if (displayText.length > 0) {
+                    process.stdout.write(displayText);
+                  }
+                  bufferedThinkingContent = null;
+                  bufferedThinkingLength = 0;
+                  lastDisplayedLength = chunkText.length;
+                } else {
+                  lastDisplayedLength = chunkText.length;
+                }
+                response1 = chunkText; // Keep for conversation history
+              }
+            } else {
+              // No thinking headers and no buffered content - this is final response content
+              // Display the new portion incrementally
+              const displayText = newText.replace(/^\*\*[^*]+\*\*\n\n/g, '').replace(/(\n\n)\*\*[^*]+\*\*\n\n/g, '$1');
+              
+              if (displayText.length > 0) {
+                process.stdout.write(displayText);
+              }
+              
+              lastDisplayedLength = chunkText.length;
+              response1 = chunkText; // Keep full response for conversation history
+            }
+          } else if (chunkText.length === lastDisplayedLength) {
+            // Same length - could be duplicate or no new content
+            if (bufferedThinkingContent && bufferedThinkingLength === chunkText.length && !hasSeenRevision) {
+              // No revision came - display the buffered content now
+              const displayText = chunkText.replace(/\*\*[^*]+\*\*\n\n/g, '').replace(/(\n\n)\*\*[^*]+\*\*\n\n/g, '$1');
+              if (displayText.length > 0) {
+                process.stdout.write(displayText);
+              }
+              bufferedThinkingContent = null;
+              bufferedThinkingLength = 0;
+            }
+            response1 = chunkText; // Keep for conversation history
+          }
         }
+      }
+      
+      // Clean up response1 - remove thinking headers for conversation history
+      if (response1) {
+        response1 = response1.replace(/\*\*[^*]+\*\*\n\n/g, '').replace(/(\n\n)\*\*[^*]+\*\*\n\n/g, '$1');
       }
       
       console.log('\n' + '─'.repeat(60));
@@ -238,7 +329,7 @@ async function main() {
     } else {
       // Non-streaming mode
       const responseData1: ChatResponseData = await sdk.generation.chat(notebookId, message1, chatOptions);
-      response1 = extractTextFromRawData(responseData1.rawData, true) || responseData1.text || '';
+      response1 = responseData1.text || extractTextFromRawData(responseData1.rawData, false) || '';
       if (responseData1.conversationId && !conversationId) {
         conversationId = responseData1.conversationId;
       }
@@ -274,21 +365,112 @@ async function main() {
     const citations2 = new Set<number>();
     
     if (useStreaming) {
-      // Streaming mode
-      let lastWrittenLength2 = 0;
+      // Streaming mode - use same logic as chat-basic.ts
+      let lastDisplayedLength = 0;
+      let bufferedThinkingContent: string | null = null;
+      let bufferedThinkingLength = 0;
+      let hasSeenRevision = false;
+      let chunkCount = 0;
+      
       for await (const chunk of sdk.generation.chatStream(notebookId, message2, conversationOptions)) {
+        chunkCount++;
+        
         // Collect citations
         if (chunk.citations) {
           chunk.citations.forEach(citation => citations2.add(citation));
         }
         
-        const textToWrite = chunk.response || chunk.text || '';
-        if (textToWrite.length > lastWrittenLength2) {
-          const newText = textToWrite.substring(lastWrittenLength2);
-          process.stdout.write(newText);
-          lastWrittenLength2 = textToWrite.length;
-          response2 = textToWrite; // Keep full response
+        // Each chunk.text contains the FULL accumulated response so far (snapshot-based)
+        const chunkText = chunk.text || '';
+        
+        if (chunkText) {
+          // Detect if this chunk contains thinking content (has thinking headers)
+          const hasThinkingHeaders = /\*\*[^*]+\*\*\n\n/.test(chunkText);
+          
+          // Check if this is a revision (text length decreased significantly)
+          const isRevision = chunkText.length < lastDisplayedLength;
+          const isBufferedRevision = bufferedThinkingContent && chunkText.length < bufferedThinkingLength;
+          
+          if (isRevision || isBufferedRevision) {
+            // API revised the response - discard any buffered thinking content
+            hasSeenRevision = true;
+            
+            // Clear buffer
+            bufferedThinkingContent = null;
+            bufferedThinkingLength = 0;
+            
+            // Remove thinking headers and display the complete revised text
+            const displayText = chunkText.replace(/\*\*[^*]+\*\*\n\n/g, '').replace(/(\n\n)\*\*[^*]+\*\*\n\n/g, '$1');
+            
+            if (displayText.length > 0) {
+              process.stdout.write(displayText);
+            }
+            
+            lastDisplayedLength = chunkText.length;
+            response2 = chunkText; // Keep full response
+          } else if (chunkText.length > lastDisplayedLength) {
+            // Normal case: text increased
+            const newText = chunkText.substring(lastDisplayedLength);
+            
+            // Buffer ALL thinking content until we see a revision
+            if (hasThinkingHeaders && !hasSeenRevision) {
+              // Buffer thinking content - don't display it yet
+              bufferedThinkingContent = chunkText;
+              bufferedThinkingLength = chunkText.length;
+              lastDisplayedLength = chunkText.length;
+              response2 = chunkText; // Keep for conversation history
+            } else if (bufferedThinkingContent) {
+              // We have buffered content - check if this is a continuation or revision
+              if (chunkText.length >= bufferedThinkingLength) {
+                // Content is growing - update buffer but still don't display
+                bufferedThinkingContent = chunkText;
+                bufferedThinkingLength = chunkText.length;
+                
+                // After 5 chunks, if no revision came, display the buffered content
+                if (chunkCount >= 5 && !hasSeenRevision) {
+                  const displayText = chunkText.replace(/\*\*[^*]+\*\*\n\n/g, '').replace(/(\n\n)\*\*[^*]+\*\*\n\n/g, '$1');
+                  if (displayText.length > 0) {
+                    process.stdout.write(displayText);
+                  }
+                  bufferedThinkingContent = null;
+                  bufferedThinkingLength = 0;
+                  lastDisplayedLength = chunkText.length;
+                } else {
+                  lastDisplayedLength = chunkText.length;
+                }
+                response2 = chunkText; // Keep for conversation history
+              }
+            } else {
+              // No thinking headers and no buffered content - this is final response content
+              // Display the new portion incrementally
+              const displayText = newText.replace(/^\*\*[^*]+\*\*\n\n/g, '').replace(/(\n\n)\*\*[^*]+\*\*\n\n/g, '$1');
+              
+              if (displayText.length > 0) {
+                process.stdout.write(displayText);
+              }
+              
+              lastDisplayedLength = chunkText.length;
+              response2 = chunkText; // Keep full response
+            }
+          } else if (chunkText.length === lastDisplayedLength) {
+            // Same length - could be duplicate or no new content
+            if (bufferedThinkingContent && bufferedThinkingLength === chunkText.length && !hasSeenRevision) {
+              // No revision came - display the buffered content now
+              const displayText = chunkText.replace(/\*\*[^*]+\*\*\n\n/g, '').replace(/(\n\n)\*\*[^*]+\*\*\n\n/g, '$1');
+              if (displayText.length > 0) {
+                process.stdout.write(displayText);
+              }
+              bufferedThinkingContent = null;
+              bufferedThinkingLength = 0;
+            }
+            response2 = chunkText; // Keep for conversation history
+          }
         }
+      }
+      
+      // Clean up response2 - remove thinking headers for conversation history
+      if (response2) {
+        response2 = response2.replace(/\*\*[^*]+\*\*\n\n/g, '').replace(/(\n\n)\*\*[^*]+\*\*\n\n/g, '$1');
       }
       
       console.log('\n' + '─'.repeat(60));
@@ -298,7 +480,7 @@ async function main() {
     } else {
       // Non-streaming mode
       const responseData2: ChatResponseData = await sdk.generation.chat(notebookId, message2, conversationOptions);
-      response2 = extractTextFromRawData(responseData2.rawData, true) || responseData2.text || '';
+      response2 = responseData2.text || extractTextFromRawData(responseData2.rawData, false) || '';
       if (responseData2.citations) {
         responseData2.citations.forEach(c => citations2.add(c));
       }
