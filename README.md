@@ -27,24 +27,14 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 
 ## Installation
 
-**From npm:**
 ```bash
 npm install notebooklm-kit
 ```
 
-**From GitHub:**
+**From source:**
 ```bash
-git clone https://github.com/photon-hq/notebooklm-kit.git
-cd notebooklm-kit
-npm run setup
+git clone https://github.com/photon-hq/notebooklm-kit.git && cd notebooklm-kit && npm run setup
 ```
-
-The `setup` script will:
-1. Install all dependencies
-2. Install Playwright Chromium browser
-3. Build the TypeScript project
-
-Alternatively, you can run `npm install` (which will automatically run `postinstall` to build).
 
 **Requirements:** Node.js >=18.0.0
 
@@ -54,12 +44,12 @@ When working with the repository, you can use the following npm scripts:
 
 | Script | Description |
 |--------|-------------|
-| `npm install` | Install dependencies and automatically build (runs `postinstall`) |
+| `npm install` | Install dependencies and automatically build (runs postinstall) |
 | `npm run setup` | Full setup: install dependencies, Playwright, and build |
 | `npm run build` | Compile TypeScript to JavaScript |
 | `npm run build:dev` | Build only (no reinstall) |
 | `npm run dev` | Watch mode (auto-rebuild on file changes) |
-| `npm run clean` | Remove compiled `dist/` directory |
+| `npm run clean` | Remove compiled dist/ directory |
 
 <details>
 <summary><strong>Development</strong></summary>
@@ -96,30 +86,9 @@ npm install notebooklm-kit
 
 ### 2. Set up authentication
 
-Create a `.env` file in your **project root** directory:
+**Auto (browser):** Create `.env` with `GOOGLE_EMAIL` and `GOOGLE_PASSWORD` (no 2FA required)
 
-```bash
-# .env file location: /path/to/your-project/.env
-# (NOT in node_modules/, NOT in src/, NOT in subdirectories)
-
-# Option 1: Manual credentials (recommended for production)
-NOTEBOOKLM_AUTH_TOKEN="your_auth_token_here"
-NOTEBOOKLM_COOKIES="your_cookie_string_here"
-
-# Option 2: Auto-login with email/password (requires no 2FA)
-GOOGLE_EMAIL="your-email@gmail.com"
-GOOGLE_PASSWORD="your-password"
-```
-
-**Important:** The `.env` file must be in the **project root** (where your `package.json` is located). The SDK automatically finds the `.env` file in the project root, regardless of where your script is executed from.
-
-**Getting credentials manually:**
-1. Open https://notebooklm.google.com in your browser
-2. Open DevTools (F12) → **Network** tab
-3. Find any request to `notebooklm.google.com`
-4. Copy the **Cookie** header value → `NOTEBOOKLM_COOKIES`
-5. In **Console** tab, run: `window.WIZ_global_data.SNlM0e`
-6. Copy the result → `NOTEBOOKLM_AUTH_TOKEN`
+**Manual:** Create `.env` with `NOTEBOOKLM_AUTH_TOKEN` and `NOTEBOOKLM_COOKIES` from browser DevTools (Network → Cookie header, Console → `window.WIZ_global_data.SNlM0e`)
 
 ### 3. Use the SDK
 
