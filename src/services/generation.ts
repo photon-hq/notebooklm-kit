@@ -220,28 +220,8 @@ export class GenerationService {
         
         // Parse sources from response (similar to SourcesService.parseSourcesFromResponse)
         sourceIds = this.extractSourceIdsFromResponse(projectResponse);
-        
-        // Debug logging (only if debug enabled)
-        if (this.rpc['config']?.debug) {
-          console.log('\n🔍 Source Extraction Debug:');
-          console.log('📝 Extracted source IDs:', sourceIds);
-          console.log('📝 Source IDs count:', sourceIds?.length || 0);
-        }
-        
-        // If no sources found, this might cause issues
-        if (!sourceIds || sourceIds.length === 0) {
-          if (this.rpc['config']?.debug) {
-            console.warn('⚠️ WARNING: No sources extracted from notebook response');
-            console.warn('⚠️ This will cause the chat request to fail');
-          }
-        }
       } catch (error) {
-        // If fetching sources fails, log and re-throw
-        if (this.rpc['config']?.debug) {
-          console.error('\n❌ Failed to fetch sources from notebook:');
-          console.error('❌ Error:', error);
-          console.error('❌ This will cause the chat request to fail\n');
-        }
+        // If fetching sources fails, continue with empty array
         sourceIds = [];
       }
     }
@@ -287,20 +267,6 @@ export class GenerationService {
     // Build the full request: [null, JSON.stringify(innerRequest)]
     const request = [null, JSON.stringify(innerRequest)];
 
-    // Debug: log the request structure (only if debug enabled)
-    if (this.rpc['config']?.debug) {
-      console.log('\n🔍 Chat Request Debug:');
-      console.log('📝 Notebook ID:', notebookId);
-      console.log('📝 Prompt:', prompt);
-      console.log('📝 Source IDs:', sourceIds);
-      console.log('📝 Source IDs count:', sourceIds.length);
-      console.log('📝 Context Items (formatted):', JSON.stringify(contextItems, null, 2));
-      console.log('📝 Conversation ID:', convId);
-      console.log('📝 Inner Request (formatted):', JSON.stringify(innerRequest, null, 2));
-      console.log('📝 Full Request:', JSON.stringify(request));
-      console.log('');
-    }
-
     try {
       // For non-streaming, collect all chunks and raw data
       const chunks: StreamChunk[] = [];
@@ -314,48 +280,14 @@ export class GenerationService {
         throw new NotebookLMError('Streaming client not initialized');
       }
 
-      // Debug logging
-      const debug = this.rpc['config']?.debug || false;
-      if (debug) {
-        console.log('\n🔍 [DEBUG] Starting non-streaming chat:');
-        console.log('   Notebook ID:', notebookId);
-        console.log('   Prompt:', prompt);
-        console.log('   Source IDs:', sourceIds);
-        console.log('   Conversation ID:', convId);
-      }
-
       const streamOptions: StreamingOptions = {
         onChunk: (chunk) => {
           chunks.push(chunk);
-          
-          // Debug each chunk
-          if (debug) {
-            console.log(`\n🔍 [DEBUG] Chunk #${chunk.chunkNumber}:`);
-            console.log('   Byte count:', chunk.byteCount);
-            console.log('   Text length:', chunk.text?.length || 0);
-            console.log('   Response length:', chunk.response?.length || 0);
-            console.log('   Has metadata:', !!chunk.metadata);
-            console.log('   Has rawData:', !!chunk.rawData);
-            console.log('   Citations:', chunk.citations || []);
-            if (chunk.rawData) {
-              console.log('   Raw data structure:', Array.isArray(chunk.rawData) ? `Array[${chunk.rawData.length}]` : typeof chunk.rawData);
-              if (Array.isArray(chunk.rawData) && chunk.rawData.length > 0) {
-                console.log('   First element type:', Array.isArray(chunk.rawData[0]) ? 'Array' : typeof chunk.rawData[0]);
-                if (typeof chunk.rawData[0] === 'string') {
-                  console.log('   First element (text) preview:', chunk.rawData[0].substring(0, 100));
-                }
-              }
-            }
-          }
           
           // Track metadata from first chunk
           if (chunk.metadata && !conversationId) {
             conversationId = chunk.metadata[0];
             messageIds = chunk.metadata.slice(0, 2) as [string, string];
-            if (debug) {
-              console.log('   [DEBUG] Extracted conversation ID:', conversationId);
-              console.log('   [DEBUG] Extracted message IDs:', messageIds);
-            }
           }
           
           // Collect citations
@@ -385,49 +317,50 @@ export class GenerationService {
         // Chunks are already processed in onChunk callback
       }
 
-      // Debug summary
-      if (debug) {
-        console.log('\n🔍 [DEBUG] Chat complete:');
-        console.log('   Chunks received:', chunks.length);
-        console.log('   Conversation ID:', conversationId || 'none');
-        console.log('   Citations:', Array.from(citations));
-        console.log('   Has rawData:', !!lastRawData);
-        
-        if (chunks.length > 0) {
-          console.log('\n🔍 [DEBUG] First chunk structure:');
-          const firstChunk = chunks[0];
-          console.log('   Text:', firstChunk.text?.substring(0, 100) || 'none');
-          console.log('   Response:', firstChunk.response?.substring(0, 100) || 'none');
-          console.log('   RawData type:', firstChunk.rawData ? (Array.isArray(firstChunk.rawData) ? 'Array' : typeof firstChunk.rawData) : 'none');
-          
-          console.log('\n🔍 [DEBUG] Last chunk structure:');
-          const lastChunk = chunks[chunks.length - 1];
-          console.log('   Text:', lastChunk.text?.substring(0, 100) || 'none');
-          console.log('   Response:', lastChunk.response?.substring(0, 100) || 'none');
-          console.log('   RawData type:', lastChunk.rawData ? (Array.isArray(lastChunk.rawData) ? 'Array' : typeof lastChunk.rawData) : 'none');
-          
-          if (lastChunk.rawData && Array.isArray(lastChunk.rawData) && lastChunk.rawData.length > 0) {
-            console.log('   RawData[0] preview:', JSON.stringify(lastChunk.rawData[0]).substring(0, 200));
-          }
-        }
-        
-        if (!chunkReceived) {
-          console.warn('⚠️  [DEBUG] WARNING: No chunks received from streaming client');
-        }
-      }
-
       // Record usage after successful chat
       this.quota?.recordUsage('chat');
 
-      // Extract text from last chunk for convenience (but examples should parse rawData)
+      // Extract text from chunks - prioritize rawData (most complete), then longest chunk text
+      // CRITICAL: rawData contains the full response structure and is most reliable
       let processedText = '';
+      
+      // Method 1: Try rawData first (most reliable - contains complete response structure)
+      if (lastRawData) {
+        try {
+          if (Array.isArray(lastRawData) && lastRawData.length > 0) {
+            const firstElement = lastRawData[0];
+            if (Array.isArray(firstElement) && firstElement.length > 0) {
+              const rawText = firstElement[0];
+              if (typeof rawText === 'string' && rawText.length > 0) {
+                processedText = rawText.replace(/\*\*[^*]+\*\*\n\n/g, '');
+              }
+            } else if (typeof firstElement === 'string' && firstElement.length > 0) {
+              processedText = firstElement.replace(/\*\*[^*]+\*\*\n\n/g, '');
+            }
+          }
+        } catch (error) {
+          // Ignore errors in rawData extraction, fall back to chunk text
+        }
+      }
+      
+      // Method 2: Fallback to longest chunk text if rawData extraction failed or is shorter
       if (chunks.length > 0) {
-        const lastChunk = chunks[chunks.length - 1];
-        if (lastChunk.response && lastChunk.response.trim()) {
-          processedText = lastChunk.response;
-        } else if (lastChunk.text && lastChunk.text.trim()) {
-          // Remove thinking headers
-          processedText = lastChunk.text.replace(/\*\*[^*]+\*\*\n\n/g, '').trim() || lastChunk.text;
+        // Find the chunk with the longest text (should be the last one, but be safe)
+        let longestChunk = chunks[0];
+        for (const chunk of chunks) {
+          if (chunk.text && chunk.text.length > (longestChunk.text?.length || 0)) {
+            longestChunk = chunk;
+          }
+        }
+        
+        // Use the longest chunk's full text if it's longer than rawData text
+        const longestChunkText = longestChunk.text 
+          ? longestChunk.text.replace(/\*\*[^*]+\*\*\n\n/g, '')
+          : (longestChunk.response || '');
+        
+        // Use chunk text if it's longer (might have more complete data)
+        if (longestChunkText.length > processedText.length) {
+          processedText = longestChunkText;
         }
       }
 
@@ -441,12 +374,6 @@ export class GenerationService {
         citations: Array.from(citations),
       };
     } catch (error) {
-      if (this.rpc['config']?.debug) {
-        console.error('\n❌ Chat Request Failed:');
-        console.error('❌ Error:', error);
-        console.error('❌ Request that failed:', JSON.stringify(request));
-        console.error('');
-      }
       throw error;
     }
   }
@@ -657,9 +584,6 @@ export class GenerationService {
       return sourceIds;
     } catch (error) {
       // Return empty array if parsing fails
-      if (this.rpc['config']?.debug) {
-        console.error('❌ Failed to extract source IDs:', error);
-      }
       return [];
     }
   }

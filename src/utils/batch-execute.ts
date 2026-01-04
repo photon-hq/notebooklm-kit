@@ -122,13 +122,6 @@ export class BatchExecuteClient {
     formData.set('f.req', reqBody);
     formData.set('at', this.config.authToken);
     
-    if (this.config.debug) {
-      console.log('\n📡 BatchExecute Request');
-      console.log('URL:', url.toString());
-      console.log('RPC IDs:', rpcs.map(r => r.id).join(', '));
-      console.log('Request Body:', reqBody);
-    }
-    
     // Execute request with retry logic
     let lastError: Error | null = null;
     let lastResponseStatus: number | undefined;
@@ -140,9 +133,6 @@ export class BatchExecuteClient {
     const retryMaxDelay = this.config.retryMaxDelay!;
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      if (attempt > 0 && this.config.debug) {
-        console.log(`🔄 Retry attempt ${attempt}/${maxRetries}`);
-      }
       if (attempt > 0) {
         // Calculate retry delay with exponential backoff
         const multiplier = Math.pow(2, attempt - 1);
@@ -169,11 +159,6 @@ export class BatchExecuteClient {
           body: formData.toString(),
         });
         } catch (fetchError) {
-          const errorMsg = (fetchError as Error)?.message || String(fetchError);
-          if (this.config.debug) {
-            console.error('\n❌ Fetch Error:', errorMsg);
-          console.error('URL:', url.toString());
-          }
           lastError = fetchError instanceof Error ? fetchError : new Error(String(fetchError));
           if (this.isRetryableError(lastError) && attempt < maxRetries) {
             continue;
@@ -189,11 +174,6 @@ export class BatchExecuteClient {
           body = await response.text();
           lastResponseBody = body;
         } catch (readError) {
-          const errorMsg = (readError as Error)?.message || String(readError);
-          if (this.config.debug) {
-            console.error('\n❌ Error Reading Response Body:', errorMsg);
-          console.error('Response status:', response.status);
-          }
           lastError = readError instanceof Error ? readError : new Error(String(readError));
           if (this.isRetryableError(lastError) && attempt < maxRetries) {
             continue;
@@ -201,17 +181,9 @@ export class BatchExecuteClient {
           throw lastError;
         }
         
-        if (this.config.debug) {
-          console.log('Response Status:', response.status, response.statusText);
-          console.log('Response Body:', body);
-        }
-        
         // Check if we should retry based on status
         if (this.isRetryableStatus(response.status) && attempt < maxRetries) {
           lastError = new Error(`Server returned status ${response.status}: ${response.statusText}`);
-          if (this.config.debug) {
-            console.log(`Retryable status ${response.status}, retrying...`);
-          }
           continue;
         }
         
@@ -230,12 +202,6 @@ export class BatchExecuteClient {
         try {
           responses = this.decodeResponse(body);
         } catch (decodeError) {
-          const errorMsg = (decodeError as Error)?.message || String(decodeError);
-          if (this.config.debug) {
-            console.error('\n❌ Error Decoding Response:', errorMsg);
-            console.error('Response status:', response.status);
-            console.error('Response body:', body);
-          }
           lastError = decodeError instanceof Error ? decodeError : new Error(String(decodeError));
           if (this.isRetryableError(lastError) && attempt < maxRetries) {
             continue;
@@ -251,18 +217,7 @@ export class BatchExecuteClient {
         const firstResponse = responses[0];
         const apiError = isErrorResponse(firstResponse);
         if (apiError) {
-          if (this.config.debug) {
-            console.log(`[DEBUG] BatchExecute - API error detected: ${apiError.message}`);
-            console.log(`[DEBUG] BatchExecute - Error code: ${(apiError as any).errorCode?.code}`);
-            console.log(`[DEBUG] BatchExecute - Retryable: ${apiError.isRetryable()}`);
-            console.log(`[DEBUG] BatchExecute - Response data:`, JSON.stringify(firstResponse, null, 2));
-          }
           throw apiError;
-        }
-        
-        // Log success only in debug mode
-        if (this.config.debug) {
-          console.log('✅ BatchExecute successful');
         }
         
         return firstResponse;
@@ -275,26 +230,15 @@ export class BatchExecuteClient {
           lastError = new Error(String(error) || 'Unknown error');
         }
         
-        // Log error (simplified)
-        const errorMsg = (error as Error)?.message || String(error);
-        if (this.config.debug) {
-          console.error(`\n❌ Error (attempt ${attempt + 1}/${maxRetries + 1}):`, errorMsg);
-          if (lastResponseStatus !== undefined) {
-            console.error('Response status:', lastResponseStatus);
-          }
-        }
-        
         // Check if error is retryable
         if (error instanceof ErrorClass && 'isRetryable' in error) {
           const retryable = (error as any).isRetryable?.() ?? false;
           if (retryable && attempt < maxRetries) {
-            console.log('Error is retryable, will retry...');
             continue;
           }
         }
         
         if (this.isRetryableError(error as Error) && attempt < maxRetries) {
-          console.log('Error is retryable, will retry...');
           continue;
         }
         
@@ -304,19 +248,9 @@ export class BatchExecuteClient {
     }
     
     // All retries failed - build comprehensive error message
-    console.error('\n❌ All Retry Attempts Failed');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('Total attempts:', maxRetries + 1);
-    
     let errorMessage = 'Unknown error';
     if (lastError) {
       errorMessage = lastError.message || lastError.toString() || String(lastError) || 'Unknown error';
-      console.error('Last error message:', errorMessage);
-      if (lastError.stack) {
-        console.error('Last error stack:', lastError.stack);
-      }
-    } else {
-      console.error('No error object captured');
     }
     
     if (lastResponseStatus !== undefined) {

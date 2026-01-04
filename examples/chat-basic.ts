@@ -193,15 +193,14 @@ async function selectSources(sources: Source[]): Promise<string[]> {
 }
 
 async function main() {
-  // Parse arguments (filter out flags)
-  const args = process.argv.slice(2).filter(arg => !arg.startsWith('--'));
-  const useStreaming = !process.argv.includes('--no-stream');
-  
-  // Only enable debug in streaming mode (cleaner output for --no-stream)
-  const sdk = await createSDK({ debug: useStreaming });
+  const sdk = await createSDK({ debug: false });
 
   try {
     await sdk.connect();
+
+    // Parse arguments (filter out flags)
+    const args = process.argv.slice(2).filter(arg => !arg.startsWith('--'));
+    const useStreaming = !process.argv.includes('--no-stream');
     
     // List notebooks
     console.log('🔍 Fetching notebooks...');
@@ -270,37 +269,136 @@ async function main() {
       console.log('─'.repeat(60));
       
       // Stream chat with the notebook (uses all sources by default)
-      let lastWrittenLength = 0;
+      // SIMPLIFIED: Each chunk.text contains the FULL accumulated response (snapshot-based, not delta-based)
+      // We just display the new portion by comparing lengths
+      let lastDisplayedLength = 0;
       let conversationId: string | undefined;
       let messageIds: [string, string] | undefined;
       const citations = new Set<number>();
       let chunkCount = 0;
       
-      for await (const chunk of sdk.generation.chatStream(
-        notebookId, 
-        message,
-        selectedSourceIds && selectedSourceIds.length > 0 ? { sourceIds: selectedSourceIds } : undefined
-      )) {
-        chunkCount++;
-        
-        // Track conversation ID and message IDs from metadata
-        if (chunk.metadata && !conversationId) {
-          conversationId = chunk.metadata[0];
-          messageIds = chunk.metadata.slice(0, 2) as [string, string];
+      // Track thinking content to avoid displaying it if it gets revised
+      let bufferedThinkingContent: string | null = null;
+      let bufferedThinkingLength = 0;
+      let hasSeenRevision = false;
+      
+      try {
+        for await (const chunk of sdk.generation.chatStream(
+          notebookId, 
+          message,
+          selectedSourceIds && selectedSourceIds.length > 0 ? { sourceIds: selectedSourceIds } : undefined
+        )) {
+          chunkCount++;
+          
+          // Track conversation ID and message IDs from metadata (use latest chunk)
+          if (chunk.metadata) {
+            conversationId = chunk.metadata[0];
+            messageIds = chunk.metadata.slice(0, 2) as [string, string];
+          }
+          
+          // Collect citations
+          if (chunk.citations && chunk.citations.length > 0) {
+            chunk.citations.forEach(citation => citations.add(citation));
+          }
+          
+          // Each chunk.text contains the FULL accumulated response so far (snapshot-based)
+          // CRITICAL: The API may REVISE responses mid-stream, causing text length to DECREASE
+          // When this happens, we need to handle it specially
+          const chunkText = chunk.text || '';
+          
+          if (chunkText) {
+            // Detect if this chunk contains thinking content (has thinking headers)
+            const hasThinkingHeaders = /\*\*[^*]+\*\*\n\n/.test(chunkText);
+            
+            // Check if this is a revision (text length decreased significantly)
+            // Also check if buffered content was replaced (revision of buffered content)
+            const isRevision = chunkText.length < lastDisplayedLength;
+            const isBufferedRevision = bufferedThinkingContent && chunkText.length < bufferedThinkingLength;
+            
+            if (isRevision || isBufferedRevision) {
+              // API revised the response - discard any buffered thinking content
+              hasSeenRevision = true;
+              
+              // Clear buffer
+              bufferedThinkingContent = null;
+              bufferedThinkingLength = 0;
+              
+              // Remove thinking headers and display the complete revised text
+              // This is the final response - display it without any revision marker
+              const displayText = chunkText.replace(/\*\*[^*]+\*\*\n\n/g, '').replace(/(\n\n)\*\*[^*]+\*\*\n\n/g, '$1');
+              
+              if (displayText.length > 0) {
+                process.stdout.write(displayText);
+              }
+              
+              // Update displayed length to current chunk text length
+              lastDisplayedLength = chunkText.length;
+            } else if (chunkText.length > lastDisplayedLength) {
+              // Normal case: text increased
+              const newText = chunkText.substring(lastDisplayedLength);
+              
+              // Buffer ALL thinking content until we see a revision
+              // Don't display thinking content that might get revised (common pattern: thinking content gets replaced)
+              if (hasThinkingHeaders && !hasSeenRevision) {
+                // Buffer thinking content - don't display it yet
+                bufferedThinkingContent = chunkText;
+                bufferedThinkingLength = chunkText.length;
+                
+                // Update displayed length to track but don't display
+                lastDisplayedLength = chunkText.length;
+              } else if (bufferedThinkingContent) {
+                // We have buffered content - check if this is a continuation or revision
+                if (chunkText.length >= bufferedThinkingLength) {
+                  // Content is growing - update buffer but still don't display
+                  bufferedThinkingContent = chunkText;
+                  bufferedThinkingLength = chunkText.length;
+                  
+                  // After 5 chunks, if no revision came, display the buffered content
+                  if (chunkCount >= 5 && !hasSeenRevision) {
+                    const displayText = chunkText.replace(/\*\*[^*]+\*\*\n\n/g, '').replace(/(\n\n)\*\*[^*]+\*\*\n\n/g, '$1');
+                    if (displayText.length > 0) {
+                      process.stdout.write(displayText);
+                    }
+                    bufferedThinkingContent = null;
+                    bufferedThinkingLength = 0;
+                    lastDisplayedLength = chunkText.length;
+                  } else {
+                    lastDisplayedLength = chunkText.length;
+                  }
+                }
+                // If chunkText.length < bufferedThinkingLength, it's a revision - handled in isRevision block
+              } else {
+                // No thinking headers and no buffered content - this is final response content
+                // Display the new portion incrementally
+                // Remove thinking headers from the new portion for cleaner display
+                const displayText = newText.replace(/^\*\*[^*]+\*\*\n\n/g, '').replace(/(\n\n)\*\*[^*]+\*\*\n\n/g, '$1');
+                
+                // Write the new content to stdout
+                if (displayText.length > 0) {
+                  process.stdout.write(displayText);
+                }
+                
+                // Update displayed length to current chunk text length
+                lastDisplayedLength = chunkText.length;
+              }
+            } else if (chunkText.length === lastDisplayedLength) {
+              // Same length - could be duplicate or no new content
+              // If we have buffered thinking content and this is the same, it means no revision is coming
+              if (bufferedThinkingContent && bufferedThinkingLength === chunkText.length && !hasSeenRevision) {
+                // No revision came - display the buffered content now
+                const displayText = chunkText.replace(/\*\*[^*]+\*\*\n\n/g, '').replace(/(\n\n)\*\*[^*]+\*\*\n\n/g, '$1');
+                if (displayText.length > 0) {
+                  process.stdout.write(displayText);
+                }
+                bufferedThinkingContent = null;
+                bufferedThinkingLength = 0;
+              }
+              // Don't display anything - already displayed this content
+            }
+          }
         }
-        
-        // Collect citations
-        if (chunk.citations && chunk.citations.length > 0) {
-          chunk.citations.forEach(citation => citations.add(citation));
-        }
-        
-        // Print response text as it streams (only new content)
-        const textToWrite = chunk.response || chunk.text || '';
-        if (textToWrite.length > lastWrittenLength) {
-          const newText = textToWrite.substring(lastWrittenLength);
-          process.stdout.write(newText);
-          lastWrittenLength = textToWrite.length;
-        }
+      } catch (streamError) {
+        throw streamError;
       }
     
       console.log('\n' + '─'.repeat(60));
@@ -325,6 +423,9 @@ async function main() {
       
       console.log('\n💡 Tip: Use --no-stream flag to get complete response at once');
     } else {
+      console.log('📦 Response (non-streaming mode):');
+      console.log('─'.repeat(60));
+      
       // Non-streaming: Get complete response at once
       const startTime = Date.now();
       const responseData: ChatResponseData = await sdk.generation.chat(
@@ -334,30 +435,77 @@ async function main() {
       );
       const duration = Date.now() - startTime;
       
-      // Extract text from rawData (the full response structure)
+      // Extract text - try multiple sources to get the complete response
       let responseText = '';
+      
+      // Method 1: Try rawData first (most reliable - contains full response structure)
       if (responseData.rawData) {
-        responseText = extractTextFromRawData(responseData.rawData, false); // Disable debug output
+        responseText = extractTextFromRawData(responseData.rawData, false);
       }
       
-      // Fallback to processed text if rawData extraction failed
+      // Method 2: Use processed text from last chunk (should be complete accumulated text)
       if (!responseText && responseData.text) {
         responseText = responseData.text;
       }
       
-      // Display the response
-      console.log(responseText || '(No response text extracted)');
+      // Method 3: Fallback - find the longest text from all chunks
+      if (!responseText && responseData.chunks && responseData.chunks.length > 0) {
+        let longestText = '';
+        for (const chunk of responseData.chunks) {
+          if (chunk.text && chunk.text.length > longestText.length) {
+            longestText = chunk.text;
+          }
+        }
+        if (longestText) {
+          responseText = longestText.replace(/\*\*[^*]+\*\*\n\n/g, '');
+        }
+      }
       
-      // Display important metadata
-      console.log('\n' + '─'.repeat(60));
+      // Check if response seems incomplete (ends mid-sentence or mid-word)
+      const trimmedText = responseText.trim();
+      const endsWithPunctuation = /[.!?]\s*$/.test(trimmedText);
+      const endsWithCitation = trimmedText.endsWith(']') || trimmedText.match(/\[\d+\]\s*$/);
+      const endsWithFormatting = trimmedText.endsWith('}') || trimmedText.endsWith('*');
+      const endsMidWord = trimmedText.length > 0 && !/[a-zA-Z0-9]\s*$/.test(trimmedText.slice(-5)); // Check last 5 chars
+      
+      const seemsIncomplete = responseText && 
+        responseText.length > 50 &&
+        !endsWithPunctuation &&
+        !endsWithCitation &&
+        !endsWithFormatting &&
+        (endsMidWord || !/[.!?]\s*$/.test(trimmedText));
+      
+      if (seemsIncomplete) {
+        console.warn('\n⚠️  Warning: Response appears to be incomplete');
+        console.warn('   The HTTP stream closed before all data was sent (server-side issue).');
+        console.warn(`   Response length: ${responseText.length} chars`);
+        console.warn(`   Chunks received: ${responseData.chunks?.length || 0}`);
+        console.warn(`   Ends with: "${trimmedText.slice(-30)}"`);
+        console.warn('\n   Possible causes:');
+        console.warn('   - Server-side timeout or rate limiting');
+        console.warn('   - Maximum response length limit');
+        console.warn('   - Network connection issues');
+        console.warn('\n   Suggestions:');
+        console.warn('   - Try a shorter or more specific question');
+        console.warn('   - Check your network connection');
+        console.warn('   - Wait a moment and try again (rate limiting)');
+        console.warn('   - Consider using streaming mode (remove --no-stream flag)');
+        console.warn('\n   Note: This is a server-side limitation. When the HTTP stream closes,');
+        console.warn('   we cannot retrieve data that wasn\'t sent. The code extracts all');
+        console.warn('   available data from the buffer, but cannot force the server to');
+        console.warn('   keep the connection open.');
+      }
+      
+      console.log(responseText || '(No response text extracted)');
+      console.log('─'.repeat(60));
+      console.log(`\n⏱️  Response time: ${duration}ms`);
       if (responseData.conversationId) {
         console.log(`💬 Conversation ID: ${responseData.conversationId}`);
       }
-      if (responseData.citations && responseData.citations.length > 0) {
-        const sortedCitations = responseData.citations.sort((a, b) => a - b);
-        console.log(`📚 Citations: [${sortedCitations.join(', ')}]`);
+      if (responseData.citations.length > 0) {
+        console.log(`📚 Citations: [${responseData.citations.sort((a, b) => a - b).join(', ')}]`);
       }
-      console.log(`⏱️  Response time: ${duration}ms`);
+      console.log('💡 Tip: Remove --no-stream flag to see streaming output');
     }
   } catch (error) {
     handleError(error, 'Failed to chat');

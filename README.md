@@ -171,6 +171,18 @@ The repository includes working examples in the [`examples/`](examples/) directo
    npx tsx examples/chat-basic.ts
    ```
 
+**Chat Example Usage:**
+```bash
+# Interactive mode (prompts for notebook and message)
+npx tsx examples/chat-basic.ts
+
+# With notebook ID and message (streaming mode - default)
+npx tsx examples/chat-basic.ts <notebook-id> "What are the key findings?"
+
+# Non-streaming mode (get complete response at once)
+npx tsx examples/chat-basic.ts <notebook-id> "What are the key findings?" --no-stream
+```
+
 **Note:** The examples automatically detect and load the `.env` file from the project root, regardless of where you run them from.
 
 ## Features
@@ -2572,7 +2584,14 @@ Examples: [chat-basic.ts](examples/chat-basic.ts) | [chat-with-sources.ts](examp
 
 **Choosing Between `chat()` and `chatStream()`:**
 - **Use `chat()`** when you want the complete response at once (simpler, blocking)
+  - Returns complete response text after all chunks are received
+  - Best for scripts, automation, or when you need the full response before processing
+  - Use the `--no-stream` flag in the example script
 - **Use `chatStream()`** when you want real-time updates (better UX, progressive display)
+  - Yields chunks as they arrive for real-time display
+  - Automatically handles thinking content buffering and revision detection
+  - Only displays the final response (no thinking steps or revision markers)
+  - Best for interactive applications or when you want immediate feedback
 - Both methods support the same options (source selection, conversation history, etc.)
 - Both methods extract citations and track conversation metadata
 
@@ -2597,10 +2616,33 @@ Examples: [chat-basic.ts](examples/chat-basic.ts) | [chat-with-sources.ts](examp
   - `conversationHistory?: Array<{ message: string; role: 'user' | 'assistant' }>` - Conversation history for follow-up messages
   - `conversationId?: string` - Conversation ID for continuing a conversation (auto-generated if not provided)
 
-**Returns:** `Promise<string>` - Complete AI response text
+**Returns:** `Promise<ChatResponseData>` - Complete AI response with metadata
+
+**Type Import:**
+```typescript
+import type { ChatResponseData } from 'notebooklm-kit';
+```
+
+**ChatResponseData Interface:**
+```typescript
+interface ChatResponseData {
+  text: string;                    // Complete response text (thinking headers removed)
+  rawData?: any;                   // Raw response data from API
+  chunks?: StreamChunk[];          // All chunks received during streaming
+  conversationId?: string;         // Conversation ID for continuing the conversation
+  citations: number[];             // Citation numbers extracted from response
+}
+```
 
 **Description:**
 Chat with your notebook content using AI. Returns the complete response after all chunks are received. This is the non-streaming mode - use `chatStream()` for real-time streaming responses.
+
+**Response Format:**
+- `text`: The complete response text with thinking headers automatically removed
+- `rawData`: Raw response structure from the API (for advanced use cases)
+- `chunks`: Array of all stream chunks received (if you need to inspect individual chunks)
+- `conversationId`: ID for continuing the conversation
+- `citations`: Array of citation numbers found in the response (e.g., `[1, 2, 3]`)
 
 **Features:**
 - ✅ Automatic source detection (uses all sources if none specified)
@@ -2613,14 +2655,17 @@ Chat with your notebook content using AI. Returns the complete response after al
 <details>
 <summary><strong>Notes</strong></summary>
 
-- Quota is checked before chat (if quota manager is enabled)
-- Usage is recorded after successful chat
-- Response is aggregated from all streaming chunks and returned as complete text
-- If `sourceIds` is provided, only those sources are used for context
-- If `sourceIds` is omitted, all sources in the notebook are automatically fetched and used
-- Conversation ID is auto-generated if not provided
-- Use `conversationHistory` for follow-up messages to maintain context
-- For real-time streaming, use `chatStream()` instead
+- **Response format**: Returns `ChatResponseData` object with `text`, `citations`, `conversationId`, etc.
+- **Text extraction**: The `text` field contains the complete response with thinking headers automatically removed
+- **Citation extraction**: Citations are automatically extracted and available in the `citations` array
+- **Conversation tracking**: Conversation ID is auto-generated if not provided and returned in response
+- **Source selection**: If `sourceIds` is provided, only those sources are used for context
+- **Auto source detection**: If `sourceIds` is omitted, all sources in the notebook are automatically fetched and used
+- **Conversation history**: Use `conversationHistory` for follow-up messages to maintain context
+- **Quota management**: Quota is checked before chat (if quota manager is enabled)
+- **Usage tracking**: Usage is recorded after successful chat
+- **Response aggregation**: Response is aggregated from all streaming chunks and returned as complete text
+- **For streaming**: Use `chatStream()` for real-time streaming responses
 
 </details>
 
@@ -2631,7 +2676,9 @@ const response = await sdk.generation.chat(
   'notebook-id',
   'What are the main findings from the research?'
 )
-console.log(response)
+console.log(response.text)  // Complete response text
+console.log(`Citations: [${response.citations.join(', ')}]`)
+console.log(`Conversation ID: ${response.conversationId}`)
 
 // Chat with specific sources
 const response = await sdk.generation.chat(
@@ -2639,16 +2686,18 @@ const response = await sdk.generation.chat(
   'Summarize the methodology section',
   { sourceIds: ['source-id-1', 'source-id-2'] }
 )
-console.log(response)
+console.log(response.text)
 
 // Follow-up message with conversation history
 const response1 = await sdk.generation.chat('notebook-id', 'What is machine learning?')
 const response2 = await sdk.generation.chat('notebook-id', 'Tell me more', {
+  conversationId: response1.conversationId,
   conversationHistory: [
     { message: 'What is machine learning?', role: 'user' },
-    { message: response1, role: 'assistant' }
+    { message: response1.text, role: 'assistant' }
   ]
 })
+console.log(response2.text)
 ```
 
 ---
@@ -2680,25 +2729,41 @@ import type { StreamChunk } from 'notebooklm-kit';
 ```
 
 **Description:**
-Stream chat responses in real-time. Returns an async generator that yields chunks as they arrive from the API. Each chunk contains incremental text updates, allowing you to display responses as they're generated.
+Stream chat responses in real-time. Returns an async generator that yields chunks as they arrive from the API. Each chunk contains the **full accumulated text** up to that point (snapshot-based, not delta-based), allowing you to display responses as they're generated.
+
+**Key Behaviors:**
+- **Snapshot-based streaming**: Each `chunk.text` contains the complete response accumulated so far, not just the new portion
+- **Thinking content buffering**: Thinking content (marked with `**Header**`) is automatically buffered and only the final response is displayed
+- **Revision detection**: If the AI revises its response mid-stream, the revision is automatically handled and only the final version is shown
+- **No revision markers**: The streaming client automatically filters out thinking steps and revision markers for a clean output
 
 **StreamChunk Interface:**
 ```typescript
 interface StreamChunk {
-  chunkNumber: number;        // Chunk number (1-based)
+  chunkNumber: number;        // Chunk number (1-based, increments with each chunk)
   byteCount: number;          // Byte count for this chunk
-  text: string;              // Full text content from this chunk
-  thinking: string[];         // Thinking headers (bold text)
-  response: string;           // Response text (non-bold)
+  text: string;              // FULL accumulated text from start to this point (snapshot-based)
+  thinking: string[];         // Thinking headers extracted from text (e.g., ["Analyzing sources", "Formulating response"])
+  response: string;           // Response text with thinking headers removed
   metadata?: [string, string, number]; // [conversationId, messageId, timestamp]
-  messageIds?: [string, string];       // Message IDs for conversation history
-  timestamp?: number;         // Timestamp
-  citations?: number[];      // Citation numbers extracted from text
-  rawData?: any;             // Raw parsed data
+  messageIds?: [string, string];       // Message IDs: [conversationId, messageId]
+  timestamp?: number;         // Timestamp from metadata
+  citations?: number[];      // Citation numbers extracted from text (e.g., [1, 2, 3])
+  rawData?: any;             // Raw parsed data from API
   isError?: boolean;         // Is this an error chunk?
-  errorCode?: number;        // Error code if error
+  errorCode?: number;        // Error code if isError is true
+  isThinking?: boolean;      // Does this chunk contain thinking content?
+  isResponse?: boolean;      // Does this chunk contain response content?
+  formatting?: any;          // Formatting information
 }
 ```
+
+**Important Notes:**
+- `chunk.text` contains the **complete accumulated response** (not incremental)
+- To display incrementally, compare `chunk.text.length` with previous chunk length
+- Thinking content is automatically filtered - you'll only see the final response
+- Citations are extracted from the text using pattern matching `[1]`, `[2]`, etc.
+- Conversation ID is available in `chunk.metadata[0]` or `chunk.messageIds[0]`
 
 **Features:**
 - ✅ Real-time streaming responses
@@ -2711,25 +2776,53 @@ interface StreamChunk {
 <details>
 <summary><strong>Notes</strong></summary>
 
-- Quota is checked before streaming starts (if quota manager is enabled)
-- Usage is recorded after streaming completes
-- Each chunk contains the full text up to that point (not just the delta)
-- Citations are automatically extracted from text using pattern matching
-- Conversation ID and message IDs are available in chunk metadata
-- Use `onChunk` callback for real-time processing
-- Set `showThinking: true` to include thinking process in output
+- **Snapshot-based streaming**: Each `chunk.text` contains the complete accumulated response from the start, not just the new portion
+- **Incremental display**: To display incrementally, compare `chunk.text.length` with previous chunk length and extract the new portion
+- **Thinking content handling**: Thinking content (marked with `**Header**`) is automatically buffered and filtered - only the final response is displayed
+- **Revision detection**: If the AI revises its response mid-stream, the revision is automatically detected and only the final version is shown
+- **No revision markers**: The client automatically handles revisions without showing "Response revised by AI" markers
+- **Citation extraction**: Citations are automatically extracted from text using pattern matching `[1]`, `[2]`, etc.
+- **Conversation tracking**: Conversation ID and message IDs are available in `chunk.metadata` or `chunk.messageIds`
+- **Quota management**: Quota is checked before streaming starts (if quota manager is enabled)
+- **Usage tracking**: Usage is recorded after streaming completes
+- **Callback support**: Use `onChunk` callback for real-time processing of each chunk
+- **Error handling**: Error chunks are detected via `chunk.isError` and `chunk.errorCode`
 
 </details>
 
 **Usage:**
-```typescript
-// Basic streaming
-for await (const chunk of sdk.generation.chatStream('notebook-id', 'What is this about?')) {
-  // Print response text as it streams
-  process.stdout.write(chunk.response || chunk.text || '');
-}
 
-// Streaming with callback
+**Basic Streaming (Snapshot-based):**
+```typescript
+// Since chunk.text contains the FULL accumulated response, display incrementally
+let lastDisplayedLength = 0;
+
+for await (const chunk of sdk.generation.chatStream('notebook-id', 'What is this about?')) {
+  // chunk.text contains complete response so far - extract only new portion
+  if (chunk.text.length > lastDisplayedLength) {
+    const newText = chunk.text.substring(lastDisplayedLength);
+    process.stdout.write(newText);
+    lastDisplayedLength = chunk.text.length;
+  }
+}
+```
+
+**Simple Streaming (Using response field):**
+```typescript
+// Use chunk.response which has thinking headers already removed
+let lastResponseLength = 0;
+
+for await (const chunk of sdk.generation.chatStream('notebook-id', 'Explain this')) {
+  if (chunk.response && chunk.response.length > lastResponseLength) {
+    const newText = chunk.response.substring(lastResponseLength);
+    process.stdout.write(newText);
+    lastResponseLength = chunk.response.length;
+  }
+}
+```
+
+**Streaming with Callback:**
+```typescript
 for await (const chunk of sdk.generation.chatStream('notebook-id', 'Explain this', {
   onChunk: (chunk) => {
     console.log(`Chunk ${chunk.chunkNumber}: ${chunk.byteCount} bytes`);
@@ -2738,37 +2831,44 @@ for await (const chunk of sdk.generation.chatStream('notebook-id', 'Explain this
     }
   }
 })) {
-  process.stdout.write(chunk.response || chunk.text || '');
+  // Display incrementally
+  if (chunk.text.length > lastDisplayedLength) {
+    const newText = chunk.text.substring(lastDisplayedLength);
+    process.stdout.write(newText);
+    lastDisplayedLength = chunk.text.length;
+  }
 }
+```
 
-// Streaming with specific sources
+**Streaming with Specific Sources:**
+```typescript
+let lastDisplayedLength = 0;
+
 for await (const chunk of sdk.generation.chatStream(
   'notebook-id',
   'Compare these sources',
   { sourceIds: ['source-id-1', 'source-id-2'] }
 )) {
-  process.stdout.write(chunk.response || chunk.text || '');
+  if (chunk.text.length > lastDisplayedLength) {
+    const newText = chunk.text.substring(lastDisplayedLength);
+    process.stdout.write(newText);
+    lastDisplayedLength = chunk.text.length;
+  }
 }
+```
 
-// Streaming with conversation history
-for await (const chunk of sdk.generation.chatStream('notebook-id', 'Tell me more', {
-  conversationId: 'conversation-id',
-  conversationHistory: [
-    { message: 'What is this?', role: 'user' },
-    { message: 'Previous response...', role: 'assistant' }
-  ]
-})) {
-  process.stdout.write(chunk.response || chunk.text || '');
-}
-
-// Collect citations and metadata
+**Collect Citations and Metadata:**
+```typescript
 const citations = new Set<number>();
 let conversationId: string | undefined;
+let messageIds: [string, string] | undefined;
+let lastDisplayedLength = 0;
 
 for await (const chunk of sdk.generation.chatStream('notebook-id', 'What are the key findings?')) {
-  // Track conversation ID
-  if (chunk.metadata && !conversationId) {
+  // Track conversation ID and message IDs
+  if (chunk.metadata) {
     conversationId = chunk.metadata[0];
+    messageIds = chunk.metadata.slice(0, 2) as [string, string];
   }
   
   // Collect citations
@@ -2776,13 +2876,34 @@ for await (const chunk of sdk.generation.chatStream('notebook-id', 'What are the
     chunk.citations.forEach(citation => citations.add(citation));
   }
   
-  // Display response
-  process.stdout.write(chunk.response || chunk.text || '');
+  // Display response incrementally
+  if (chunk.text.length > lastDisplayedLength) {
+    const newText = chunk.text.substring(lastDisplayedLength);
+    process.stdout.write(newText);
+    lastDisplayedLength = chunk.text.length;
+  }
 }
 
 console.log(`\nConversation ID: ${conversationId}`);
+console.log(`Message IDs: ${messageIds?.join(', ')}`);
 console.log(`Citations: [${Array.from(citations).sort((a, b) => a - b).join(', ')}]`);
 ```
+
+**Example Output Format:**
+```
+The provided sources primarily discuss the field of Artificial Intelligence (AI) 
+and the transformative research paper "Attention Is All You Need" [1, 2]. 
+
+The transformer architecture introduced in 2017 revolutionized AI by enabling 
+parallel processing and becoming the foundation for modern large language models [3, 4].
+```
+
+**Note:** The streaming client automatically:
+- Buffers thinking content (won't display it)
+- Detects and handles revisions (only shows final response)
+- Removes thinking headers from output
+- Extracts citations from text
+- Tracks conversation metadata
 
 ---
 

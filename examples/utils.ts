@@ -92,7 +92,7 @@ async function extractCredentialsFromBrowser(waitSeconds: number = 60, keepOpen:
   try {
     const context = await browser.newContext({
       userAgent: USER_AGENT,
-      viewport: { width: 1280, height: 800 }
+      viewport: { width: 1920, height: 1080 }
     });
     const page = await context.newPage();
     

@@ -145,7 +145,7 @@ async function selectSources(sources: Source[]): Promise<string[]> {
 
 async function main() {
   // Enable debugging
-  const sdk = await createSDK({ debug: true });
+  const sdk = await createSDK({ debug: false });
 
   try {
     await sdk.connect();

@@ -41,7 +41,7 @@ async function promptUser(question: string): Promise<string> {
 }
 
 async function main() {
-  const sdk = await createSDK({ debug: true });
+  const sdk = await createSDK({ debug: false });
 
   try {
     await sdk.connect(); // Initialize SDK with authentication

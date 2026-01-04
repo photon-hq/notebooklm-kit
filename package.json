@@ -20,11 +20,11 @@
   "scripts": {
     "postinstall": "npx playwright install chromium && npm run build",
     "setup": "npm install && npx playwright install chromium && npm run build",
+    "install": "npm install",
     "build": "tsc",
     "build:dev": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
-    "clean:all": "rm -rf dist node_modules",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
@@ -61,7 +61,6 @@
   },
   "dependencies": {
     "dotenv": "^17.2.3",
-    "pdf-lib": "^1.17.1",
     "playwright": "^1.57.0"
   }
 }

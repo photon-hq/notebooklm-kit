@@ -11,8 +11,8 @@ import { isErrorResponse } from './errors.js';
  * Format: <chunk-length>\n<chunk-data>\n<chunk-length>\n<chunk-data>...
  */
 export function parseChunkedResponse(raw: string, debug: boolean = false): RPCResponse[] {
-  const log = (msg: string) => {
-    if (debug) console.log(`[ChunkedDecoder] ${msg}`);
+  const log = (_msg: string) => {
+    // Debug logging disabled
   };
   
   // Remove prefix if present
@@ -96,8 +96,8 @@ export function parseChunkedResponse(raw: string, debug: boolean = false): RPCRe
  * Process chunks and extract RPC responses
  */
 function processChunks(chunks: string[], debug: boolean = false): RPCResponse[] {
-  const log = (msg: string) => {
-    if (debug) console.log(`[ChunkProcessor] ${msg}`);
+  const log = (_msg: string) => {
+    // Debug logging disabled
   };
   
   if (chunks.length === 0) {

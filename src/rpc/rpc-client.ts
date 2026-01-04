@@ -85,11 +85,6 @@ export class RPCClient {
    * Execute an RPC call
    */
   async call(rpcId: string, args: any[], notebookId?: string): Promise<any> {
-    if (this.config.debug) {
-      console.log('\n🔷 RPC Call:', rpcId);
-      console.log('Args:', JSON.stringify(args, null, 2));
-    }
-    
     // Create request-specific URL parameters
     const urlParams: Record<string, string> = {};
     
@@ -107,11 +102,6 @@ export class RPCClient {
     };
     
     const response = await this.batchClient.do(rpcCall);
-    
-    if (this.config.debug) {
-      console.log('✅ RPC Response:', response.id);
-      console.log('Data:', JSON.stringify(response.data, null, 2));
-    }
     
     return response.data;
   }
