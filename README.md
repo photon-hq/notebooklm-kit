@@ -23,14 +23,14 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 
 | Feature | Method | Example |
 |---------|--------|---------|
-| **Notebook Management** |
+| **[Notebook Management](#notebooks)**<br><small>`list()`, `create()`, `get()`, `update()`, `delete()`, `share()`</small> | | |
 | List Notebooks | `sdk.notebooks.list()` | [notebook-list.ts](examples/notebook-list.ts) |
 | Create Notebook | `sdk.notebooks.create()` | [notebook-create.ts](examples/notebook-create.ts) |
 | Get Notebook | `sdk.notebooks.get()` | [notebook-get.ts](examples/notebook-get.ts) |
 | Update Notebook | `sdk.notebooks.update()` | [notebook-update.ts](examples/notebook-update.ts) |
 | Delete Notebook | `sdk.notebooks.delete()` | [notebook-delete.ts](examples/notebook-delete.ts) |
 | Share Notebook | `sdk.notebooks.share()` | [notebook-share.ts](examples/notebook-share.ts) |
-| **Source Management** |
+| **[Source Management](#sources)**<br><small>`list()`, `get()`, `add.url()`, `add.text()`, `add.youtube()`, `add.file()`, `add.drive()`, `add.batch()`, `add.web.searchAndWait()`, `update()`, `delete()`, `status()`</small> | | |
 | List Sources | `sdk.sources.list()` | [source-list.ts](examples/source-list.ts) |
 | Add URL Source | `sdk.sources.add.url()` | [source-add-url.ts](examples/source-add-url.ts) |
 | Add Text Source | `sdk.sources.add.text()` | [source-add-text.ts](examples/source-add-text.ts) |
@@ -44,7 +44,7 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 | Update Source | `sdk.sources.update()` | [source-update.ts](examples/source-update.ts) |
 | Delete Source | `sdk.sources.delete()` | [source-delete.ts](examples/source-delete.ts) |
 | Check Source Status | `sdk.sources.status()` | [source-status.ts](examples/source-status.ts) |
-| **Artifact Generation** |
+| **[Artifact Generation](#artifacts)**<br><small>`create()`, `list()`, `get()`, `download()`, `rename()`, `delete()`, `share()`</small> | | |
 | Create Artifact | `sdk.artifacts.create()` | [artifact-create.ts](examples/artifact-create.ts) |
 | Create Artifact (Subservices) | `sdk.artifacts.{type}.create()` | [artifact-create-subservices.ts](examples/artifact-create-subservices.ts) |
 | List Artifacts | `sdk.artifacts.list()` | [artifact-list.ts](examples/artifact-list.ts) |
@@ -55,11 +55,11 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 | Rename Artifact | `sdk.artifacts.rename()` | [artifact-rename.ts](examples/artifact-rename.ts) |
 | Delete Artifact | `sdk.artifacts.delete()` | [artifact-delete.ts](examples/artifact-delete.ts) |
 | Share Artifact | `sdk.artifacts.share()` | [artifact-share.ts](examples/artifact-share.ts) |
-| **Chat & Generation** |
+| **[Chat & Generation](#generation--chat)**<br><small>`chat()`, `chatStream()`, `setChatConfig()`</small> | | |
 | Chat | `sdk.generation.chat()` | [chat-basic.ts](examples/chat-basic.ts) |
 | Stream Chat | `sdk.generation.chatStream()` | [chat-conversation.ts](examples/chat-conversation.ts) |
 | Set Chat Config | `sdk.generation.setChatConfig()` | [generation-set-chat-config.ts](examples/generation-set-chat-config.ts) |
-| **Notes Management** |
+| **[Notes Management](#notes)**<br><small>`list()`, `create()`, `update()`, `delete()`</small> | | |
 | List Notes | `sdk.notes.list()` | [note-list.ts](examples/note-list.ts) |
 | Create Note | `sdk.notes.create()` | [note-create.ts](examples/note-create.ts) |
 | Update Note | `sdk.notes.update()` | [note-update.ts](examples/note-update.ts) |
