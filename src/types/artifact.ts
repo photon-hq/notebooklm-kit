@@ -117,8 +117,8 @@ export interface SlideDeckCustomization {
   /** Language code (use NotebookLMLanguage enum or ISO 639-1 code, e.g., 'en') */
   language?: string;
   
-  /** Length: 1=Short, 2=Default, 3=Long (default: 2) */
-  length?: 1 | 2 | 3;
+  /** Length: 1=Short (5-10 slides), 2=Default (10-15 slides) (default: 2) */
+  length?: 1 | 2;
 }
 
 /**

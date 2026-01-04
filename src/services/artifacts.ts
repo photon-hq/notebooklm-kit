@@ -1968,13 +1968,13 @@ export class ArtifactsService {
       // Always set customization array, even if no customization object provided
       const slideCustom = customization as SlideDeckCustomization | undefined;
       const format = slideCustom?.format ?? 2; // 2=Presenter, 3=Detailed deck
-      const length = slideCustom?.length ?? 2; // 1=Short, 2=Default, 3=Long
+      const length = slideCustom?.length ?? 2; // 1=Short (5-10 slides), 2=Default (10-15 slides)
       
       (args[2] as any[])[13] = [[
         instructions || null, // Description/instructions
         slideCustom?.language || defaultLanguage, // Language (default: notebook's default language)
         format, // Format (2=presenter, 3=detailed deck)
-        length, // Length (1=short, 2=default, 3=long)
+        length, // Length (1=Short, 2=Default)
       ]];
     } else if (artifactType === ArtifactType.AUDIO) {
       // Audio customization at index 8: [null, [null, format, null, [sourceIdsFlat], language, null, length]]

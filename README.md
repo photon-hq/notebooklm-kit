@@ -1954,7 +1954,7 @@ customization: {
 | Option | Values | Description | Default |
 |-------|--------|-------------|---------|
 | `format` | `2`, `3` | **2** = Presenter slides (concise, bullet points), **3** = Detailed deck (comprehensive, full content) | `2` |
-| `length` | `1`, `2`, `3` | **1** = Short (5-10 slides), **2** = Default (10-15 slides), **3** = Long (15-25+ slides) | `2` |
+| `length` | `1`, `2` | **1** = Short (5-10 slides), **2** = Default (10-15 slides) | `2` |
 | `language` | `string` | Language code (e.g., `'en'`, `'hi'`, `'es'`). Use `NotebookLMLanguage` enum for type safety. Supports 80+ languages. | `'en'` |
 
 **Example:**
