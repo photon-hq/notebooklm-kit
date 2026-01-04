@@ -15,7 +15,6 @@
 
 The NotebookLM Kit provides a clean, service-based interface to all NotebookLM features:
 
-![NotebookLM SDK Demo](.github/assets/notebooklm-sdk-animation.gif)
 
 | Service | Purpose | Methods |
 |---------|---------|---------|
