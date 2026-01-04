@@ -35,7 +35,7 @@ async function main() {
     
     console.log('Note created successfully!');
     console.log('─'.repeat(60));
-    console.log(`Note ID: ${note.noteId}`);
+    console.log(`Note ID: ${note.noteId || '(not found in response)'}`);
     console.log(`Title: ${note.title}`);
     console.log('─'.repeat(60));
   } catch (error) {

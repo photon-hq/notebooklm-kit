@@ -32,6 +32,21 @@ async function main() {
         if (note.tags && note.tags.length > 0) {
           console.log(`   Tags: ${note.tags.join(', ')}`);
         }
+        if (note.noteType && note.noteType.length > 0) {
+          const typeNames = note.noteType.map(t => t === 1 ? 'Regular' : t === 2 ? 'Generated' : `Type ${t}`);
+          console.log(`   Type: ${typeNames.join(', ')}`);
+        }
+        if (note.projectId) {
+          console.log(`   Project ID: ${note.projectId}`);
+        }
+        if (note.createdAt) {
+          const date = new Date(note.createdAt);
+          console.log(`   Created: ${date.toLocaleString()}`);
+        }
+        if (note.updatedAt) {
+          const date = new Date(note.updatedAt);
+          console.log(`   Updated: ${date.toLocaleString()}`);
+        }
         console.log();
       });
     }
