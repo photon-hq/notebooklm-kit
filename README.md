@@ -22,7 +22,7 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 | **[`sdk.notebooks`](#sdknotebooks---notebook-management)** | Notebook management | `list()`, `create()`, `get()`, `update()`, `delete()`, `share()` |
 | **[`sdk.sources`](#sdksources---source-management)** | Add & manage sources | `list()`, `get()`, `add.url()`, `add.text()`, `add.youtube()`, `add.web.searchAndWait()`, `update()`, `delete()`, `status()` |
 | **[`sdk.artifacts`](#sdkartifacts---artifact-management)** | Generate study materials | `create()`, `list()`, `get()`, `download()`, `delete()`, `rename()`, `share()` |
-| **[`sdk.generation`](#sdkgeneration---generation--chat)** | Chat & content generation | `chat()`, `chatStream()`, `setChatConfig()`, `deleteChatHistory()` |
+| **[`sdk.generation`](#sdkgeneration---generation--chat)** | Chat & content generation | `chat()`, `chatStream()`, `setChatConfig()` |
 | **[`sdk.notes`](#sdknotes---notes-management)** | Manage notes | `create()`, `list()`, `update()`, `delete()` |
 
 ## Installation
@@ -240,7 +240,6 @@ npx tsx examples/chat-basic.ts <notebook-id> "What are the key findings?" --no-s
 | Chat Stream | Chat with real-time streaming response chunks | [`sdk.generation.chatStream(notebookId, prompt, options?)`](#chat-stream) | [chat-basic.ts](examples/chat-basic.ts) |
 | Chat Conversation | Multi-turn conversations with history tracking | [`sdk.generation.chat(notebookId, prompt, { conversationHistory })`](#chat) | [chat-conversation.ts](examples/chat-conversation.ts) |
 | Set Chat Config | Configure chat (custom prompt, learning guide, response length) | [`sdk.generation.setChatConfig(notebookId, config)`](#set-chat-configuration) | [generation-set-chat-config.ts](examples/generation-set-chat-config.ts) |
-| Delete Chat History | Delete a conversation history | [`sdk.generation.deleteChatHistory(notebookId, conversationId)`](#delete-chat-history) | [generation-delete-chat-history.ts](examples/generation-delete-chat-history.ts) |
 
 ### `sdk.notes` - Notes Management
 
@@ -2572,7 +2571,7 @@ const result = await sdk.artifacts.share('notebook-id', {
 
 ## Generation & Chat
 
-Examples: [chat-basic.ts](examples/chat-basic.ts) | [chat-conversation.ts](examples/chat-conversation.ts) | [generation-set-chat-config.ts](examples/generation-set-chat-config.ts) | [generation-delete-chat-history.ts](examples/generation-delete-chat-history.ts)
+Examples: [chat-basic.ts](examples/chat-basic.ts) | [chat-conversation.ts](examples/chat-conversation.ts) | [generation-set-chat-config.ts](examples/generation-set-chat-config.ts)
 
 **Key Features:**
 - ✅ **Streaming & Non-streaming modes** - Choose real-time streaming (`chatStream()`) or complete responses (`chat()`)
@@ -2972,51 +2971,6 @@ await sdk.generation.setChatConfig('notebook-id', {
 ---
 
 ---
-
-### Delete Chat History
-
-**Method:** `sdk.generation.deleteChatHistory(notebookId, conversationId)`
-
-**Example:** [generation-delete-chat-history.ts](examples/generation-delete-chat-history.ts)
-
-**Parameters:**
-- `notebookId: string` - The notebook ID (required)
-- `conversationId: string` - The conversation ID to delete (required)
-
-**Returns:** `Promise<any>` - Deletion result
-
-**Description:**
-Delete a conversation history from the notebook. Use this to remove old conversations or clean up chat history. **This action cannot be undone.**
-
-**Getting Conversation IDs:**
-Conversation IDs are returned in chat responses:
-- From `chatStream()`: Available in `chunk.metadata[0]`
-- From `chat()`: Tracked automatically, can be extracted from response metadata
-- Examples show how to track and use conversation IDs
-
-**Usage:**
-```typescript
-// Delete a specific conversation
-await sdk.generation.deleteChatHistory('notebook-id', 'conversation-id')
-
-// Example: Track conversation ID and delete later
-let conversationId: string | undefined;
-
-for await (const chunk of sdk.generation.chatStream('notebook-id', 'Hello')) {
-  if (chunk.metadata && !conversationId) {
-    conversationId = chunk.metadata[0];
-  }
-  process.stdout.write(chunk.response || chunk.text || '');
-}
-
-// Later, delete the conversation
-if (conversationId) {
-  await sdk.generation.deleteChatHistory('notebook-id', conversationId);
-  console.log('Conversation deleted');
-}
-```
-
-**Note:** 
 - ⚠️ This action is permanent and cannot be undone
 - Each conversation has a unique ID that persists across sessions
 - Use conversation IDs to manage multiple parallel conversations

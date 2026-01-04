@@ -408,7 +408,7 @@ async function main() {
       console.log(`   Chunks received: ${chunkCount}`);
       if (conversationId) {
         console.log(`   Conversation ID: ${conversationId}`);
-        console.log('   💡 Use this ID to continue the conversation or delete chat history');
+        console.log('   💡 Use this ID to continue the conversation');
       }
       if (messageIds) {
         console.log(`   Message IDs: ${messageIds[0]}, ${messageIds[1]}`);

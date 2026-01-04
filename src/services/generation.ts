@@ -464,30 +464,6 @@ export class GenerationService {
   }
 
   /**
-   * Delete chat history
-   * 
-   * @param notebookId - The notebook ID
-   * @param conversationId - The conversation ID to delete
-   * 
-   * @example
-   * ```typescript
-   * await client.generation.deleteChatHistory('notebook-id', 'conversation-id');
-   * ```
-   */
-  async deleteChatHistory(notebookId: string, conversationId: string): Promise<any> {
-    // Format: [[[conversation_id]]]
-    const request = [[[conversationId]]];
-
-    const response = await this.rpc.call(
-      RPC.RPC_DELETE_CHAT_HISTORY,
-      request,
-      notebookId
-    );
-
-    return response;
-  }
-
-  /**
    * Generate a conversation ID (UUID v4)
    */
   private generateConversationId(): string {
