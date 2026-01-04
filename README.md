@@ -418,13 +418,13 @@ await sdk.connect(); // Logs in, extracts auth token, prompts for cookies, saves
 ```bash
 # .env file location: /path/to/your-project/.env
 
-# Option 1: Manual credentials (recommended for production)
-NOTEBOOKLM_AUTH_TOKEN="ACi2F2NZSD7yrNvFMrCkP3vZJY1R:1766720233448"
-NOTEBOOKLM_COOKIES="_ga=GA1.1.1949425436.1764104083; SID=g.a0005AiwX...; ..."
-
-# Option 2: Auto-login with email/password (requires no 2FA)
+# Option 1: Auto-login with email/password (recommended - requires no 2FA)
 GOOGLE_EMAIL="your-email@gmail.com"
 GOOGLE_PASSWORD="your-password"
+
+# Option 2: Manual credentials (for production or when auto-login isn't available)
+NOTEBOOKLM_AUTH_TOKEN="ACi2F2NZSD7yrNvFMrCkP3vZJY1R:1766720233448"
+NOTEBOOKLM_COOKIES="_ga=GA1.1.1949425436.1764104083; SID=g.a0005AiwX...; ..."
 
 # Optional: Retry configuration
 NOTEBOOKLM_MAX_RETRIES=1          # Default: 1
