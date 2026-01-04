@@ -13,16 +13,57 @@
 
 ## Overview
 
-The NotebookLM Kit provides a clean, service-based interface to all NotebookLM features:
+The NotebookLM Kit provides a clean, service-based interface to all NotebookLM features. Perfect for building AI research assistants, study tools, content generators, and automated knowledge management systems.
 
+**Note**
 
-| Service | Purpose | Methods |
-|---------|---------|---------|
-| **[`sdk.notebooks`](#sdknotebooks---notebook-management)** | Notebook management | `list()`, `create()`, `get()`, `update()`, `delete()`, `share()` |
-| **[`sdk.sources`](#sdksources---source-management)** | Add & manage sources | `list()`, `get()`, `add.url()`, `add.text()`, `add.youtube()`, `add.web.searchAndWait()`, `update()`, `delete()`, `status()` |
-| **[`sdk.artifacts`](#sdkartifacts---artifact-management)** | Generate study materials | `create()`, `list()`, `get()`, `download()`, `delete()`, `rename()`, `share()` |
-| **[`sdk.generation`](#sdkgeneration---generation--chat)** | Chat & content generation | `chat()`, `chatStream()`, `setChatConfig()` |
-| **[`sdk.notes`](#sdknotes---notes-management)** | Manage notes | `create()`, `list()`, `update()`, `delete()` |
+✨ Looking for advanced features, custom integrations, or enterprise support? Contact us at vandit@photon.codes.
+
+## Features
+
+| Feature | Method | Example |
+|---------|--------|---------|
+| **Notebook Management** |
+| List Notebooks | `sdk.notebooks.list()` | [notebook-list.ts](examples/notebook-list.ts) |
+| Create Notebook | `sdk.notebooks.create()` | [notebook-create.ts](examples/notebook-create.ts) |
+| Get Notebook | `sdk.notebooks.get()` | [notebook-get.ts](examples/notebook-get.ts) |
+| Update Notebook | `sdk.notebooks.update()` | [notebook-update.ts](examples/notebook-update.ts) |
+| Delete Notebook | `sdk.notebooks.delete()` | [notebook-delete.ts](examples/notebook-delete.ts) |
+| Share Notebook | `sdk.notebooks.share()` | [notebook-share.ts](examples/notebook-share.ts) |
+| **Source Management** |
+| List Sources | `sdk.sources.list()` | [source-list.ts](examples/source-list.ts) |
+| Add URL Source | `sdk.sources.add.url()` | [source-add-url.ts](examples/source-add-url.ts) |
+| Add Text Source | `sdk.sources.add.text()` | [source-add-text.ts](examples/source-add-text.ts) |
+| Add YouTube Source | `sdk.sources.add.youtube()` | [source-add-youtube.ts](examples/source-add-youtube.ts) |
+| Add File Source | `sdk.sources.add.file()` | [source-add-file.ts](examples/source-add-file.ts) |
+| Add Drive Source | `sdk.sources.add.drive()` | [source-add-drive.ts](examples/source-add-drive.ts) |
+| Add Batch Sources | `sdk.sources.add.batch()` | [source-add-batch.ts](examples/source-add-batch.ts) |
+| Web Search Source | `sdk.sources.add.web.searchAndWait()` | [source-web-search.ts](examples/source-web-search.ts) |
+| Advanced Web Search | `sdk.sources.add.web.searchAndWait()` | [source-web-search-advanced.ts](examples/source-web-search-advanced.ts) |
+| Get Source | `sdk.sources.get()` | [source-get.ts](examples/source-get.ts) |
+| Update Source | `sdk.sources.update()` | [source-update.ts](examples/source-update.ts) |
+| Delete Source | `sdk.sources.delete()` | [source-delete.ts](examples/source-delete.ts) |
+| Check Source Status | `sdk.sources.status()` | [source-status.ts](examples/source-status.ts) |
+| **Artifact Generation** |
+| Create Artifact | `sdk.artifacts.create()` | [artifact-create.ts](examples/artifact-create.ts) |
+| Create Artifact (Subservices) | `sdk.artifacts.{type}.create()` | [artifact-create-subservices.ts](examples/artifact-create-subservices.ts) |
+| List Artifacts | `sdk.artifacts.list()` | [artifact-list.ts](examples/artifact-list.ts) |
+| Get Artifact | `sdk.artifacts.get()` | [artifact-get.ts](examples/artifact-get.ts) |
+| Download Artifact | `sdk.artifacts.download()` | [artifact-download.ts](examples/artifact-download.ts) |
+| Download Video | `sdk.artifacts.download()` | [artifact-video.ts](examples/artifact-video.ts) |
+| Download Slides | `sdk.artifacts.download()` | [slide-download-test.ts](examples/slide-download-test.ts) |
+| Rename Artifact | `sdk.artifacts.rename()` | [artifact-rename.ts](examples/artifact-rename.ts) |
+| Delete Artifact | `sdk.artifacts.delete()` | [artifact-delete.ts](examples/artifact-delete.ts) |
+| Share Artifact | `sdk.artifacts.share()` | [artifact-share.ts](examples/artifact-share.ts) |
+| **Chat & Generation** |
+| Chat | `sdk.generation.chat()` | [chat-basic.ts](examples/chat-basic.ts) |
+| Stream Chat | `sdk.generation.chatStream()` | [chat-conversation.ts](examples/chat-conversation.ts) |
+| Set Chat Config | `sdk.generation.setChatConfig()` | [generation-set-chat-config.ts](examples/generation-set-chat-config.ts) |
+| **Notes Management** |
+| List Notes | `sdk.notes.list()` | [note-list.ts](examples/note-list.ts) |
+| Create Note | `sdk.notes.create()` | [note-create.ts](examples/note-create.ts) |
+| Update Note | `sdk.notes.update()` | [note-update.ts](examples/note-update.ts) |
+| Delete Note | `sdk.notes.delete()` | [note-delete.ts](examples/note-delete.ts) |
 
 ## Installation
 
@@ -36,6 +77,10 @@ git clone https://github.com/photon-hq/notebooklm-kit.git && cd notebooklm-kit &
 ```
 
 **Requirements:** Node.js >=18.0.0
+
+## Version
+
+Current version: **2.1.1**
 
 ## Available Scripts
 
@@ -195,7 +240,7 @@ npx tsx examples/chat-basic.ts <notebook-id> "What are the key findings?" --no-s
 | Get Artifact | Get artifact details (auto-fetches content when ready) | [`sdk.artifacts.get()`](#get-artifact) | [artifact-get.ts](examples/artifact-get.ts) |
 | Download Artifact | Download artifact data to disk (quiz/flashcard JSON, audio file) | [`sdk.artifacts.download()`](#download-artifact) | [artifact-download.ts](examples/artifact-download.ts) |
 | Download Video | Download video artifact as MP4 file | [`sdk.artifacts.download()`](#download-artifact) | [artifact-video.ts](examples/artifact-video.ts) |
-| Download Slides | Download slide deck as PDF or PNG files | [`sdk.artifacts.download()`](#download-artifact) | [artifact-slide.ts](examples/artifact-slide.ts) |
+| Download Slides | Download slide deck as PDF or PNG files | [`sdk.artifacts.download()`](#download-artifact) | [slide-download-test.ts](examples/slide-download-test.ts) |
 | Rename Artifact | Rename an artifact | [`sdk.artifacts.rename()`](#rename-artifact) | [artifact-rename.ts](examples/artifact-rename.ts) |
 | Delete Artifact | Delete an artifact | [`sdk.artifacts.delete()`](#delete-artifact) | [artifact-delete.ts](examples/artifact-delete.ts) |
 | Share Artifact | Share artifact/notebook with users or enable link sharing | [`sdk.artifacts.share()`](#share-artifact) | [artifact-share.ts](examples/artifact-share.ts) |
@@ -1652,7 +1697,7 @@ if (status.allReady) {
 
 ## Artifacts
 
-Examples: [artifact-create.ts](examples/artifact-create.ts) | [artifact-create-subservices.ts](examples/artifact-create-subservices.ts) | [artifact-list.ts](examples/artifact-list.ts) | [artifact-get.ts](examples/artifact-get.ts) | [artifact-download.ts](examples/artifact-download.ts) | [artifact-video.ts](examples/artifact-video.ts) | [artifact-slide.ts](examples/artifact-slide.ts) | [artifact-rename.ts](examples/artifact-rename.ts) | [artifact-delete.ts](examples/artifact-delete.ts) | [artifact-share.ts](examples/artifact-share.ts)
+Examples: [artifact-create.ts](examples/artifact-create.ts) | [artifact-create-subservices.ts](examples/artifact-create-subservices.ts) | [artifact-list.ts](examples/artifact-list.ts) | [artifact-get.ts](examples/artifact-get.ts) | [artifact-download.ts](examples/artifact-download.ts) | [artifact-video.ts](examples/artifact-video.ts) | [slide-download-test.ts](examples/slide-download-test.ts) | [artifact-rename.ts](examples/artifact-rename.ts) | [artifact-delete.ts](examples/artifact-delete.ts) | [artifact-share.ts](examples/artifact-share.ts)
 
 ### Create Artifact
 
@@ -2029,7 +2074,7 @@ artifacts.forEach(artifact => {
 
 **Method:** `sdk.artifacts.get(artifactId, notebookId?, options?)`
 
-**Examples:** [artifact-get.ts](examples/artifact-get.ts) | [artifact-video.ts](examples/artifact-video.ts) (video-specific) | [artifact-slide.ts](examples/artifact-slide.ts) (slide-specific)
+**Examples:** [artifact-get.ts](examples/artifact-get.ts) | [artifact-video.ts](examples/artifact-video.ts) (video-specific) | [slide-download-test.ts](examples/slide-download-test.ts) (slide-specific)
 
 **Parameters:**
 - `artifactId: string` - The artifact ID from `create()` or `list()` (required)
@@ -2282,9 +2327,39 @@ if (video.state === ArtifactState.READY) {
 
 **Method:** `sdk.artifacts.download(slideId, outputPath, notebookId, { downloadAs })`
 
-**Example:** [artifact-slide.ts](examples/artifact-slide.ts)
+**Example:** [slide-download-test.ts](examples/slide-download-test.ts)
 
-**Parameters:**
+**Interactive Example (`slide-download-test.ts`):**
+
+The `slide-download-test.ts` example provides an interactive script for downloading slide decks:
+
+1. **Lists and selects notebooks** - Shows all available notebooks and prompts for selection
+2. **Lists and selects slide artifacts** - Displays all ready slide deck artifacts for the selected notebook
+3. **Extracts slide image URLs** - Recursively searches artifact data structure to find slide image URLs
+4. **Authenticates with Google** - Uses Playwright to authenticate with Google (handles 2FA)
+5. **Downloads images** - Downloads each slide image using authenticated browser session
+6. **Saves in requested format** - Saves as PNG (individual files) or PDF (single file)
+
+**Environment Variables for `slide-download-test.ts`:**
+- `NOTEBOOK_ID` - Optional: Pre-select a notebook ID (skips notebook selection)
+- `GOOGLE_EMAIL` - Required: Google account email for authentication
+- `GOOGLE_PASSWORD` - Required: Google account password for authentication
+- `DOWNLOAD_AS` - Optional: `'pdf'` or `'png'` (defaults to interactive prompt)
+- `OUTPUT_DIR` - Optional: Output directory path (defaults to `./downloads`)
+
+**Usage:**
+```bash
+# Using tsx (recommended)
+NOTEBOOK_ID=your-notebook-id GOOGLE_EMAIL=your@email.com GOOGLE_PASSWORD=yourpassword DOWNLOAD_AS=pdf npx tsx examples/slide-download-test.ts
+
+# Or set environment variables separately
+export GOOGLE_EMAIL=your@email.com
+export GOOGLE_PASSWORD=yourpassword
+export DOWNLOAD_AS=pdf
+npx tsx examples/slide-download-test.ts
+```
+
+**SDK Method Parameters:**
 - `slideId` (string, required): The slide artifact ID
 - `outputPath` (string, required): Directory path to save the downloaded slides
 - `notebookId` (string, required): The notebook ID containing the slides
