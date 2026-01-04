@@ -480,6 +480,62 @@ const sdk = new NotebookLMClient({
 await sdk.connect();
 ```
 
+**Enable Debug Mode:**
+
+Debug mode provides detailed logging for troubleshooting, API calls, authentication, and internal operations.
+
+**Option 1: Environment Variable (Recommended)**
+```bash
+# In your .env file
+NOTEBOOKLM_DEBUG=true
+```
+
+**Option 2: Config Option**
+```typescript
+const sdk = new NotebookLMClient({
+  debug: true, // Enable debug logging
+  // ... other config
+});
+
+await sdk.connect();
+```
+
+**Option 3: Development Mode**
+```bash
+# Automatically enables debug in development
+NODE_ENV=development
+```
+
+**What Debug Mode Logs:**
+- ✅ RPC call details (method names, arguments, responses)
+- ✅ Authentication flow (login steps, credential extraction)
+- ✅ Auto-refresh operations (token refresh attempts, timing)
+- ✅ Streaming responses (chunk processing, parsing)
+- ✅ Error details (full stack traces, API responses)
+- ✅ Response parsing (chunked data processing, validation)
+
+**Example Debug Output:**
+```
+[DEBUG] RPC Call: wXbhsf with args: [null, 1, null, [2]]
+[DEBUG] Response received: 200 OK
+[DEBUG] Parsing chunked response: 3 chunks found
+[DEBUG] Auto-refresh: Token expires in 5 minutes, refreshing now...
+[DEBUG] Authentication: Extracting credentials from browser...
+```
+
+**Disable Debug:**
+```typescript
+// Explicitly disable (overrides environment variable)
+const sdk = new NotebookLMClient({
+  debug: false,
+});
+```
+
+```bash
+# Or in .env
+NOTEBOOKLM_DEBUG=false
+```
+
 <details>
 <summary><strong>Connection Flow</strong></summary>
 
@@ -602,6 +658,9 @@ NOTEBOOKLM_COOKIES="_ga=GA1.1.1949425436.1764104083; SID=g.a0005AiwX...; ..."
 NOTEBOOKLM_MAX_RETRIES=1          # Default: 1
 NOTEBOOKLM_RETRY_DELAY=1000       # Default: 1000ms
 NOTEBOOKLM_RETRY_MAX_DELAY=5000   # Default: 5000ms
+
+# Optional: Debug mode (enables detailed logging)
+NOTEBOOKLM_DEBUG=true             # Enable debug logging for troubleshooting
 
 # Optional: Force re-authentication (ignore saved credentials)
 FORCE_REAUTH=true

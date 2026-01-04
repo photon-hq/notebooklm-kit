@@ -259,8 +259,18 @@ export class NotebookLMClient {
    * ```
    */
   constructor(config: NotebookLMConfig = {}) {
+    // Auto-enable debug mode from environment variable if not explicitly set
+    // Supports: NOTEBOOKLM_DEBUG=true, DEBUG=true, or NODE_ENV=development
+    const envDebug = process.env.NOTEBOOKLM_DEBUG === 'true' || 
+                     process.env.DEBUG === 'true' || 
+                     process.env.NODE_ENV === 'development';
+    
     // Store config for lazy initialization
-    this.config = config;
+    // If debug is not explicitly set in config, use environment variable
+    this.config = {
+      ...config,
+      debug: config.debug !== undefined ? config.debug : envDebug,
+    };
     this.quotaManager = new QuotaManager(
       config.enforceQuotas === true, // Default to false
       config.plan || 'standard' // Default to standard plan
