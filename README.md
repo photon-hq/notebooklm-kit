@@ -1,6 +1,6 @@
 <div align="center">
    
-# @photon-ai/NotebookLM-kit
+# notebooklm-kit
 
 > A TypeScript SDK for programmatic access to Google NotebookLM.
 
