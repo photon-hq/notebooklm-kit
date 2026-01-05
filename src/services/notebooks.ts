@@ -81,27 +81,24 @@ export class NotebooksService {
       throw new APIError('Invalid notebook ID format', undefined, 400);
     }
     
-    // Validate: at least one field must be provided (title, description, or emoji)
-    if (!options.title && !options.description && !options.emoji) {
-      throw new APIError('At least one field (title, description, or emoji) must be provided', undefined, 400);
+    // Validate: at least one field must be provided (title or emoji)
+    if (!options.title && !options.emoji) {
+      throw new APIError('At least one field (title or emoji) must be provided', undefined, 400);
     }
     
     if (options.title && options.title.length > 100) {
       throw new APIError('Notebook title exceeds maximum length (100 characters)', undefined, 400);
     }
     
-    // Set emoji if provided (supports: emoji only, title + emoji, or emoji + description)
+    // Set emoji if provided (supports: emoji only, title + emoji)
     if (options.emoji !== undefined) {
       await this.setEmoji(notebookId, options.emoji);
     }
     
-    // Update title and/or description if provided (supports: title only, description only, or title + description)
-    if (options.title !== undefined || options.description !== undefined) {
+    // Update title if provided (supports: title only, or title + emoji)
+    if (options.title !== undefined) {
       const updateArray: any[] = [null, null, null, null];
-      
-      if (options.title !== undefined) {
-        updateArray[3] = [null, options.title];
-      }
+      updateArray[3] = [null, options.title];
       
       const updates = [updateArray];
       
@@ -121,7 +118,7 @@ export class NotebooksService {
       return notebook;
     }
     
-    // If only emoji was updated (no title or description), fetch the notebook and update emoji in response
+    // If only emoji was updated (no title), fetch the notebook and update emoji in response
     const notebook = await this.get(notebookId);
     if (options.emoji !== undefined) {
       notebook.emoji = options.emoji;

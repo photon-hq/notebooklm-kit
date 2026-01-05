@@ -26,10 +26,9 @@ async function main() {
     console.log(`Created: ${notebook3.emoji} ${notebook3.title}`);
     console.log(`ID: ${notebook3.projectId}\n`);
 
-    // Create notebook with title, description, and emoji
+    // Create notebook with title and emoji
     const notebook4 = await sdk.notebooks.create({
       title: 'Project Notes',
-      description: 'Initial project description',
       emoji: '🔬',
     });
     console.log(`Created: ${notebook4.emoji} ${notebook4.title}`);

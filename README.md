@@ -883,7 +883,6 @@ if (notebook.sharing?.isShared) {
 **Parameters:**
 - `options: CreateNotebookOptions`
   - `title: string` - Notebook title (optional, auto-generated if empty)
-  - `description?: string` - Initial description (optional)
   - `emoji?: string` - Notebook emoji (optional)
 
 **Returns:** `Promise<Notebook>`
@@ -934,13 +933,6 @@ const notebook = await sdk.notebooks.create({
 
 // Auto-generated title
 const untitled = await sdk.notebooks.create({})
-
-// With description and emoji
-const notebook = await sdk.notebooks.create({
-  title: 'Project Notes',
-  description: 'Initial project description',
-  emoji: '🔬',
-})
 ```
 
 ---
@@ -961,12 +953,12 @@ const notebook = await sdk.notebooks.create({
 **Returns:** `Promise<Notebook>` (same as `get()` - full notebook details)
 
 **Description:**
-Updates notebook title, description, or emoji. Returns full notebook details after update (same structure as `get()`). Supports updating emoji only, title only, or both together.
+Updates notebook title or emoji. Returns full notebook details after update (same structure as `get()`). Supports updating emoji only, title only, or both together.
 
 <details>
 <summary><strong>Validation</strong></summary>
 
-- At least one field (`title`, `description`, or `emoji`) must be provided
+- At least one field (`title` or `emoji`) must be provided
 - Title maximum length: 100 characters
 - Notebook ID is automatically trimmed (removes trailing spaces)
 - Returns error if notebook doesn't exist
