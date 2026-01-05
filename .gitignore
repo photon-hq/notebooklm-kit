@@ -72,3 +72,9 @@ nlm/
 test-results/
 playwright-report/
 playwright/.cache/
+
+# Personal commitizen config (not for repo)
+.cz-config.cjs
+
+# Personal scripts (local tooling only)
+scripts/

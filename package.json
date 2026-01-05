@@ -76,7 +76,13 @@
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
     "type-check": "tsc --noEmit",
-    "prepublishOnly": "npm run clean && npm run type-check && npm run build"
+    "prepublishOnly": "npm run clean && npm run type-check && npm run build",
+    "commit": "cz",
+    "install-hook": "node scripts/install-hook.cjs",
+    "release": "standard-version",
+    "release:minor": "standard-version --release-as minor",
+    "release:major": "standard-version --release-as major",
+    "release:patch": "standard-version --release-as patch"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
@@ -85,6 +91,15 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "commitizen": "^4.3.0",
+    "cz-customizable": "^7.0.0",
+    "standard-version": "^9.5.0"
+  },
+  "config": {
+    "commitizen": {
+      "path": "cz-customizable",
+      "config": ".cz-config.cjs"
+    }
   }
 }
