@@ -16,6 +16,9 @@ build/
 .env.test.local
 .env.production.local
 
+# npm config (contains auth token)
+.npmrc
+
 # Credentials (contains sensitive auth data)
 credentials.json
 
