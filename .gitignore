@@ -78,3 +78,6 @@ playwright/.cache/
 
 # Personal scripts (local tooling only)
 scripts/
+
+# Git hooks (personal tooling)
+.git/hooks/prepare-commit-msg.mjs

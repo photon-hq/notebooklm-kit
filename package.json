@@ -98,7 +98,9 @@
   },
   "config": {
     "commitizen": {
-      "path": "cz-customizable",
+      "path": "cz-customizable"
+    },
+    "cz-customizable": {
       "config": ".cz-config.cjs"
     }
   }
