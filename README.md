@@ -17,9 +17,6 @@
 
 The NotebookLM Kit provides a clean, service-based interface to all NotebookLM features. Perfect for building AI research assistants, study tools, content generators, and automated knowledge management systems.
 
-> [!NOTE]
-> **✨ Looking for advanced features, custom integrations, or enterprise support? Contact us at [vandit@photon.codes](mailto:vandit@photon.codes).**
-
 ## Features
 
 <table>
