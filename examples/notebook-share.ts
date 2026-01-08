@@ -130,6 +130,8 @@ async function main() {
   let sdk: Awaited<ReturnType<typeof createSDK>> | null = null;
 
   try {
+    console.log('⚠️  EXPERIMENTAL FEATURE: Notebook Sharing\n');
+    console.log('⚠️  This feature is experimental and may have limitations or breaking changes.\n');
     console.log('=== Notebook Sharing ===\n');
     
     // Get notebook ID

@@ -152,6 +152,8 @@ async function main() {
   try {
     await sdk.connect(); // Initialize SDK with authentication
 
+    console.log('⚠️  EXPERIMENTAL FEATURE: Google Drive Source\n');
+    console.log('⚠️  This feature is experimental and may have limitations or breaking changes.\n');
     console.log('=== Adding Google Drive Source ===\n');
 
     // Prompt for required fields

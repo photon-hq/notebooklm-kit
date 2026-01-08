@@ -59,7 +59,7 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 <td><a href="examples/notebook-delete.ts">notebook-delete.ts</a></td>
 </tr>
 <tr>
-<td>Share Notebook</td>
+<td>Share Notebook <small>⚠️ Experimental</small></td>
 <td><code>sdk.notebooks.share()</code></td>
 <td><a href="examples/notebook-share.ts">notebook-share.ts</a></td>
 </tr>
@@ -94,7 +94,7 @@ The NotebookLM Kit provides a clean, service-based interface to all NotebookLM f
 <td><a href="examples/source-add-file.ts">source-add-file.ts</a></td>
 </tr>
 <tr>
-<td>Add Drive Source</td>
+<td>Add Drive Source <small>⚠️ Experimental</small></td>
 <td><code>sdk.sources.add.drive()</code></td>
 <td><a href="examples/source-add-drive.ts">source-add-drive.ts</a></td>
 </tr>
@@ -382,7 +382,7 @@ npx tsx examples/chat-basic.ts <notebook-id> "What are the key findings?" --no-s
 | Create Notebook | Create a new notebook (auto-generates title if empty) | [`sdk.notebooks.create(options)`](#create-notebook) | [notebook-create.ts](examples/notebook-create.ts) |
 | Update Notebook | Update notebook title or emoji | [`sdk.notebooks.update(notebookId, options)`](#update-notebook) | [notebook-update.ts](examples/notebook-update.ts) |
 | Delete Notebook | Delete one or more notebooks | [`sdk.notebooks.delete(notebookIds)`](#delete-notebook) | [notebook-delete.ts](examples/notebook-delete.ts) |
-| Share Notebook | Share notebook with users or enable link sharing | [`sdk.notebooks.share(notebookId, options)`](#share-notebook) | [notebook-share.ts](examples/notebook-share.ts) |
+| Share Notebook <small>⚠️ Experimental</small> | Share notebook with users or enable link sharing | [`sdk.notebooks.share(notebookId, options)`](#share-notebook) | [notebook-share.ts](examples/notebook-share.ts) |
 
 ### `sdk.sources` - Source Management
 
@@ -394,7 +394,7 @@ npx tsx examples/chat-basic.ts <notebook-id> "What are the key findings?" --no-s
 | Add Text | Add a source from text content | [`sdk.sources.add.text(notebookId, options)`](#add-text-source) | [source-add-text.ts](examples/source-add-text.ts) |
 | Add File | Add a source from a file (PDF, image, etc.) | [`sdk.sources.add.file(notebookId, options)`](#add-file-source) | [source-add-file.ts](examples/source-add-file.ts) |
 | Add YouTube | Add a YouTube video as a source | [`sdk.sources.add.youtube(notebookId, options)`](#add-youtube-source) | [source-add-youtube.ts](examples/source-add-youtube.ts) |
-| Add Google Drive | Add a Google Drive file as a source | [`sdk.sources.add.drive(notebookId, options)`](#add-google-drive-source) | [source-add-drive.ts](examples/source-add-drive.ts) |
+| Add Google Drive <small>⚠️ Experimental</small> | Add a Google Drive file as a source | [`sdk.sources.add.drive(notebookId, options)`](#add-google-drive-source) | [source-add-drive.ts](examples/source-add-drive.ts) |
 | Batch Add | Add multiple sources at once | [`sdk.sources.add.batch(notebookId, options)`](#batch-add-sources) | [source-add-batch.ts](examples/source-add-batch.ts) |
 | Web Search (Simple) | Search web and wait for results | [`sdk.sources.add.web.searchAndWait(notebookId, options)`](#web-search-simple) | [source-web-search.ts](examples/source-web-search.ts) |
 | Web Search (Advanced) | Multi-step web search workflow | [`sdk.sources.add.web.search()`](#web-search-advanced) → `getResults()` → `addDiscovered()` | [source-web-search-advanced.ts](examples/source-web-search-advanced.ts) |
@@ -1056,6 +1056,8 @@ console.log(`Deleted ${result.count} notebooks: ${result.deleted.join(', ')}`)
 
 ### Share Notebook
 
+> **⚠️ Experimental:** This feature is experimental and may have limitations or breaking changes in future versions.
+
 **Method:** `sdk.notebooks.share(notebookId, options)`
 
 **Example:** [notebook-share.ts](examples/notebook-share.ts)
@@ -1556,6 +1558,8 @@ const sourceId = await sdk.sources.add.youtube('notebook-id', {
 
 ### Add Google Drive Source
 
+> **⚠️ Experimental:** This feature is experimental and may have limitations or breaking changes in future versions.
+
 **Method:** `sdk.sources.add.drive(notebookId, options)`
 
 **Parameters:**
@@ -1613,7 +1617,7 @@ Adds multiple sources at once. Supports mixed source types (URLs, text, files, Y
 - `{ type: 'text', title: string, content: string }` - Text source
 - `{ type: 'file', content: Buffer | string, fileName: string, mimeType?: string }` - File source
 - `{ type: 'youtube', urlOrId: string, title?: string }` - YouTube source
-- `{ type: 'gdrive', fileId: string, title?: string, mimeType?: string }` - Google Drive source
+- `{ type: 'gdrive', fileId: string, title?: string, mimeType?: string }` - Google Drive source <small>⚠️ Experimental</small>
 
 **Usage:**
 ```typescript
@@ -1660,12 +1664,12 @@ const sourceIds = await sdk.sources.add.batch('notebook-id', {
 
 **Source Types:**
 - `SearchSourceType.WEB` - Search web (default)
-- `SearchSourceType.GOOGLE_DRIVE` - Search Google Drive (FAST mode only)
+- `SearchSourceType.GOOGLE_DRIVE` - Search Google Drive (FAST mode only) <small>⚠️ Experimental</small>
 
 **Return Fields:**
 - `sessionId: string` - Required for adding sources (use with `addDiscovered()`)
 - `web: DiscoveredWebSource[]` - Discovered web sources
-- `drive: DiscoveredDriveSource[]` - Discovered Google Drive sources
+- `drive: DiscoveredDriveSource[]` - Discovered Google Drive sources <small>⚠️ Experimental</small>
 
 <details>
 <summary><strong>Notes</strong></summary>
