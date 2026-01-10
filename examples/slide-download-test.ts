@@ -1,30 +1,19 @@
 /**
- * Interactive slide download test function
+ * Example: Interactive slide download
  * 
- * Based on Manus AI solution for downloading slide images:
- * 1. Lists slide artifacts from a notebook
- * 2. Provides interactive selection
- * 3. Extracts image URLs from artifact data
- * 4. Downloads each image (following redirects)
- * 5. Saves as PNG (individual images) or PDF (single file)
+ * This example demonstrates:
+ * 1. Listing slide artifacts from a notebook
+ * 2. Interactive selection of slide decks
+ * 3. Extracting image URLs from artifact data
+ * 4. Downloading slide images (requires Google authentication)
+ * 5. Saving as PNG (individual images) or PDF (single file)
  * 
  * Environment Variables:
- *   DOWNLOAD_AS=pdf  - Automatically use PDF format (or 'png' for PNG)
- *   OUTPUT_DIR=./downloads  - Set output directory
- * 
- * Usage:
- *   
- * Option 1: Using tsx (recommended - install: npm install -D tsx)
- *   NOTEBOOK_ID=your-notebook-id npx tsx examples/slide-download-test.ts
- *   OR: npm install -D tsx && NOTEBOOK_ID=your-notebook-id tsx examples/slide-download-test.ts
- * 
- * Option 2: Compile and run
- *   npm run build
- *   node dist/examples/slide-download-test.js
- * 
- * Option 3: Using ts-node with ESM
- *   npm install -D ts-node @types/node
- *   NOTEBOOK_ID=your-notebook-id node --loader ts-node/esm examples/slide-download-test.ts
+ *   NOTEBOOK_ID - Notebook ID (optional, will prompt if not provided)
+ *   GOOGLE_EMAIL - Google account email for authentication
+ *   GOOGLE_PASSWORD - Google account password for authentication
+ *   DOWNLOAD_AS - Output format: 'pdf' or 'png' (optional)
+ *   OUTPUT_DIR - Output directory (default: ./downloads)
  */
 
 import * as readline from 'readline';
