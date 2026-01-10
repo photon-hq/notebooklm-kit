@@ -1,6 +1,6 @@
 import { RPCClient } from '../rpc/rpc-client.js';
 import * as RPC from '../rpc/rpc-methods.js';
-import type { Notebook, CreateNotebookOptions, UpdateNotebookOptions, ShareNotebookOptions, ShareNotebookResult, DeleteNotebookResult, SharingSettings } from '../types/notebook.js';
+import type { Notebook, CreateNotebookOptions, UpdateNotebookOptions, ShareNotebookOptions, ShareNotebookResult, DeleteNotebookResult, DeleteNotebookOptions, SharingSettings } from '../types/notebook.js';
 import { NotebookLMError } from '../types/common.js';
 import { APIError } from '../utils/errors.js';
 import { createChunkedParser } from '../utils/chunked-parser.js';
@@ -126,21 +126,94 @@ export class NotebooksService {
     return notebook;
   }
   
-  async delete(notebookIds: string | string[]): Promise<DeleteNotebookResult> {
+  /**
+   * Delete one or more notebooks
+   * 
+   * Note: Google's API does not support batch deletion in a single call.
+   * Multiple notebooks are deleted individually, either in parallel (default) or sequentially.
+   * 
+   * @param notebookIds - Single notebook ID or array of IDs
+   * @param options - Optional deletion options
+   * @returns Result with deleted IDs and count
+   */
+  async delete(notebookIds: string | string[], options?: DeleteNotebookOptions): Promise<DeleteNotebookResult> {
     const ids = Array.isArray(notebookIds) ? notebookIds : [notebookIds];
+    const mode = options?.mode || 'parallel';
     
+    // Validate all IDs first
     for (const id of ids) {
       if (!id || typeof id !== 'string') {
         throw new APIError('Invalid notebook ID format', undefined, 400);
       }
     }
     
-    await this.rpc.call(RPC.RPC_DELETE_PROJECTS, [ids, [2]]);
+    // Single notebook deletion - use batch API with single ID
+    if (ids.length === 1) {
+      try {
+        await this.rpc.call(RPC.RPC_DELETE_PROJECTS, [[ids[0]], [2]]);
+        return {
+          deleted: ids,
+          count: 1,
+        };
+      } catch (error) {
+        throw new APIError(`Failed to delete notebook: ${(error as Error).message}`, undefined, 500);
+      }
+    }
     
-    return {
-      deleted: ids,
-      count: ids.length,
+    // Multiple notebook deletion - delete individually
+    const deleted: string[] = [];
+    const failed: string[] = [];
+    
+    if (mode === 'parallel') {
+      // Delete all notebooks in parallel
+      const deletePromises = ids.map(async (id) => {
+        try {
+          // Each deletion uses a single-item array [id] to avoid batch API issues
+          await this.rpc.call(RPC.RPC_DELETE_PROJECTS, [[id], [2]]);
+          return { success: true, id };
+        } catch (error) {
+          return { success: false, id, error: (error as Error).message };
+        }
+      });
+      
+      const results = await Promise.all(deletePromises);
+      
+      for (const result of results) {
+        if (result.success) {
+          deleted.push(result.id);
+        } else {
+          failed.push(result.id);
+        }
+      }
+    } else {
+      // Sequential deletion - delete one at a time
+      for (const id of ids) {
+        try {
+          await this.rpc.call(RPC.RPC_DELETE_PROJECTS, [[id], [2]]);
+          deleted.push(id);
+        } catch (error) {
+          failed.push(id);
+          // Continue with remaining deletions even if one fails
+        }
+      }
+    }
+    
+    const result: DeleteNotebookResult = {
+      deleted,
+      count: deleted.length,
     };
+    
+    if (failed.length > 0) {
+      result.failed = failed;
+      result.failedCount = failed.length;
+    }
+    
+    // Throw error if all deletions failed
+    if (deleted.length === 0 && failed.length > 0) {
+      throw new APIError(`Failed to delete all notebooks: ${failed.join(', ')}`, undefined, 500);
+    }
+    
+    return result;
   }
   
   async share(notebookId: string, options: ShareNotebookOptions): Promise<ShareNotebookResult> {

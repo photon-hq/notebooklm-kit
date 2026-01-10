@@ -77,9 +77,19 @@ export interface ShareNotebookResult {
 }
 
 /**
+ * Options for deleting notebook(s)
+ */
+export interface DeleteNotebookOptions {
+  /** Execution mode: 'parallel' (default) or 'sequential' */
+  mode?: 'parallel' | 'sequential';
+}
+
+/**
  * Result of deleting notebook(s)
  */
 export interface DeleteNotebookResult {
   deleted: string[]; /** Array of deleted notebook IDs */
-  count: number; /** Number of notebooks deleted */
+  failed?: string[]; /** Array of notebook IDs that failed to delete (only present if some failed) */
+  count: number; /** Number of notebooks successfully deleted */
+  failedCount?: number; /** Number of notebooks that failed to delete */
 }

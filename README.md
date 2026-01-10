@@ -1006,21 +1006,25 @@ const updated = await sdk.notebooks.update('notebook-id', {
 
 ### Delete Notebook
 
-**Method:** `sdk.notebooks.delete(notebookIds)`
+**Method:** `sdk.notebooks.delete(notebookIds, options?)`
 
 **Example:** [notebook-delete.ts](examples/notebook-delete.ts)
 
 **Parameters:**
 - `notebookIds: string | string[]` - Single notebook ID or array of IDs (required)
+- `options?: DeleteNotebookOptions` - Optional deletion options:
+  - `mode?: 'parallel' | 'sequential'` - Execution mode (default: 'parallel')
 
 **Returns:** `Promise<DeleteNotebookResult>`
 
 **Description:**
-Deletes one or more notebooks. Returns confirmation with deleted IDs and count.
+Deletes one or more notebooks. For multiple notebooks, deletions are performed individually (either in parallel or sequentially) since Google's API does not support true batch deletion. Returns confirmation with deleted IDs and count.
 
 **Return Fields:**
-- `deleted: string[]` - Array of deleted notebook IDs
-- `count: number` - Number of notebooks deleted
+- `deleted: string[]` - Array of successfully deleted notebook IDs
+- `count: number` - Number of notebooks successfully deleted
+- `failed?: string[]` - Array of notebook IDs that failed to delete (only present if some failed)
+- `failedCount?: number` - Number of notebooks that failed to delete
 
 <details>
 <summary><strong>Validation</strong></summary>
@@ -1032,12 +1036,22 @@ Deletes one or more notebooks. Returns confirmation with deleted IDs and count.
 </details>
 
 <details>
+<summary><strong>Deletion Modes</strong></summary>
+
+- **Parallel (default):** All notebooks are deleted simultaneously using `Promise.all()`. Faster but may hit rate limits.
+- **Sequential:** Notebooks are deleted one at a time. Slower but more reliable and avoids rate limit issues.
+
+</details>
+
+<details>
 <summary><strong>Notes</strong></summary>
 
 - No confirmation required - deletion is immediate
-- Batch deletion is supported (pass array of IDs)
-- Returns validation/confirmation object (not void)
-- All IDs are validated before any deletion occurs
+- Google's API does not support batch deletion in a single call
+- Multiple notebooks are deleted individually, one per API call
+- Parallel mode is default but sequential mode is recommended for large batches to avoid rate limits
+- Failed deletions are tracked separately - if some succeed and some fail, you'll get both `deleted` and `failed` arrays
+- Throws error only if ALL deletions fail (partial failures return result with `failed` array)
 
 </details>
 
@@ -1047,9 +1061,16 @@ Deletes one or more notebooks. Returns confirmation with deleted IDs and count.
 const result = await sdk.notebooks.delete('notebook-id')
 console.log(`Deleted ${result.count} notebook: ${result.deleted[0]}`)
 
-// Delete multiple notebooks
+// Delete multiple notebooks (parallel - default)
 const result = await sdk.notebooks.delete(['id-1', 'id-2', 'id-3'])
 console.log(`Deleted ${result.count} notebooks: ${result.deleted.join(', ')}`)
+
+// Delete multiple notebooks (sequential - recommended for large batches)
+const result = await sdk.notebooks.delete(['id-1', 'id-2', 'id-3'], { mode: 'sequential' })
+console.log(`Deleted ${result.count} notebooks: ${result.deleted.join(', ')}`)
+if (result.failed && result.failed.length > 0) {
+  console.log(`Failed to delete: ${result.failed.join(', ')}`)
+}
 ```
 
 ---
