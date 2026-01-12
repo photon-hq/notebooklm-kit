@@ -251,7 +251,7 @@ git clone https://github.com/photon-hq/notebooklm-kit.git && cd notebooklm-kit &
 
 ## Version
 
-Current version: **2.1.2**
+Current version: **2.2.0**
 
 ## Available Scripts
 
