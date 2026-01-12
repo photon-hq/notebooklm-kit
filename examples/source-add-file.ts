@@ -11,6 +11,7 @@ async function main() {
     const notebookId = process.env.NOTEBOOK_ID || 'your-notebook-id';
 
     console.log('=== Adding File Source ===\n');
+    console.log('Note: Large files (>200MB or >500k words) are automatically chunked\n');
 
     // Example 1: Add file from Buffer (Node.js)
     console.log('1. Adding file from Buffer...');
@@ -28,23 +29,37 @@ This is a sample research document.
 3. Point three
     `.trim());
     
-    const sourceId1 = await sdk.sources.add.file(notebookId, {
+    const result1 = await sdk.sources.add.file(notebookId, {
       content: fileContent,
       fileName: 'research-document.txt',
       mimeType: 'text/plain',
     });
-    console.log(`Added file source (Buffer)`);
-    console.log(`Source ID: ${sourceId1}\n`);
+    
+    if (typeof result1 === 'string') {
+      console.log(`Added file source (Buffer)`);
+      console.log(`Source ID: ${result1}\n`);
+    } else {
+      console.log(`Added file source (auto-chunked)`);
+      console.log(`Uploaded ${result1.chunks?.length || 0} chunks`);
+      console.log(`Source IDs: ${result1.allSourceIds?.join(', ')}\n`);
+    }
 
     // Example 2: Add file from base64 string
     console.log('2. Adding file from base64 string...');
     const base64Content = fileContent.toString('base64');
-    const sourceId2 = await sdk.sources.add.file(notebookId, {
+    const result2 = await sdk.sources.add.file(notebookId, {
       content: base64Content,
       fileName: 'research-document-base64.txt',
     });
-    console.log(`Added file source (base64)`);
-    console.log(`Source ID: ${sourceId2}\n`);
+    
+    if (typeof result2 === 'string') {
+      console.log(`Added file source (base64)`);
+      console.log(`Source ID: ${result2}\n`);
+    } else {
+      console.log(`Added file source (auto-chunked)`);
+      console.log(`Uploaded ${result2.chunks?.length || 0} chunks`);
+      console.log(`Source IDs: ${result2.allSourceIds?.join(', ')}\n`);
+    }
 
     // Example 3: Add actual file from filesystem (if file exists)
     const filePath = process.env.FILE_PATH;
@@ -52,12 +67,19 @@ This is a sample research document.
       console.log('3. Adding file from filesystem...');
       const fileBuffer = readFileSync(filePath);
       const fileName = basename(filePath);
-      const sourceId3 = await sdk.sources.add.file(notebookId, {
+      const result3 = await sdk.sources.add.file(notebookId, {
         content: fileBuffer,
         fileName: fileName,
       });
-      console.log(`Added file: ${fileName}`);
-      console.log(`Source ID: ${sourceId3}\n`);
+      
+      if (typeof result3 === 'string') {
+        console.log(`Added file: ${fileName}`);
+        console.log(`Source ID: ${result3}\n`);
+      } else {
+        console.log(`Added file: ${fileName} (auto-chunked)`);
+        console.log(`Uploaded ${result3.chunks?.length || 0} chunks`);
+        console.log(`Source IDs: ${result3.allSourceIds?.join(', ')}\n`);
+      }
     } else {
       console.log('3. Set FILE_PATH in .env to add a file from filesystem\n');
     }

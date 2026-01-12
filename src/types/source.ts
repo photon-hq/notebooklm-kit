@@ -240,3 +240,28 @@ export interface WebSearchResult {
   web: DiscoveredWebSource[]; // Discovered web sources
   drive: DiscoveredDriveSource[]; // Discovered Google Drive sources
 }
+
+/**
+ * Chunk metadata for auto-chunked sources
+ */
+export interface SourceChunk {
+  sourceId: string; // Source ID of this chunk
+  fileName: string; // Original or chunked file name
+  chunkIndex: number; // Zero-based index of this chunk
+  wordStart?: number; // Starting word index (for text chunks)
+  wordEnd?: number; // Ending word index (for text chunks)
+  sizeBytes?: number; // Size in bytes (for file chunks)
+}
+
+/**
+ * Result from adding a source (may be chunked)
+ */
+export interface AddSourceResult {
+  sourceId?: string; // Single source ID (if not chunked)
+  sourceIds?: string[]; // All source IDs (if chunked)
+  wasChunked: boolean; // Whether the source was automatically chunked
+  totalWords?: number; // Total word count (for text sources)
+  totalSizeBytes?: number; // Total size in bytes (for file sources)
+  chunks?: SourceChunk[]; // Chunk metadata (if chunked)
+  allSourceIds?: string[]; // All source IDs (convenience - same as sourceIds if chunked, [sourceId] if not)
+}
