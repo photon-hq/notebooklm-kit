@@ -80,6 +80,8 @@ export type {
   BatchAddSourcesOptions,
   SearchWebAndWaitOptions,
   WebSearchResult,
+  AddSourceResult,
+  SourceChunk,
 } from './types/source.js';
 export { ResearchMode, SearchSourceType } from './types/source.js';
 

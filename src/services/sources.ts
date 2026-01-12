@@ -29,6 +29,8 @@ import type {
   BatchAddSourcesOptions,
   SearchWebAndWaitOptions,
   WebSearchResult,
+  AddSourceResult,
+  SourceChunk,
 } from '../types/source.js';
 import { ResearchMode, SearchSourceType, SourceType, SourceStatus } from '../types/source.js';
 import { NotebookLMError } from '../types/common.js';
@@ -666,6 +668,93 @@ export class AddSourcesService {
     this.web = new WebSearchService(rpc, quota);
   }
 
+  /**
+   * Count words in text (approximation)
+   */
+  private countWords(text: string): number {
+    return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+  }
+
+  /**
+   * Chunk text by word count to fit within limits
+   */
+  private chunkTextByWords(text: string, maxWords: number): string[] {
+    const words = text.trim().split(/\s+/);
+    const chunks: string[] = [];
+    
+    for (let i = 0; i < words.length; i += maxWords) {
+      const chunk = words.slice(i, i + maxWords).join(' ');
+      chunks.push(chunk);
+    }
+    
+    return chunks;
+  }
+
+  /**
+   * Chunk buffer by size (for binary files)
+   */
+  private chunkBufferBySize(buffer: Buffer, maxSizeBytes: number): Buffer[] {
+    const chunks: Buffer[] = [];
+    
+    for (let i = 0; i < buffer.length; i += maxSizeBytes) {
+      chunks.push(buffer.slice(i, i + maxSizeBytes));
+    }
+    
+    return chunks;
+  }
+
+  /**
+   * Extract text from common text-based file types
+   * Returns null if file type is not text-based or extraction fails
+   */
+  private async extractTextFromFile(
+    content: Buffer | string,
+    fileName: string,
+    mimeType?: string
+  ): Promise<string | null> {
+    try {
+      let buffer: Buffer;
+      
+      if (Buffer.isBuffer(content)) {
+        buffer = content;
+      } else if (typeof content === 'string') {
+        // Assume base64
+        buffer = Buffer.from(content, 'base64');
+      } else {
+        return null;
+      }
+      
+      // Check file extension and MIME type
+      const ext = fileName.toLowerCase().split('.').pop() || '';
+      const isTextFile = 
+        ['txt', 'md', 'markdown', 'csv', 'json', 'xml', 'html', 'htm', 'css', 'js', 'ts', 'py', 'java', 'cpp', 'c', 'h'].includes(ext) ||
+        mimeType?.startsWith('text/') ||
+        mimeType === 'application/json' ||
+        mimeType === 'application/xml';
+      
+      if (isTextFile) {
+        // Try to decode as UTF-8 text
+        try {
+          return buffer.toString('utf-8');
+        } catch {
+          return null;
+        }
+      }
+      
+      // For PDFs, we'd need a PDF library (like pdf-parse)
+      // For now, return null to indicate we can't extract text
+      if (ext === 'pdf' || mimeType === 'application/pdf') {
+        // PDF text extraction requires a library - return null
+        // Users can install pdf-parse and extract text themselves if needed
+        return null;
+      }
+      
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   // Helper method to extract source ID from response
   private extractSourceId(response: any): string {
     try {
@@ -790,58 +879,134 @@ export class AddSourcesService {
   }
 
   /**
-   * Add a text source
+   * Add a text source (with auto-chunking support)
    */
-  async text(notebookId: string, options: AddSourceFromTextOptions): Promise<string> {
+  async text(notebookId: string, options: AddSourceFromTextOptions): Promise<string | AddSourceResult> {
     const { content, title } = options;
     
     if (!content || typeof content !== 'string') {
       throw new NotebookLMError('Content is required and must be a string');
     }
     
-    this.quota?.checkQuota('addSource', notebookId);
+    // Get limits from quota manager
+    const maxWords = this.quota?.getLimits().wordsPerSource || 500000;
+    const wordCount = this.countWords(content);
     
-    // Text format: [null, [title, content], null, 2, ...]
-    // Index 1 = [title, content], Index 3 = type code 2
-    const textData = title ? [title, content] : [null, content];
-    
-    const response = await this.rpc.call(
-      RPC.RPC_ADD_SOURCES,
-      [
+    // If within limits, add normally
+    if (wordCount <= maxWords) {
+      this.quota?.checkQuota('addSource', notebookId);
+      
+      // Text format: [null, [title, content], null, 2, ...]
+      // Index 1 = [title, content], Index 3 = type code 2
+      const textData = title ? [title, content] : [null, content];
+      
+      const response = await this.rpc.call(
+        RPC.RPC_ADD_SOURCES,
         [
           [
-            null,
-            textData,
-            null,
-            2,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            1,
+            [
+              null,
+              textData,
+              null,
+              2,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              1,
+            ],
           ],
+          notebookId,
         ],
-        notebookId,
-      ],
-      notebookId
-    );
-    
-    const sourceId = this.extractSourceId(response);
-    
-    if (sourceId) {
-      this.quota?.recordUsage('addSource', notebookId);
+        notebookId
+      );
+      
+      const sourceId = this.extractSourceId(response);
+      
+      if (sourceId) {
+        this.quota?.recordUsage('addSource', notebookId);
+      }
+      
+      return sourceId;
     }
     
-    return sourceId;
+    // Auto-chunk: Split text into chunks
+    const chunks = this.chunkTextByWords(content, maxWords);
+    const chunkCount = chunks.length;
+    
+    // Check quota for all chunks
+    for (let i = 0; i < chunkCount; i++) {
+      this.quota?.checkQuota('addSource', notebookId);
+    }
+    
+    // Upload chunks in parallel
+    const uploadPromises = chunks.map(async (chunk, index) => {
+      const chunkTitle = title ? `${title} (Part ${index + 1}/${chunkCount})` : `Text Source (Part ${index + 1}/${chunkCount})`;
+      const textData = [chunkTitle, chunk];
+      
+      const response = await this.rpc.call(
+        RPC.RPC_ADD_SOURCES,
+        [
+          [
+            [
+              null,
+              textData,
+              null,
+              2,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              1,
+            ],
+          ],
+          notebookId,
+        ],
+        notebookId
+      );
+      
+      const sourceId = this.extractSourceId(response);
+      
+      if (sourceId) {
+        this.quota?.recordUsage('addSource', notebookId);
+      }
+      
+      return {
+        sourceId,
+        chunkIndex: index,
+        wordStart: index * maxWords + 1,
+        wordEnd: Math.min((index + 1) * maxWords, wordCount),
+      };
+    });
+    
+    const results = await Promise.all(uploadPromises);
+    const sourceIds = results.map(r => r.sourceId).filter((id): id is string => !!id);
+    const chunkMetadata: SourceChunk[] = results.map(r => ({
+      sourceId: r.sourceId,
+      fileName: title || 'text-source',
+      chunkIndex: r.chunkIndex,
+      wordStart: r.wordStart,
+      wordEnd: r.wordEnd,
+    }));
+    
+    return {
+      wasChunked: true,
+      totalWords: wordCount,
+      sourceIds,
+      chunks: chunkMetadata,
+      allSourceIds: sourceIds,
+    };
   }
 
   /**
-   * Add a file source
+   * Add a file source (with auto-chunking support)
    */
-  async file(notebookId: string, options: AddSourceFromFileOptions): Promise<string> {
-    const { fileName, content } = options;
+  async file(notebookId: string, options: AddSourceFromFileOptions): Promise<string | AddSourceResult> {
+    const { fileName, content, mimeType } = options;
     
     if (!fileName || typeof fileName !== 'string') {
       throw new NotebookLMError('File name is required and must be a string');
@@ -851,42 +1016,160 @@ export class AddSourcesService {
       throw new NotebookLMError('File content is required');
     }
     
-    let base64Content: string;
-    let sizeBytes: number = 0;
+    // Get limits from quota manager
+    const maxSizeMB = this.quota?.getLimits().fileSizeMB || 200;
+    const maxSizeBytes = maxSizeMB * 1024 * 1024;
+    const maxWords = this.quota?.getLimits().wordsPerSource || 500000;
+    
+    let buffer: Buffer;
+    let sizeBytes: number;
     
     if (Buffer.isBuffer(content)) {
+      buffer = content;
       sizeBytes = content.length;
-      base64Content = content.toString('base64');
     } else if (typeof content === 'string') {
-      base64Content = content;
+      // Assume base64
+      buffer = Buffer.from(content, 'base64');
       sizeBytes = Math.floor((content.length * 3) / 4);
     } else {
       throw new NotebookLMError('Invalid content type for file');
     }
     
-    this.quota?.validateFileSize(sizeBytes);
-    this.quota?.checkQuota('addSource', notebookId);
+    // Try to extract text for text-based files (to check word count)
+    const extractedText = await this.extractTextFromFile(buffer, fileName, mimeType);
+    const isTextBased = extractedText !== null;
+    let wordCount = 0;
     
-    const response = await this.rpc.call(
-      RPC.RPC_UPLOAD_FILE_BY_FILENAME,
-      [
-        [
-          [fileName, 13],
-        ],
-        notebookId,
-        [2],
-        [1, null, null, null, null, null, null, null, null, null, [1]],
-      ],
-      notebookId
-    );
-    
-    const sourceId = this.extractSourceId(response);
-    
-    if (sourceId) {
-      this.quota?.recordUsage('addSource', notebookId);
+    if (isTextBased && extractedText) {
+      wordCount = this.countWords(extractedText);
     }
     
-    return sourceId;
+    // Check if chunking is needed
+    const needsSizeChunking = sizeBytes > maxSizeBytes;
+    const needsWordChunking = isTextBased && wordCount > maxWords;
+    
+    // If within limits, add normally
+    if (!needsSizeChunking && !needsWordChunking) {
+      this.quota?.validateFileSize(sizeBytes);
+      this.quota?.checkQuota('addSource', notebookId);
+      
+      const base64Content = buffer.toString('base64');
+      
+      const response = await this.rpc.call(
+        RPC.RPC_UPLOAD_FILE_BY_FILENAME,
+        [
+          [
+            [fileName, 13],
+          ],
+          notebookId,
+          [2],
+          [1, null, null, null, null, null, null, null, null, null, [1]],
+        ],
+        notebookId
+      );
+      
+      const sourceId = this.extractSourceId(response);
+      
+      if (sourceId) {
+        this.quota?.recordUsage('addSource', notebookId);
+      }
+      
+      return sourceId;
+    }
+    
+    // Auto-chunk needed
+    let chunks: Array<{ buffer: Buffer; wordStart?: number; wordEnd?: number; sizeBytes: number }>;
+    let chunkCount: number;
+    
+    if (needsWordChunking && isTextBased && extractedText) {
+      // Chunk by words (for text-based files)
+      const textChunks = this.chunkTextByWords(extractedText, maxWords);
+      chunkCount = textChunks.length;
+      
+      // Convert text chunks back to buffers
+      chunks = textChunks.map((textChunk, index) => {
+        const chunkBuffer = Buffer.from(textChunk, 'utf-8');
+        return {
+          buffer: chunkBuffer,
+          wordStart: index * maxWords + 1,
+          wordEnd: Math.min((index + 1) * maxWords, wordCount),
+          sizeBytes: chunkBuffer.length,
+        };
+      });
+    } else if (needsSizeChunking) {
+      // Chunk by size (for binary files or files that exceed size limit)
+      const bufferChunks = this.chunkBufferBySize(buffer, maxSizeBytes);
+      chunkCount = bufferChunks.length;
+      
+      chunks = bufferChunks.map((chunkBuffer, index) => ({
+        buffer: chunkBuffer,
+        sizeBytes: chunkBuffer.length,
+      }));
+    } else {
+      // Should not reach here, but handle gracefully
+      throw new NotebookLMError('Unexpected chunking scenario');
+    }
+    
+    // Check quota for all chunks
+    for (let i = 0; i < chunkCount; i++) {
+      this.quota?.checkQuota('addSource', notebookId);
+    }
+    
+    // Upload chunks in parallel
+    const uploadPromises = chunks.map(async (chunk, index) => {
+      const baseName = fileName.replace(/\.[^/.]+$/, ''); // Remove extension
+      const ext = fileName.split('.').pop() || '';
+      const chunkFileName = `${baseName}_part${index + 1}_of_${chunkCount}.${ext}`;
+      const base64Content = chunk.buffer.toString('base64');
+      
+      const response = await this.rpc.call(
+        RPC.RPC_UPLOAD_FILE_BY_FILENAME,
+        [
+          [
+            [chunkFileName, 13],
+          ],
+          notebookId,
+          [2],
+          [1, null, null, null, null, null, null, null, null, null, [1]],
+        ],
+        notebookId
+      );
+      
+      const sourceId = this.extractSourceId(response);
+      
+      if (sourceId) {
+        this.quota?.recordUsage('addSource', notebookId);
+      }
+      
+      return {
+        sourceId,
+        chunkIndex: index,
+        fileName: chunkFileName,
+        wordStart: chunk.wordStart,
+        wordEnd: chunk.wordEnd,
+        sizeBytes: chunk.sizeBytes,
+      };
+    });
+    
+    const results = await Promise.all(uploadPromises);
+    const sourceIds = results.map(r => r.sourceId).filter((id): id is string => !!id);
+    const chunkMetadata: SourceChunk[] = results.map(r => ({
+      sourceId: r.sourceId,
+      fileName: r.fileName,
+      chunkIndex: r.chunkIndex,
+      wordStart: r.wordStart,
+      wordEnd: r.wordEnd,
+      sizeBytes: r.sizeBytes,
+    }));
+    
+    return {
+      wasChunked: true,
+      totalWords: isTextBased ? wordCount : undefined,
+      totalSizeBytes: sizeBytes,
+      sourceIds,
+      chunks: chunkMetadata,
+      allSourceIds: sourceIds,
+    };
   }
 
   /**
@@ -1607,72 +1890,75 @@ export class SourcesService {
   /**
    * Add a source from text (copied text)
    * 
+   * **Auto-Chunking:** If the text exceeds 500,000 words, it will be automatically
+   * split into chunks and uploaded in parallel. Returns `AddSourceResult` with chunk metadata.
+   * 
    * WORKFLOW USAGE:
-   * - Returns immediately after source is queued
+   * - Returns immediately after source is queued (or chunks are uploaded)
    * - Use pollProcessing() to check if source is ready
    * - Or use workflow functions that handle waiting automatically
+   * - If chunked, returns `AddSourceResult` with `wasChunked: true` and chunk metadata
    * 
    * @param notebookId - The notebook ID
    * @param options - Text content and title
+   * @returns Source ID (string) if not chunked, or `AddSourceResult` if chunked
    * 
    * @example
    * ```typescript
+   * // Single source (within limits)
    * const sourceId = await client.sources.addFromText('notebook-id', {
    *   title: 'My Notes',
    *   content: 'This is my research content...',
    * });
+   * 
+   * // Large text (auto-chunked)
+   * const result = await client.sources.addFromText('notebook-id', {
+   *   title: 'Large Document',
+   *   content: veryLongText, // > 500k words
+   * });
+   * if (result.wasChunked) {
+   *   console.log(`Uploaded ${result.chunks.length} chunks`);
+   *   console.log(`Source IDs: ${result.allSourceIds.join(', ')}`);
+   * }
    * ```
    */
-  async addFromText(notebookId: string, options: AddSourceFromTextOptions): Promise<string> {
-    const { title, content } = options;
+  async addFromText(notebookId: string, options: AddSourceFromTextOptions): Promise<string | AddSourceResult> {
+    const result = await this.add.text(notebookId, options);
     
-    // Validate text length
-    this.quota?.validateTextSource(content);
-    
-    // Check quota before adding source
-    this.quota?.checkQuota('addSource', notebookId);
-    
-    const response = await this.rpc.call(
-      RPC.RPC_ADD_SOURCES,
-      [
-        [
-          [
-            null,
-            [title, content],
-            null,
-            2, // text source type
-          ],
-        ],
-        notebookId,
-      ],
-      notebookId
-    );
-    
-    const sourceId = this.extractSourceId(response);
-    
-    // Record usage after successful addition
-    if (sourceId) {
-      this.quota?.recordUsage('addSource', notebookId);
+    // If it's a string (single source), return as-is for backward compatibility
+    if (typeof result === 'string') {
+      return result;
     }
     
-    return sourceId;
+    // If it's AddSourceResult (chunked), return it
+    return result;
   }
   
   /**
    * Add a source from uploaded file
    * 
+   * **Auto-Chunking:** If the file exceeds 200MB or contains more than 500,000 words (for text-based files),
+   * it will be automatically split into chunks and uploaded in parallel. Returns `AddSourceResult` with chunk metadata.
+   * 
+   * **Chunking Behavior:**
+   * - Text-based files (txt, md, csv, json, etc.): Chunked by word count (500k words per chunk)
+   * - Binary files: Chunked by size (200MB per chunk)
+   * - PDFs: Note that PDF text extraction requires a PDF library. For now, PDFs are chunked by size only.
+   * 
    * WORKFLOW USAGE:
-   * - Returns immediately after file is uploaded and queued
+   * - Returns immediately after file is uploaded and queued (or chunks are uploaded)
    * - File processing may take longer than URLs/text
    * - Use pollProcessing() to check if source is ready
    * - Or use workflow functions that handle waiting automatically
+   * - If chunked, returns `AddSourceResult` with `wasChunked: true` and chunk metadata
    * 
    * @param notebookId - The notebook ID
    * @param options - File content, name, and MIME type
+   * @returns Source ID (string) if not chunked, or `AddSourceResult` if chunked
    * 
    * @example
    * ```typescript
-   * // From Buffer (Node.js)
+   * // From Buffer (Node.js) - single file
    * const fileBuffer = await fs.readFile('document.pdf');
    * const sourceId = await client.sources.addFromFile('notebook-id', {
    *   content: fileBuffer,
@@ -1680,60 +1966,29 @@ export class SourcesService {
    *   mimeType: 'application/pdf',
    * });
    * 
-   * // From base64 string
-   * const sourceId = await client.sources.addFromFile('notebook-id', {
-   *   content: base64String,
-   *   fileName: 'document.pdf',
+   * // Large file (auto-chunked)
+   * const result = await client.sources.addFromFile('notebook-id', {
+   *   content: largeFileBuffer, // > 200MB or > 500k words
+   *   fileName: 'large-document.pdf',
    * });
+   * if (result.wasChunked) {
+   *   console.log(`Uploaded ${result.chunks.length} chunks`);
+   *   result.chunks.forEach(chunk => {
+   *     console.log(`Chunk ${chunk.chunkIndex + 1}: ${chunk.sourceId}`);
+   *   });
+   * }
    * ```
    */
-  async addFromFile(notebookId: string, options: AddSourceFromFileOptions): Promise<string> {
-    const { content, fileName, mimeType = 'application/octet-stream' } = options;
+  async addFromFile(notebookId: string, options: AddSourceFromFileOptions): Promise<string | AddSourceResult> {
+    const result = await this.add.file(notebookId, options);
     
-    // Validate file size and check quota
-    let sizeBytes: number;
-    let base64Content: string;
-    
-    if (typeof Buffer !== 'undefined' && Buffer.isBuffer(content)) {
-      sizeBytes = content.length;
-      base64Content = content.toString('base64');
-    } else if (typeof content === 'string') {
-      // Already base64
-      base64Content = content;
-      // Estimate size from base64 (base64 is ~33% larger than binary)
-      sizeBytes = Math.floor((content.length * 3) / 4);
-    } else {
-      throw new NotebookLMError('Invalid content type for file');
+    // If it's a string (single source), return as-is for backward compatibility
+    if (typeof result === 'string') {
+      return result;
     }
     
-    this.quota?.validateFileSize(sizeBytes);
-    this.quota?.checkQuota('addSource', notebookId);
-    
-    // Files use o4cbdc RPC with structure: [[[fileName, 13]], notebookId, [2], [1,null,...,[1]]]
-    // The number 13 is the file type indicator
-    // Note: Files may need to be uploaded via a separate endpoint first, then referenced by filename
-    // For now, we'll try using o4cbdc with just the filename
-    const response = await this.rpc.call(
-      RPC.RPC_UPLOAD_FILE_BY_FILENAME,
-      [
-        [
-          [fileName, 13], // [filename, fileType] where 13 = file upload
-        ],
-        notebookId,
-        [2],
-        [1, null, null, null, null, null, null, null, null, null, [1]],
-      ],
-      notebookId
-    );
-    
-    const sourceId = this.extractSourceId(response);
-    
-    // Record usage after successful addition
-    if (sourceId) {
-      this.quota?.recordUsage('addSource', notebookId);
-    }
-    
-    return sourceId;
+    // If it's AddSourceResult (chunked), return it
+    return result;
   }
   
   /**
@@ -2516,7 +2771,7 @@ export class SourcesService {
       this.quota?.checkQuota('addSource', notebookId);
     }
     
-    // Add all sources
+    // Add all sources (may return string or AddSourceResult for text/file)
     const addPromises = sources.map(source => {
       switch (source.type) {
         case 'url':
@@ -2542,7 +2797,23 @@ export class SourcesService {
       }
     });
     
-    const sourceIds = await Promise.all(addPromises);
+    const results = await Promise.all(addPromises);
+    
+    // Extract source IDs from results (handle both string and AddSourceResult)
+    const sourceIds: string[] = [];
+    for (const result of results) {
+      if (typeof result === 'string') {
+        sourceIds.push(result);
+      } else if (result && typeof result === 'object' && 'allSourceIds' in result) {
+        // Chunked result - add all source IDs
+        sourceIds.push(...(result.allSourceIds || []));
+      } else if (result && typeof result === 'object' && 'sourceId' in result) {
+        // Single source ID in result object
+        if (result.sourceId) {
+          sourceIds.push(result.sourceId);
+        }
+      }
+    }
     
     // Wait for processing if requested
     if (waitForProcessing) {

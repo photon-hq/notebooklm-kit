@@ -151,8 +151,8 @@ export class NotebooksService {
     if (ids.length === 1) {
       try {
         await this.rpc.call(RPC.RPC_DELETE_PROJECTS, [[ids[0]], [2]]);
-        return {
-          deleted: ids,
+    return {
+      deleted: ids,
           count: 1,
         };
       } catch (error) {

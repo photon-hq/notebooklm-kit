@@ -251,7 +251,7 @@ git clone https://github.com/photon-hq/notebooklm-kit.git && cd notebooklm-kit &
 
 ## Version
 
-Current version: **2.1.1**
+Current version: **2.1.2**
 
 ## Available Scripts
 
@@ -1203,8 +1203,10 @@ const sourceId = await sdk.sources.addFromURL('notebook-id', {
 
 ---
 
-#### `addFromText(notebookId: string, options: AddTextSourceOptions)` → `Promise<string>`
+#### `addFromText(notebookId: string, options: AddTextSourceOptions)` → `Promise<string | AddSourceResult>`
 Add a source from text content.
+
+**Auto-Chunking:** Large texts (>500k words) are automatically split into chunks and uploaded in parallel.
 
 **Parameters:**
 - `notebookId: string` - The notebook ID
@@ -1212,40 +1214,69 @@ Add a source from text content.
 - `options.content: string` - Text content
 
 **Returns:**
-- `string` - Source ID
+- `string` - Source ID (if not chunked)
+- `AddSourceResult` - Chunk metadata (if auto-chunked)
 
 **Example:**
 ```typescript
+// Small text (returns string)
 const sourceId = await sdk.sources.addFromText('notebook-id', {
   title: 'Research Notes',
   content: 'Your text content here...',
 })
+
+// Large text (auto-chunked)
+const result = await sdk.sources.addFromText('notebook-id', {
+  title: 'Large Document',
+  content: veryLongText, // > 500k words
+})
+if (typeof result === 'string') {
+  console.log(`Source ID: ${result}`)
+} else {
+  console.log(`Uploaded ${result.chunks?.length || 0} chunks`)
+}
 ```
 
 ---
 
-#### `addFromFile(notebookId: string, options: AddFileSourceOptions)` → `Promise<string>`
+#### `addFromFile(notebookId: string, options: AddFileSourceOptions)` → `Promise<string | AddSourceResult>`
 Add a source from a file (PDF, image, etc.).
+
+**Auto-Chunking:** Large files (>200MB or >500k words) are automatically split into chunks and uploaded in parallel.
 
 **Parameters:**
 - `notebookId: string` - The notebook ID
-- `options.content: Buffer` - File content as Buffer
+- `options.content: Buffer | string` - File content as Buffer or base64 string
 - `options.fileName: string` - File name
-- `options.mimeType: string` - MIME type (e.g., 'application/pdf')
+- `options.mimeType?: string` - MIME type (e.g., 'application/pdf')
 
 **Returns:**
-- `string` - Source ID
+- `string` - Source ID (if not chunked)
+- `AddSourceResult` - Chunk metadata (if auto-chunked)
 
 **Example:**
 ```typescript
 import { readFile } from 'fs/promises'
 
+// Small file (returns string)
 const buffer = await readFile('./document.pdf')
 const sourceId = await sdk.sources.addFromFile('notebook-id', {
   content: buffer,
   fileName: 'document.pdf',
   mimeType: 'application/pdf',
 })
+
+// Large file (auto-chunked)
+const largeBuffer = await readFile('./large-document.pdf')
+const result = await sdk.sources.addFromFile('notebook-id', {
+  content: largeBuffer, // > 200MB or > 500k words
+  fileName: 'large-document.pdf',
+})
+if (typeof result === 'string') {
+  console.log(`Source ID: ${result}`)
+} else {
+  console.log(`Uploaded ${result.chunks?.length || 0} chunks`)
+}
 ```
 
 ---
@@ -1486,17 +1517,46 @@ if (!status.processing.includes(sourceId)) {
   - `content: string` - Text content (required)
   - `title: string` - Source title (required)
 
-**Returns:** `Promise<string>` - Source ID
+**Returns:** `Promise<string | AddSourceResult>` - Source ID (string) if not chunked, or `AddSourceResult` if auto-chunked
 
 **Description:**
 Adds text content as a source. Useful for adding notes, research summaries, or any text-based content.
 
+**Auto-Chunking:**
+- If text exceeds 500,000 words, it's automatically split into chunks and uploaded in parallel
+- Each chunk is uploaded as a separate source (counts toward your source limit)
+- Returns `AddSourceResult` with chunk count and source IDs when chunked
+- Small texts (≤500k words) return a simple string (backward compatible)
+
+<details>
+<summary><strong>Auto-Chunking Details</strong></summary>
+
+- **Limit:** 500,000 words per source
+- **Behavior:** Large texts are automatically split into optimal chunks
+- **Upload:** All chunks are uploaded in parallel for faster processing
+- **Result:** Returns chunk metadata including number of chunks and all source IDs
+
+</details>
+
 **Usage:**
 ```typescript
+// Small text (returns string - backward compatible)
 const sourceId = await sdk.sources.add.text('notebook-id', {
   title: 'Research Notes',
   content: 'Key findings from research...',
 })
+
+// Large text (auto-chunked - returns AddSourceResult)
+const result = await sdk.sources.add.text('notebook-id', {
+  title: 'Large Document',
+  content: veryLongText, // > 500k words
+})
+if (typeof result === 'string') {
+  console.log(`Source ID: ${result}`)
+} else {
+  console.log(`Uploaded ${result.chunks?.length || 0} chunks`)
+  console.log(`Source IDs: ${result.allSourceIds?.join(', ')}`)
+}
 ```
 
 ---
@@ -1512,22 +1572,43 @@ const sourceId = await sdk.sources.add.text('notebook-id', {
   - `fileName: string` - File name (required)
   - `mimeType?: string` - MIME type (optional, auto-detected if not provided)
 
-**Returns:** `Promise<string>` - Source ID
+**Returns:** `Promise<string | AddSourceResult>` - Source ID (string) if not chunked, or `AddSourceResult` if auto-chunked
 
 **Description:**
 Adds a file (PDF, image, video, etc.) as a source. Supports files as Buffer or base64 string.
+
+**Auto-Chunking:**
+- Files exceeding 200MB or containing more than 500,000 words are automatically split into chunks
+- Text-based files (txt, md, csv, json, etc.): Chunked by word count (500k words per chunk)
+- Binary files: Chunked by size (200MB per chunk)
+- All chunks are uploaded in parallel for faster processing
+- Each chunk counts as a separate source toward your source limit
+- Small files return a simple string (backward compatible)
+
+<details>
+<summary><strong>Auto-Chunking Details</strong></summary>
+
+- **Size Limit:** 200MB per source
+- **Word Limit:** 500,000 words per source
+- **Text Files:** Automatically extracted and chunked by word count
+- **Binary Files:** Chunked by file size
+- **PDFs:** Chunked by size (text extraction requires a PDF library)
+- **Result:** Returns chunk metadata including number of chunks and all source IDs
+
+</details>
 
 **Supported File Types:**
 - PDF files
 - Image files (PNG, JPG, etc.)
 - Video files
+- Text files (txt, md, csv, json, etc.)
 - Other document types
 
 **Usage:**
 ```typescript
 import fs from 'fs'
 
-// From file buffer
+// Small file (returns string - backward compatible)
 const fileBuffer = fs.readFileSync('document.pdf')
 const sourceId = await sdk.sources.add.file('notebook-id', {
   content: fileBuffer,
@@ -1535,12 +1616,18 @@ const sourceId = await sdk.sources.add.file('notebook-id', {
   mimeType: 'application/pdf',
 })
 
-// From base64 string
-const base64Content = fileBuffer.toString('base64')
-const sourceId = await sdk.sources.add.file('notebook-id', {
-  content: base64Content,
-  fileName: 'document.pdf',
+// Large file (auto-chunked - returns AddSourceResult)
+const largeFileBuffer = fs.readFileSync('large-document.pdf')
+const result = await sdk.sources.add.file('notebook-id', {
+  content: largeFileBuffer, // > 200MB or > 500k words
+  fileName: 'large-document.pdf',
 })
+if (typeof result === 'string') {
+  console.log(`Source ID: ${result}`)
+} else {
+  console.log(`Uploaded ${result.chunks?.length || 0} chunks`)
+  console.log(`Source IDs: ${result.allSourceIds?.join(', ')}`)
+}
 ```
 
 ---

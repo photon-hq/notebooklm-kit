@@ -11,7 +11,8 @@ async function main() {
     console.log('=== Adding Text Source ===\n');
 
     // Add text source
-    const sourceId = await sdk.sources.add.text(notebookId, {
+    // Note: Large texts (>500k words) are automatically chunked and uploaded in parallel
+    const result = await sdk.sources.add.text(notebookId, {
       title: 'Research Notes',
       content: `
 # Research Notes
@@ -28,8 +29,15 @@ async function main() {
 - Paper 2: "Transfer Learning Techniques"
       `.trim(),
     });
-    console.log(`Added text source`);
-    console.log(`Source ID: ${sourceId}\n`);
+    
+    if (typeof result === 'string') {
+      console.log(`Added text source`);
+      console.log(`Source ID: ${result}\n`);
+    } else {
+      console.log(`Added text source (auto-chunked)`);
+      console.log(`Uploaded ${result.chunks?.length || 0} chunks`);
+      console.log(`Source IDs: ${result.allSourceIds?.join(', ')}\n`);
+    }
 
     // Check processing status
     const status = await sdk.sources.status(notebookId);
