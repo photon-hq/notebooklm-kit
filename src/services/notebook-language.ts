@@ -129,20 +129,21 @@ export class NotebookLanguageService {
     }
     
     try {
-      // Based on mm55.txt, the RPC call structure is:
       // RPC: hT54vc (MutateAccount)
-      // Args: [[null, [[null, null, null, null, ["en"]]]]]
-      // The language code is in a nested array at the end
+      // Captured from browser (2026-03-02):
+      //   f.req args string = [[[null,[[null,null,null,null,["en"]]]]]]
       const args = [
         [
-          null,
           [
+            null,
             [
-              null,
-              null,
-              null,
-              null,
-              [normalizedLang] // Language code in array
+              [
+                null,
+                null,
+                null,
+                null,
+                [normalizedLang]
+              ]
             ]
           ]
         ]

@@ -39,6 +39,7 @@ export type { InfographicImageData, FetchInfographicOptions } from './services/a
 // Types
 export type {
   NotebookLMConfig,
+  TransportLocaleSettings,
   RPCCall,
   RPCResponse,
   BatchExecuteConfig,
@@ -149,6 +150,8 @@ export type {
 export {
   ArtifactType,
   ArtifactState,
+  SlideDeckFormat,
+  SlideDeckLength,
 } from './types/artifact.js';
 
 // RPC methods (for advanced use)
@@ -161,8 +164,12 @@ export type { RPCClientConfig } from './rpc/rpc-client.js';
 // Batch execute client (for advanced use)
 export { BatchExecuteClient } from './utils/batch-execute.js';
 
+// Page metadata extraction (for advanced use — bl / f.sid rotation)
+export { extractPageMetadata } from './utils/page-metadata.js';
+export type { PageMetadata } from './utils/page-metadata.js';
+
 // Error utilities (for advanced use)
-export { 
+export {
   ErrorType,
   APIError,
   getErrorCode,
@@ -201,4 +208,3 @@ export {
   PLAN_LIMITS,
 } from './utils/quota.js';
 export type { UsageData, NotebookLMPlan, PlanLimits } from './utils/quota.js';
-

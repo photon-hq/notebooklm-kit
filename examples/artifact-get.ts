@@ -1,4 +1,4 @@
-import { createSDK, handleError } from './utils.js';
+import { createSDK, handleError, resolveDevAuthUser } from './utils.js';
 import { ArtifactType, ArtifactState } from '../src/types/artifact.js';
 import * as readline from 'readline';
 import { fileURLToPath } from 'url';
@@ -8,6 +8,25 @@ import * as RPC from '../src/rpc/rpc-methods.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PROJECT_ROOT = join(__dirname, '..');
+const AUTH_USER = resolveDevAuthUser();
+
+function ensureAuthUser(url: string): string {
+  if (!url) {
+    return url;
+  }
+
+  const normalized = url.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&').replace(/\\u002f/g, '/');
+  try {
+    const parsedUrl = new URL(normalized);
+    parsedUrl.searchParams.set('authuser', AUTH_USER);
+    return parsedUrl.toString();
+  } catch {
+    if (normalized.includes('authuser=')) {
+      return normalized.replace(/([?&])authuser=[^&#]*/i, `$1authuser=${AUTH_USER}`);
+    }
+    return `${normalized}${normalized.includes('?') ? '&' : '?'}authuser=${AUTH_USER}`;
+  }
+}
 
 /**
  * Prompt user for input
@@ -111,11 +130,7 @@ function extractSlideUrlsFromArtifact(artifact: any, targetArtifactId?: string, 
           typeof obj[2] === 'number') {
         let url = String(obj[0]);
         url = url.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&').replace(/\\u002f/g, '/');
-        if (!url.includes('?')) {
-          url += '?authuser=0';
-        } else if (!url.includes('authuser=0')) {
-          url += '&authuser=0';
-        }
+        url = ensureAuthUser(url);
         if (!urls.includes(url) && (url.includes('=w') || url.includes('=s'))) {
           urls.push(url);
         }
@@ -130,12 +145,7 @@ function extractSlideUrlsFromArtifact(artifact: any, targetArtifactId?: string, 
         searchForSlides(value, depth + 1);
       }
     } else if (typeof obj === 'string' && obj.includes('lh3.googleusercontent.com/notebooklm') && (obj.includes('=w') || obj.includes('=s'))) {
-      let url = obj.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&');
-      if (!url.includes('?')) {
-        url += '?authuser=0';
-      } else if (!url.includes('authuser=0')) {
-        url += '&authuser=0';
-      }
+      const url = ensureAuthUser(obj.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&'));
       if (!urls.includes(url)) {
         urls.push(url);
       }
@@ -506,4 +516,3 @@ async function main() {
 }
 
 main().catch(console.error);
-

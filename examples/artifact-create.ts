@@ -151,8 +151,8 @@ async function main() {
     //   title: 'Presentation Slides',
     //   instructions: 'Create a comprehensive presentation',
     //   customization: {
-    //     format: 2, // 2=Presenter slides, 3=Detailed deck
-    //     length: 2, // 1=Short, 2=Default, 3=Long
+    //     format: 'detailed', // 1/'detailed'=Detailed, 2/'presenter'=Presenter
+    //     length: 'default', // 1/'short'=Short, 3/'default'=Default
     //     language: NotebookLMLanguage.ENGLISH, // Optional: overrides notebook default
     //     // If language is omitted, will use notebook's default language
     //   },
@@ -252,4 +252,3 @@ async function main() {
 }
 
 main().catch(console.error);
-

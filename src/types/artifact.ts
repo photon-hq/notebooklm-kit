@@ -18,6 +18,7 @@ export { NotebookLMLanguage, getLanguageInfo, isLanguageSupported, COMMON_LANGUA
  * - `SLIDE_DECK` (9) - Presentation slides
  * - `AUDIO` (10) - Audio overview/podcast
  * - `VIDEO` (11) - Video overview
+ * - `DATA_TABLE` (12) - Structured data tables
  */
 export enum ArtifactType {
   UNKNOWN = 0,
@@ -29,6 +30,7 @@ export enum ArtifactType {
   SLIDE_DECK = 9,
   AUDIO = 10,  // Audio overview (podcast)
   VIDEO = 11,  // Video overview
+  DATA_TABLE = 12, // Structured data tables
 }
 
 /**
@@ -39,6 +41,28 @@ export enum ArtifactState {
   CREATING = 1,
   READY = 2,
   FAILED = 3,
+}
+
+/**
+ * Named slide format values used by NotebookLM slide customization.
+ *
+ * - `DETAILED` = 1 (UI: 「詳細なスライド」)
+ * - `PRESENTER` = 2 (UI: 「プレゼンターのスライド」)
+ */
+export enum SlideDeckFormat {
+  DETAILED = 1,
+  PRESENTER = 2,
+}
+
+/**
+ * Named slide length values used by NotebookLM slide customization.
+ *
+ * - `SHORT` = 1 (UI: 「短め」)
+ * - `DEFAULT` = 3 (UI: 「デフォルト」)
+ */
+export enum SlideDeckLength {
+  SHORT = 1,
+  DEFAULT = 3,
 }
 
 /**
@@ -111,14 +135,68 @@ export interface FlashcardCustomization {
  * Slide deck customization options
  */
 export interface SlideDeckCustomization {
-  /** Format: 2=Presenter slides, 3=Detailed deck (default: 2) */
-  format?: 2 | 3;
+  /**
+   * Slide format.
+   * - `SlideDeckFormat.DETAILED` / `'detailed'` / `1` = Detailed deck (default)
+   * - `SlideDeckFormat.PRESENTER` / `'presenter'` / `2` = Presenter slides
+   * - `3` is accepted as a legacy alias and mapped to detailed
+   */
+  format?: SlideDeckFormat | 'detailed' | 'presenter' | 1 | 2 | 3;
   
   /** Language code (use NotebookLMLanguage enum or ISO 639-1 code, e.g., 'en') */
   language?: string;
   
-  /** Length: 1=Short (5-10 slides), 2=Default (10-15 slides) (default: 2) */
-  length?: 1 | 2;
+  /**
+   * Slide length.
+   * - `SlideDeckLength.SHORT` / `'short'` / `1` = Short
+   * - `SlideDeckLength.DEFAULT` / `'default'` / `3` = Default (10-15 slides, default)
+   * - `2` is accepted as a legacy alias and mapped to default
+   */
+  length?: SlideDeckLength | 'short' | 'default' | 1 | 2 | 3;
+
+  /** Direct equivalent of the slide customization textarea ("作成するスライドについて説明してください") */
+  description?: string;
+
+  /** Optional deck summary/overview requirement */
+  summary?: string;
+
+  /** Optional audience profile (legacy alias: targetAudience) */
+  audience?: string;
+
+  /** Optional audience profile (e.g., "executive team", "new hires", "engineering leads") */
+  targetAudience?: string;
+
+  /** Optional desired outcome for the presentation */
+  presentationGoal?: string;
+
+  /** Optional style guidance (legacy alias: tone) */
+  style?: string;
+
+  /** Optional tone/style guidance (e.g., "data-driven", "storytelling", "technical") */
+  tone?: string;
+
+  /** Speaker notes style preference: 'none' | 'concise' | 'detailed' */
+  speakerNotesStyle?: 'none' | 'concise' | 'detailed';
+
+  /**
+   * Optional ordered slide plan (title + intent + key points).
+   * SDK converts this into structured generation instructions.
+   */
+  sections?: Array<{
+    title: string;
+    objective?: string;
+    keyPoints?: string[];
+    visualDirection?: string;
+  }>;
+
+  /** Required concepts or facts that must appear in the deck */
+  mustInclude?: string[];
+
+  /** Priority points (from customization hint text's "ポイント") */
+  points?: string[];
+
+  /** Concepts or claims to explicitly avoid */
+  mustAvoid?: string[];
 }
 
 /**
@@ -192,6 +270,23 @@ export interface VideoCustomization {
 }
 
 /**
+ * Data table customization options
+ *
+ * Note:
+ * - NotebookLM UI exposes language + free-text prompt + detail level for Data Table.
+ */
+export interface DataTableCustomization {
+  /** Language code (use NotebookLMLanguage enum or ISO 639-1 code, e.g., 'en') */
+  language?: string;
+
+  /** Optional free-text steering prompt shown in NotebookLM's Data Table customization UI */
+  userSteeringPrompt?: string;
+
+  /** Detail level: 1=Concise, 2=Standard, 3=Detailed (default: 2) */
+  detailLevel?: 1 | 2 | 3;
+}
+
+/**
  * Options for creating artifacts
  * 
  * **Source Selection:**
@@ -209,6 +304,7 @@ export interface VideoCustomization {
  * - Infographic (ArtifactType.INFOGRAPHIC)
  * - Audio (ArtifactType.AUDIO)
  * - Video (ArtifactType.VIDEO)
+ * - Data Table (ArtifactType.DATA_TABLE)
  * 
  * For other artifact types (Study Guide, Mind Map, Report, Document), customization is not supported.
  */
@@ -218,6 +314,15 @@ export interface CreateArtifactOptions {
   
   /** Custom instructions */
   instructions?: string;
+
+  /**
+   * Slide design template text (SLIDE_DECK only).
+   *
+   * When provided for `ArtifactType.SLIDE_DECK`, this template is appended to
+   * the slide instructions using a deterministic merge order:
+   * 1) language lock, 2) `instructions`, 3) `slideDesignTemplate`.
+   */
+  slideDesignTemplate?: string;
   
   /** 
    * Source IDs to use for artifact generation
@@ -246,7 +351,7 @@ export interface CreateArtifactOptions {
    * Customization options (only supported for Quiz, Flashcards, Slide Deck, Infographic, Audio, Video)
    * Must match the artifact type being created
    */
-  customization?: QuizCustomization | FlashcardCustomization | SlideDeckCustomization | InfographicCustomization | AudioCustomization | VideoCustomization;
+  customization?: QuizCustomization | FlashcardCustomization | SlideDeckCustomization | InfographicCustomization | AudioCustomization | VideoCustomization | DataTableCustomization;
 }
 
 /**
@@ -299,4 +404,3 @@ export interface VideoArtifact extends Artifact {
   videoData: string; // URL or base64 encoded video data
   status?: string;
 }
-

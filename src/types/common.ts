@@ -32,6 +32,16 @@ export interface NotebookLMConfig {
    * Use '1' or '2' if you have multiple Google accounts signed in
    */
   authUser?: string;
+
+  /**
+   * Locale preference for transport language settings.
+   *
+   * - `'auto'` (default): infer locale from `NOTEBOOKLM_LOCALE`, then system locale (`LC_ALL`, `LC_MESSAGES`, `LANG`)
+   * - BCP47-like tag (e.g. `ja-JP`, `en-US`): force locale
+   *
+   * This controls default `hl` query param and `Accept-Language` header.
+   */
+  locale?: string;
   
   /** Custom HTTP headers */
   headers?: Record<string, string>;
@@ -132,6 +142,20 @@ export interface BatchExecuteConfig {
   maxRetries?: number;
   retryDelay?: number;
   retryMaxDelay?: number;
+}
+
+/**
+ * Resolved transport locale settings used for requests.
+ */
+export interface TransportLocaleSettings {
+  /** Canonical locale tag (BCP47-ish), e.g. ja-JP, en-US */
+  effectiveLocale: string;
+  /** Which source determined the locale */
+  localeSource: 'config' | 'env' | 'system' | 'default';
+  /** NotebookLM hl query value (language subtag), e.g. ja, en */
+  hl: string;
+  /** Accept-Language header value */
+  acceptLanguage: string;
 }
 
 /**
@@ -275,4 +299,3 @@ export interface ChatResponseData {
  * Re-exported from streaming-client for convenience
  */
 export type { StreamChunk } from '../utils/streaming-client.js';
-

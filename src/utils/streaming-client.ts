@@ -93,8 +93,6 @@ interface ParsedChunk {
 export class StreamingClient {
   private config: RPCClientConfig;
   private requestCounter: number = 3114440;
-  private buffer: string = '';
-  private chunkCount: number = 0;
 
   constructor(config: RPCClientConfig) {
     this.config = config;
@@ -113,14 +111,6 @@ export class StreamingClient {
    */
   private logError(_message: string): void {
     // Debug logging disabled
-  }
-
-  /**
-   * Reset parser state for new stream
-   */
-  private reset(): void {
-    this.buffer = '';
-    this.chunkCount = 0;
   }
 
   /**
@@ -172,8 +162,8 @@ export class StreamingClient {
       }
 
       const decoder = new TextDecoder();
-      this.reset();
-
+      let buffer = '';
+      let chunkCount = 0;
       let totalBytesReceived = 0;
       let chunkIndex = 0;
 
@@ -186,8 +176,8 @@ export class StreamingClient {
         const { done, value } = await reader.read();
 
         if (done) {
-          if (this.config.debug && this.buffer.length > 0) {
-            this.log(`\n📥 Stream ended, buffer has ${this.buffer.length} bytes remaining`);
+          if (this.config.debug && buffer.length > 0) {
+            this.log(`\n📥 Stream ended, buffer has ${buffer.length} bytes remaining`);
           }
 
           // Decode any remaining data from decoder
@@ -195,7 +185,7 @@ export class StreamingClient {
             const remainingDecoded = decoder.decode(undefined, { stream: false });
             if (remainingDecoded) {
               totalBytesReceived += remainingDecoded.length;
-              this.buffer += remainingDecoded;
+              buffer += remainingDecoded;
               if (this.config.debug) {
                 this.log(`📥 Decoded ${remainingDecoded.length} remaining bytes from decoder`);
               }
@@ -210,11 +200,13 @@ export class StreamingClient {
           const MAX_DRAIN_ITERATIONS = 100;
 
           if (this.config.debug) {
-            this.log(`\n🔄 Starting aggressive buffer drain (buffer size: ${this.buffer.length} bytes)`);
+            this.log(`\n🔄 Starting aggressive buffer drain (buffer size: ${buffer.length} bytes)`);
           }
 
           while (drainIterations < MAX_DRAIN_ITERATIONS) {
-            const chunks = this.extractCompleteFrames();
+            const extracted = this.extractCompleteFrames(buffer);
+            const chunks = extracted.frames;
+            buffer = extracted.buffer;
 
             if (chunks.length === 0) {
               // No more complete frames found
@@ -226,8 +218,8 @@ export class StreamingClient {
             }
 
             for (const parsed of chunks) {
-              this.chunkCount++;
-              const streamChunk = this.createStreamChunk(parsed);
+              chunkCount++;
+              const streamChunk = this.createStreamChunk(parsed, chunkCount);
 
               if (options?.onChunk) {
                 options.onChunk(streamChunk);
@@ -241,9 +233,9 @@ export class StreamingClient {
 
           if (this.config.debug) {
             this.log(`\n✅ Buffer drain complete after ${drainIterations} iterations`);
-            this.log(`   Final buffer size: ${this.buffer.length} bytes`);
-            if (this.buffer.length > 0) {
-              this.log(`   Remaining buffer: ${this.buffer.substring(0, 200)}`);
+            this.log(`   Final buffer size: ${buffer.length} bytes`);
+            if (buffer.length > 0) {
+              this.log(`   Remaining buffer: ${buffer.substring(0, 200)}`);
             }
           }
 
@@ -254,20 +246,22 @@ export class StreamingClient {
         if (value && value.length > 0) {
           const newData = decoder.decode(value, { stream: true });
           totalBytesReceived += value.length;
-          this.buffer += newData;
+          buffer += newData;
 
           if (this.config.debug) {
             this.log(`\n📥 Received chunk #${++chunkIndex}: ${value.length} bytes (total: ${totalBytesReceived} bytes)`);
           }
 
           // Extract and yield complete frames from buffer
-          const chunks = this.extractCompleteFrames();
+          const extracted = this.extractCompleteFrames(buffer);
+          const chunks = extracted.frames;
+          buffer = extracted.buffer;
           for (const parsed of chunks) {
-            this.chunkCount++;
-            const streamChunk = this.createStreamChunk(parsed);
+            chunkCount++;
+            const streamChunk = this.createStreamChunk(parsed, chunkCount);
 
             if (this.config.debug) {
-              this.log(`\n📦 Parsed Chunk #${this.chunkCount}:`);
+              this.log(`\n📦 Parsed Chunk #${chunkCount}:`);
               this.log(`   Text Length: ${parsed.text?.length || 0}`);
               this.log(`   Citations: [${parsed.citations?.join(', ') || 'none'}]`);
             }
@@ -282,7 +276,7 @@ export class StreamingClient {
       }
 
       if (this.config.debug) {
-        this.log(`\n✅ Stream complete: ${this.chunkCount} chunks received, ${totalBytesReceived} total bytes`);
+        this.log(`\n✅ Stream complete: ${chunkCount} chunks received, ${totalBytesReceived} total bytes`);
       }
     } catch (error) {
       if (this.config.debug) {
@@ -296,41 +290,42 @@ export class StreamingClient {
    * Extract all complete frames from buffer
    * This is the core buffer processing logic - simplified and foolproof
    */
-  private extractCompleteFrames(): ParsedChunk[] {
+  private extractCompleteFrames(inputBuffer: string): { frames: ParsedChunk[]; buffer: string } {
     const frames: ParsedChunk[] = [];
+    let buffer = inputBuffer;
 
     // Remove XSSI prefix if present
-    if (this.buffer.startsWith(")]}'")) {
-      this.buffer = this.buffer.substring(4).trimStart();
+    if (buffer.startsWith(")]}'")) {
+      buffer = buffer.substring(4).trimStart();
     }
 
     // Keep extracting frames until buffer is exhausted
     let iterations = 0;
     const MAX_ITERATIONS = 1000;
 
-    while (this.buffer.length > 0 && iterations < MAX_ITERATIONS) {
+    while (buffer.length > 0 && iterations < MAX_ITERATIONS) {
       iterations++;
 
       // Trim leading whitespace
-      this.buffer = this.buffer.trimStart();
+      buffer = buffer.trimStart();
 
-      if (this.buffer.length === 0) {
+      if (buffer.length === 0) {
         break;
       }
 
       // Look for byte count pattern: digits followed by newline
-      const byteCountMatch = this.buffer.match(/^(\d+)\n/);
+      const byteCountMatch = buffer.match(/^(\d+)\n/);
 
       if (!byteCountMatch) {
         // No valid frame header at start - try to find next frame
-        const nextFrameMatch = this.buffer.match(/(\d+)\n\[\["wrb\.fr"/);
+        const nextFrameMatch = buffer.match(/(\d+)\n\[\["wrb\.fr"/);
 
         if (nextFrameMatch && nextFrameMatch.index !== undefined && nextFrameMatch.index > 0) {
           // Skip invalid content before next frame
           if (this.config.debug) {
             this.log(`⚠️  Skipping ${nextFrameMatch.index} bytes of invalid content`);
           }
-          this.buffer = this.buffer.substring(nextFrameMatch.index);
+          buffer = buffer.substring(nextFrameMatch.index);
           continue;
         } else {
           // No more frames found
@@ -343,16 +338,16 @@ export class StreamingClient {
       const requiredLength = headerLength + byteCount;
 
       // Check if we have the complete frame
-      if (this.buffer.length < requiredLength) {
+      if (buffer.length < requiredLength) {
         // Incomplete frame - wait for more data
         if (this.config.debug) {
-          this.log(`⏳ Incomplete frame: need ${requiredLength} bytes, have ${this.buffer.length} bytes`);
+          this.log(`⏳ Incomplete frame: need ${requiredLength} bytes, have ${buffer.length} bytes`);
         }
         break;
       }
 
       // Extract the complete frame
-      const frameText = this.buffer.substring(headerLength, requiredLength);
+      const frameText = buffer.substring(headerLength, requiredLength);
 
       // Parse the frame
       try {
@@ -376,10 +371,10 @@ export class StreamingClient {
       }
 
       // ALWAYS remove the frame from buffer (even if parsing failed)
-      this.buffer = this.buffer.substring(requiredLength).trimStart();
+      buffer = buffer.substring(requiredLength).trimStart();
     }
 
-    return frames;
+    return { frames, buffer };
   }
 
   /**
@@ -559,9 +554,9 @@ export class StreamingClient {
   /**
    * Create StreamChunk from ParsedChunk
    */
-  private createStreamChunk(parsed: ParsedChunk): StreamChunk {
+  private createStreamChunk(parsed: ParsedChunk, chunkNumber: number): StreamChunk {
     return {
-      chunkNumber: this.chunkCount,
+      chunkNumber,
       byteCount: parsed.byteCount,
       text: parsed.text || '',
       thinking: parsed.thinking || [],

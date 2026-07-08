@@ -16,9 +16,7 @@ export class NotebooksService {
     // Args format: [null, 1, null, [2]]
     const args = [null, 1, null, [2]];
     const response = await this.rpc.call(RPC.RPC_LIST_MY_NOTEBOOKS, args);
-    const notebooks = this.parseListResponse(response);
-    // Filter out "OpenStax's Biology" notebook (not in user's expected list)
-    return notebooks.filter(nb => !nb.title.includes("OpenStax's Biology"));
+    return this.parseListResponse(response);
   }
   
   async get(notebookId: string): Promise<Notebook> {
@@ -490,8 +488,8 @@ export class NotebooksService {
         responseStr = JSON.stringify(response);
       }
       
-      // Enable debug mode for notebook list parsing (can be disabled with NOTEBOOKLM_DEBUG=false)
-      const debugMode = process.env.NOTEBOOKLM_DEBUG !== 'false';
+      // Enable debug mode for notebook list parsing only when explicitly requested
+      const debugMode = process.env.NOTEBOOKLM_DEBUG === 'true';
       const parser = createChunkedParser(responseStr, debugMode);
       const projects = parser.parseListProjectsResponse();
       return projects.map((p: any) => ({
@@ -695,4 +693,3 @@ export class NotebooksService {
     }
   }
 }
-

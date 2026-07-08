@@ -115,9 +115,26 @@ export interface FlashcardCustomization {
 }
 
 export interface SlideDeckCustomization {
-  format?: 2 | 3;
+  format?: 1 | 2 | 3 | 'detailed' | 'presenter';
   language?: string;
-  length?: 1 | 2 | 3;
+  length?: 1 | 2 | 3 | 'short' | 'default';
+  description?: string;
+  summary?: string;
+  audience?: string;
+  targetAudience?: string;
+  presentationGoal?: string;
+  style?: string;
+  tone?: string;
+  speakerNotesStyle?: 'none' | 'concise' | 'detailed';
+  sections?: Array<{
+    title: string;
+    objective?: string;
+    keyPoints?: string[];
+    visualDirection?: string;
+  }>;
+  mustInclude?: string[];
+  points?: string[];
+  mustAvoid?: string[];
 }
 
 export interface InfographicCustomization {
@@ -140,11 +157,18 @@ export interface VideoCustomization {
   customStyleDescription?: string;
 }
 
+export interface DataTableCustomization {
+  language?: string;
+  userSteeringPrompt?: string;
+  detailLevel?: 1 | 2 | 3;
+}
+
 export interface CreateArtifactOptions {
   title?: string;
   instructions?: string;
+  slideDesignTemplate?: string;
   sourceIds?: string[];
-  customization?: QuizCustomization | FlashcardCustomization | SlideDeckCustomization | InfographicCustomization | AudioCustomization | VideoCustomization;
+  customization?: QuizCustomization | FlashcardCustomization | SlideDeckCustomization | InfographicCustomization | AudioCustomization | VideoCustomization | DataTableCustomization;
 }
 
 export interface QuizQuestion {
@@ -208,8 +232,8 @@ export interface DownloadSlidesOptions {
 }
 
 export interface GetSlideOptions {
-  /** Download format: 'pdf' (default) or 'png' */
-  downloadAs?: 'pdf' | 'png';
+  /** Download format: 'pdf' (default), 'png', or 'pptx' */
+  downloadAs?: 'pdf' | 'png' | 'pptx';
   /** Output directory path (required for slides) */
   outputPath: string;
 }
@@ -330,6 +354,14 @@ class SlideService {
   }
 }
 
+class DataTableService {
+  constructor(private artifactsService: ArtifactsService) {}
+
+  async create(notebookId: string, options: CreateArtifactOptions = {}): Promise<Artifact> {
+    return this.artifactsService.create(notebookId, ArtifactType.DATA_TABLE, options);
+  }
+}
+
 export class ArtifactsService {
   public readonly video: VideoService;
   public readonly audio: AudioService;
@@ -339,6 +371,7 @@ export class ArtifactsService {
   public readonly flashcard: FlashcardService;
   public readonly quiz: QuizService;
   public readonly slide: SlideService;
+  public readonly datatable: DataTableService;
   
   private notebookLanguageService: NotebookLanguageService;
   
@@ -354,6 +387,7 @@ export class ArtifactsService {
     this.flashcard = new FlashcardService(this);
     this.quiz = new QuizService(this);
     this.slide = new SlideService(this);
+    this.datatable = new DataTableService(this);
     this.notebookLanguageService = new NotebookLanguageService(this.rpc);
   }
   
@@ -931,9 +965,61 @@ export class ArtifactsService {
             throw new NotebookLMError('Cookies are required for slide downloads. Ensure the RPC client has cookies configured.');
           }
           
-          // Get artifact list response to extract image URLs
-              const artifactsListResponse = await this.rpc.call(RPC.RPC_LIST_ARTIFACTS, [[2], notebookId], notebookId);
-          const imageUrls = extractSlideImageUrls(artifactsListResponse, artifactId);
+          const downloadFormat = slideOptions.downloadAs || 'pdf';
+
+          // Get artifact list response to extract download URLs
+          const artifactsListResponse = await this.rpc.call(RPC.RPC_LIST_ARTIFACTS, [[2], notebookId], notebookId);
+
+          // PPTX path uses direct file download from contribution.usercontent URL
+          if (downloadFormat === 'pptx') {
+            let pptxUrl: string | null = null;
+
+            if (Array.isArray(artifactsListResponse)) {
+              for (const artifactEntry of artifactsListResponse) {
+                if (Array.isArray(artifactEntry) && artifactEntry.length > 0 && artifactEntry[0] === artifactId) {
+                  pptxUrl = extractPptxUrl(artifactEntry);
+                  if (pptxUrl) break;
+                }
+              }
+            }
+
+            if (!pptxUrl) {
+              pptxUrl = extractPptxUrl(artifactsListResponse);
+            }
+
+            if (!pptxUrl) {
+              throw new NotebookLMError('No PPTX download URL found. The slide deck may not be ready yet.');
+            }
+
+            const normalizedPptxUrl = normalizePdfUrl(pptxUrl, getRpcAuthUser(this.rpc));
+            const pptxData = await downloadFileFromUrl(normalizedPptxUrl, rpcCookies);
+
+            const fsModule: any = await import('fs/promises').catch(() => null);
+            if (!fsModule?.writeFile) {
+              throw new NotebookLMError('File system access not available');
+            }
+
+            const pathModule = await import('path');
+            await fsModule.mkdir(slideOptions.outputPath, { recursive: true });
+
+            const sanitizedTitle = (artifact.title || 'slides').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            const pptxPath = pathModule.join(slideOptions.outputPath, `${sanitizedTitle}.pptx`);
+            await fsModule.writeFile(pptxPath, Buffer.from(pptxData));
+
+            return {
+              ...artifact,
+              downloadPath: pptxPath,
+              downloadFormat: 'pptx',
+              downloadUrl: normalizedPptxUrl,
+            };
+          }
+
+          // PDF/PNG path uses rendered slide images
+          const imageUrls = extractSlideImageUrls(
+            artifactsListResponse,
+            artifactId,
+            getRpcAuthUser(this.rpc)
+          );
           
           if (imageUrls.length === 0) {
             throw new NotebookLMError('No slide image URLs found. The slide deck may not be ready yet.');
@@ -943,7 +1029,6 @@ export class ArtifactsService {
           const images = await downloadSlideImages(imageUrls, rpcCookies);
           
           // Save as PDF (default) or PNG
-          const downloadFormat = slideOptions.downloadAs || 'pdf';
           const result = await saveSlideImages(
             images,
             slideOptions.outputPath,
@@ -1004,7 +1089,7 @@ export class ArtifactsService {
    * **Customization Options by Type:**
    * 
    * **Note:** Customization is only supported for the following artifact types:
-   * Quiz, Flashcards, Slide Deck, Infographic, Audio, Video.
+   * Quiz, Flashcards, Slide Deck, Infographic, Audio, Video, Data Table.
    * 
    * Other artifact types (Mind Map, Report) do not support customization.
    * 
@@ -1037,15 +1122,16 @@ export class ArtifactsService {
    * - `instructions` (string, optional): Custom instructions for topic focus
    * 
    * **Slide Deck (`SlideDeckCustomization`):**
-   * - `customization.format` (2 | 3, optional): Presentation format
-   *   - `2` = Presenter slides (default)
-   *   - `3` = Detailed deck
+   * - `customization.format` (1 | 2 | 3 | 'detailed' | 'presenter', optional): Presentation format
+   *   - `1` or `'detailed'` = Detailed deck (UI default)
+   *   - `2` or `'presenter'` = Presenter slides
+   *   - `3` = Legacy alias mapped to Detailed deck
    * - `customization.language` (string, optional): Language code (use NotebookLMLanguage enum or ISO 639-1 code, e.g., 'en')
  *   - NotebookLM supports 80+ languages for slide decks
-   * - `customization.length` (1 | 2 | 3, optional): Length preference
-   *   - `1` = Short
-   *   - `2` = Default (default)
-   *   - `3` = Long
+   * - `customization.length` (1 | 2 | 3 | 'short' | 'default', optional): Length preference
+   *   - `1` or `'short'` = Short
+   *   - `3` or `'default'` = Default (10-15 slides, UI default)
+   *   - `2` = Legacy alias mapped to Default
    * - `instructions` (string, optional): Used as description/theme for the presentation
    * 
    * **Infographic (`InfographicCustomization`):**
@@ -1183,9 +1269,9 @@ export class ArtifactsService {
    *   title: 'Quarterly Report',
    *   instructions: 'Focus on revenue and growth metrics',
    *   customization: {
-   *     format: 3, // Detailed deck
+   *     format: 'detailed', // Detailed deck (or SlideDeckFormat.DETAILED)
    *     language: NotebookLMLanguage.SPANISH, // or 'es'
-   *     length: 2, // Default
+   *     length: 'default', // Default length (or SlideDeckLength.DEFAULT)
    *   },
    * });
    * 
@@ -1204,7 +1290,7 @@ export class ArtifactsService {
    *   customization: {
    *     format: 0, // Deep dive
    *     language: NotebookLMLanguage.FRENCH, // or 'fr' - supports 80+ languages
-   *     length: 2, // Default
+   *     length: 'default', // Default
    *   },
    * });
    * 
@@ -1258,15 +1344,16 @@ export class ArtifactsService {
       ArtifactType.INFOGRAPHIC,
       ArtifactType.AUDIO,
       ArtifactType.VIDEO,
+      ArtifactType.DATA_TABLE,
     ];
     
     if (options.customization && !supportedCustomizationTypes.includes(type)) {
       throw new NotebookLMError(
         `Customization is not supported for artifact type ${type}. ` +
-        `Customization is only supported for: Quiz, Flashcards, Slide Deck, Infographic, Audio, Video.`
+        `Customization is only supported for: Quiz, Flashcards, Slide Deck, Infographic, Audio, Video, Data Table.`
       );
     }
-    
+
     // If sourceIds is omitted or empty, fetch all sources from the notebook
     let sourceIds = options.sourceIds || [];
     if (sourceIds.length === 0) {
@@ -1292,8 +1379,8 @@ export class ArtifactsService {
     // Mind Map uses yyryJe (RPC_ACT_ON_SOURCES) with special structure
     if (type === ArtifactType.MIND_MAP) {
       artifact = await this.createMindMap(notebookId, options);
-    } else if (type === ArtifactType.AUDIO || type === ArtifactType.VIDEO || type === ArtifactType.QUIZ || type === ArtifactType.FLASHCARDS || type === ArtifactType.SLIDE_DECK || type === ArtifactType.INFOGRAPHIC || type === ArtifactType.REPORT) {
-      // Audio, Video, Quiz, Flashcards, Slides, Infographics, and Reports all use R7cb6c
+    } else if (type === ArtifactType.AUDIO || type === ArtifactType.VIDEO || type === ArtifactType.QUIZ || type === ArtifactType.FLASHCARDS || type === ArtifactType.SLIDE_DECK || type === ArtifactType.INFOGRAPHIC || type === ArtifactType.REPORT || type === ArtifactType.DATA_TABLE) {
+      // Audio, Video, Quiz, Flashcards, Slides, Infographics, Reports, and Data Tables all use R7cb6c
       artifact = await this.createR7cb6cArtifact(notebookId, type, options);
     } else {
       // Other artifacts use xpWGLf
@@ -1506,7 +1593,11 @@ export class ArtifactsService {
       
       // Get artifact list response to extract image URLs
       const artifactsListResponse = await this.rpc.call(RPC.RPC_LIST_ARTIFACTS, [[2], notebookId], notebookId);
-      const imageUrls = extractSlideImageUrls(artifactsListResponse, artifactId);
+      const imageUrls = extractSlideImageUrls(
+        artifactsListResponse,
+        artifactId,
+        getRpcAuthUser(this.rpc)
+      );
       
       if (imageUrls.length === 0) {
         throw new NotebookLMError('No slide image URLs found. The slide deck may not be ready yet.');
@@ -1563,6 +1654,8 @@ export class ArtifactsService {
         return 7;
       case ArtifactType.SLIDE_DECK:
         return 8;
+      case ArtifactType.DATA_TABLE:
+        return 9;
       case ArtifactType.VIDEO:
         return 3;
       case ArtifactType.AUDIO:
@@ -1810,6 +1903,8 @@ export class ArtifactsService {
         return ArtifactType.INFOGRAPHIC;
       case 8:
         return ArtifactType.SLIDE_DECK;
+      case 9:
+        return ArtifactType.DATA_TABLE;
       case 10:
         return ArtifactType.AUDIO;
       case 11:
@@ -1821,14 +1916,14 @@ export class ArtifactsService {
   }
   
   /**
-   * Create artifacts using R7cb6c RPC (Quiz, Slides, Infographics, Video)
+   * Create artifacts using R7cb6c RPC (Quiz, Slides, Infographics, Video, Data Table)
    */
   private async createR7cb6cArtifact(
     notebookId: string,
     artifactType: ArtifactType,
     options: CreateArtifactOptions
   ): Promise<Artifact> {
-    const { instructions = '', sourceIds = [], customization } = options;
+    const { instructions = '', slideDesignTemplate, sourceIds = [], customization } = options;
     const apiType = this.getApiTypeNumber(artifactType);
     
     // Format source IDs as nested arrays: [[[sourceId1]], [[sourceId2]]]
@@ -1839,14 +1934,16 @@ export class ArtifactsService {
     
     // Build the base structure: [null, null, type, sourceIds, ...nulls, customization]
     // For Quiz/Flashcards: array should have exactly 10 elements (0-9) per curl request
-    // For Slides/Infographics: array needs 16 elements (0-15) for customization at index 15
+    // For Slides/Infographics: array needs 17 elements (0-16) for customization at index 16
     // For Audio: array needs at least 7 elements (0-6) for customization at index 6
     // For Video: array needs at least 9 elements (0-8) for customization at index 8
     // For Report: array needs exactly 8 elements (0-7) for customization at index 7 (NOT extended!)
+    // For Data Table: array needs at least 19 elements (0-18) for customization at index 18
     const needsExtendedArray = artifactType === ArtifactType.SLIDE_DECK || 
                                artifactType === ArtifactType.INFOGRAPHIC ||
                                artifactType === ArtifactType.AUDIO ||
-                               artifactType === ArtifactType.VIDEO;
+                               artifactType === ArtifactType.VIDEO ||
+                               artifactType === ArtifactType.DATA_TABLE;
     
     const innerArray: any[] = [
       null,  // Index 0
@@ -1867,9 +1964,18 @@ export class ArtifactsService {
         null,  // Index 10
         null,  // Index 11
         null,  // Index 12
-        null,  // Index 13 (Slides customization goes here)
+        null,  // Index 13
         null,  // Index 14
         null,  // Index 15
+        null,  // Index 16 (Slides customization goes here)
+      );
+    }
+    
+    // Data Table customization is at index 18 (field 19), so reserve indexes 17 and 18.
+    if (artifactType === ArtifactType.DATA_TABLE) {
+      innerArray.push(
+        null, // Index 17
+        null, // Index 18 (Data Table customization goes here)
       );
     }
     
@@ -1953,7 +2059,8 @@ export class ArtifactsService {
                          artifactType === ArtifactType.AUDIO ||
                          artifactType === ArtifactType.VIDEO ||
                          artifactType === ArtifactType.REPORT ||
-                         artifactType === ArtifactType.INFOGRAPHIC;
+                         artifactType === ArtifactType.INFOGRAPHIC ||
+                         artifactType === ArtifactType.DATA_TABLE;
     
     let defaultLanguage: string = 'en';
     if (needsLanguage) {
@@ -1963,18 +2070,27 @@ export class ArtifactsService {
     // Add customization based on artifact type
     // Note: Slide decks, Audio, and Video ALWAYS need customization array set, even with defaults
     if (artifactType === ArtifactType.SLIDE_DECK) {
-      // Slides customization at index 13: [[instructions, language, format, length]]
-      // Structure from mm4.txt and mm6.txt: [[null,"en",2,3]] or [["something something","en",2,3]]
+      // Slides customization at index 16: [[instructions, language, format, length]]
+      // UI-observed structure: [[null,"ja",1,3]]
+      // - format: 1=Detailed, 2=Presenter
+      // - length: 1=Short, 3=Default
       // Always set customization array, even if no customization object provided
       const slideCustom = customization as SlideDeckCustomization | undefined;
-      const format = slideCustom?.format ?? 2; // 2=Presenter, 3=Detailed deck
-      const length = slideCustom?.length ?? 2; // 1=Short (5-10 slides), 2=Default (10-15 slides)
+      const effectiveSlideLanguage = slideCustom?.language || defaultLanguage;
+      const format = this.resolveSlideDeckFormat(slideCustom?.format); // 1=Detailed (default), 2=Presenter
+      const length = this.resolveSlideDeckLength(slideCustom?.length); // 1=Short, 3=Default (10-15 slides)
+      const slideInstructions = this.buildSlideInstructions(
+        instructions,
+        slideDesignTemplate,
+        effectiveSlideLanguage,
+        slideCustom
+      );
       
-      (args[2] as any[])[13] = [[
-        instructions || null, // Description/instructions
-        slideCustom?.language || defaultLanguage, // Language (default: notebook's default language)
-        format, // Format (2=presenter, 3=detailed deck)
-        length, // Length (1=Short, 2=Default)
+      (args[2] as any[])[16] = [[
+        slideInstructions, // Description/instructions
+        effectiveSlideLanguage, // Language (default: notebook's default language)
+        format, // Format (1=Detailed, 2=Presenter)
+        length, // Length (1=Short, 3=Default)
       ]];
     } else if (artifactType === ArtifactType.AUDIO) {
       // Audio customization at index 8: [null, [null, format, null, [sourceIdsFlat], language, null, length]]
@@ -2095,6 +2211,24 @@ export class ArtifactsService {
             format, // Index 6: Format (2 = "Create Your Own")
           ],
         ];
+    } else if (artifactType === ArtifactType.DATA_TABLE) {
+      // Data Table customization at index 18 (field 19): [null, [userSteeringPrompt, language, detailLevel]]
+      // Structure aligns with R7cb6c table generation options serializer (YHa -> fields 1,2,3).
+      const tableCustom = customization as DataTableCustomization | undefined;
+      const effectiveLanguage = tableCustom?.language || defaultLanguage;
+      const prompt = (tableCustom?.userSteeringPrompt ?? instructions)?.trim() || null;
+      const detailLevel = tableCustom?.detailLevel === 1 || tableCustom?.detailLevel === 3
+        ? tableCustom.detailLevel
+        : 2;
+
+      (args[2] as any[])[18] = [
+        null,
+        [
+          prompt,            // Index 0 (proto field 1): userSteeringPrompt
+          effectiveLanguage, // Index 1 (proto field 2): language
+          detailLevel,       // Index 2 (proto field 3): detailLevel
+        ],
+      ];
     }
     
     // Optional customization for other artifacts (only if provided)
@@ -2159,6 +2293,159 @@ export class ArtifactsService {
     );
     
     return this.parseArtifactResponse(response);
+  }
+
+  private resolveSlideDeckFormat(format?: SlideDeckCustomization['format']): number {
+    // Accept readable names and keep backward compatibility with previous numeric mapping.
+    if (typeof format === 'string') {
+      const normalized = format.trim().toLowerCase();
+      if (normalized === 'presenter') {
+        return 2;
+      }
+      return 1; // detailed
+    }
+
+    if (format === 2) {
+      return 2; // presenter
+    }
+
+    // Detailed is the current UI default. Legacy "3" is mapped to detailed.
+    return 1;
+  }
+
+  private resolveSlideDeckLength(length?: SlideDeckCustomization['length']): number {
+    // Accept readable names and keep backward compatibility with previous numeric mapping.
+    if (typeof length === 'string') {
+      const normalized = length.trim().toLowerCase();
+      if (normalized === 'short') {
+        return 1;
+      }
+      return 3; // default
+    }
+
+    if (length === 1) {
+      return 1; // short
+    }
+
+    // Default length is currently represented as 3. Legacy "2" is mapped to default.
+    return 3;
+  }
+
+  private buildSlideInstructions(
+    instructions: string,
+    slideDesignTemplate: string | undefined,
+    language: string,
+    slideCustomization?: SlideDeckCustomization
+  ): string | null {
+    const baseInstructions = instructions.trim();
+    const directDescription = slideCustomization?.description?.trim() || '';
+    const designTemplate = slideDesignTemplate?.trim();
+    const advancedPlan = this.buildSlideAdvancedPlan(slideCustomization);
+    const mergedInstructionBody = [directDescription, baseInstructions, advancedPlan]
+      .map(part => part?.trim())
+      .filter((part): part is string => !!part)
+      .join('\n\n');
+
+    const languageLock = [
+      'Output language requirements:',
+      `- All slide text must be in ${language}.`,
+      '- Keep titles and bullets in the selected language unless quoting proper nouns.',
+    ].join('\n');
+
+    const mergedParts = [languageLock];
+    if (mergedInstructionBody) {
+      mergedParts.push(mergedInstructionBody);
+    }
+    if (designTemplate) {
+      mergedParts.push(`Design template (must follow):\n${designTemplate}`);
+    }
+    return mergedParts.join('\n\n');
+  }
+
+  private buildSlideAdvancedPlan(slideCustomization?: SlideDeckCustomization): string | null {
+    if (!slideCustomization) {
+      return null;
+    }
+
+    const normalizeList = (items?: string[]): string[] =>
+      (items || [])
+        .map(item => item?.trim())
+        .filter((item): item is string => !!item)
+        .slice(0, 20);
+
+    const lines: string[] = [];
+
+    const summary = slideCustomization.summary?.trim();
+    if (summary) {
+      lines.push(`Deck summary: ${summary}`);
+    }
+
+    const audienceAlias = slideCustomization.audience?.trim();
+    const audience = slideCustomization.targetAudience?.trim();
+    if (audience || audienceAlias) {
+      lines.push(`Target audience: ${audience || audienceAlias}`);
+    }
+
+    const goal = slideCustomization.presentationGoal?.trim();
+    if (goal) {
+      lines.push(`Presentation goal: ${goal}`);
+    }
+
+    const styleAlias = slideCustomization.style?.trim();
+    const tone = slideCustomization.tone?.trim();
+    if (tone || styleAlias) {
+      lines.push(`Tone: ${tone || styleAlias}`);
+    }
+
+    if (slideCustomization.speakerNotesStyle && slideCustomization.speakerNotesStyle !== 'none') {
+      lines.push(`Speaker notes: ${slideCustomization.speakerNotesStyle}`);
+    }
+
+    const mustInclude = normalizeList(slideCustomization.mustInclude);
+    if (mustInclude.length > 0) {
+      lines.push(`Must include: ${mustInclude.map(item => `"${item}"`).join(', ')}`);
+    }
+
+    const points = normalizeList(slideCustomization.points);
+    if (points.length > 0) {
+      lines.push(`Priority points: ${points.map(item => `"${item}"`).join(', ')}`);
+    }
+
+    const mustAvoid = normalizeList(slideCustomization.mustAvoid);
+    if (mustAvoid.length > 0) {
+      lines.push(`Must avoid: ${mustAvoid.map(item => `"${item}"`).join(', ')}`);
+    }
+
+    const sections = (slideCustomization.sections || [])
+      .filter(section => section && typeof section.title === 'string' && section.title.trim().length > 0)
+      .slice(0, 20);
+
+    if (sections.length > 0) {
+      lines.push('Slide plan (in order):');
+      sections.forEach((section, index) => {
+        const sectionTitle = section.title.trim();
+        const sectionObjective = section.objective?.trim();
+        const sectionVisualDirection = section.visualDirection?.trim();
+        const sectionKeyPoints = normalizeList(section.keyPoints).slice(0, 8);
+
+        lines.push(`${index + 1}. ${sectionTitle}`);
+        if (sectionObjective) {
+          lines.push(`   - Objective: ${sectionObjective}`);
+        }
+        if (sectionKeyPoints.length > 0) {
+          lines.push(`   - Key points: ${sectionKeyPoints.join(' | ')}`);
+        }
+        if (sectionVisualDirection) {
+          lines.push(`   - Visual direction: ${sectionVisualDirection}`);
+        }
+      });
+    }
+
+    if (lines.length === 0) {
+      return null;
+    }
+
+    return ['Advanced slide planning requirements:', ...lines].join('\n');
   }
   
   /**
@@ -2592,7 +2879,7 @@ export class ArtifactsService {
     // Parse artifact type - could be at index 2 or another position
     let typeIndex = -1;
     for (let i = 1; i < Math.min(data.length, 5); i++) {
-      if (typeof data[i] === 'number' && data[i] >= 1 && data[i] <= 10) {
+      if (typeof data[i] === 'number' && data[i] >= 1 && data[i] <= 12) {
         typeIndex = i;
         break;
       }
@@ -3443,31 +3730,36 @@ function parseAudioDownloadResponse(response: any, audioId?: string): string | n
   return findUrl(response);
 }
 
-function downloadAudioFromUrl(url: string, cookies: string): Promise<Uint8Array> {
+interface HttpDownloadOptions {
+  headers: Record<string, string>;
+  failedMessage: string;
+  responseErrorMessage: string;
+  requestErrorMessage?: string;
+  timeoutMessage: string;
+  timeoutMs?: number;
+  onRedirect: (location: string, currentUrl: URL) => Promise<Uint8Array>;
+}
+
+function httpDownload(url: string, options: HttpDownloadOptions): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     const urlObj = new URL(url);
     const isHttps = urlObj.protocol === 'https:';
     const httpModule = isHttps ? https : http;
-    const options: any = {
+    const requestOptions: any = {
       hostname: urlObj.hostname,
       port: urlObj.port || (isHttps ? 443 : 80),
       path: urlObj.pathname + urlObj.search,
       method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
-        'Cookie': cookies,
-        'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
+      headers: options.headers,
     };
-    const req = httpModule.request(options, (res) => {
+    const req = httpModule.request(requestOptions, (res) => {
       if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          return downloadAudioFromUrl(res.headers.location, cookies)
+          return options.onRedirect(res.headers.location, urlObj)
             .then(resolve)
             .catch(reject);
         }
-        reject(new NotebookLMError(`Failed to download audio: HTTP ${res.statusCode}`));
+        reject(new NotebookLMError(`${options.failedMessage}: HTTP ${res.statusCode}`));
         return;
       }
       const chunks: Buffer[] = [];
@@ -3475,17 +3767,35 @@ function downloadAudioFromUrl(url: string, cookies: string): Promise<Uint8Array>
         chunks.push(chunk);
       });
       res.on('end', () => {
-        const audioData = Buffer.concat(chunks);
-        resolve(new Uint8Array(audioData));
+        resolve(new Uint8Array(Buffer.concat(chunks)));
       });
       res.on('error', (error: Error) => {
-        reject(new NotebookLMError(`Error downloading audio: ${error.message}`));
+        reject(new NotebookLMError(`${options.responseErrorMessage}: ${error.message}`));
       });
     });
     req.on('error', (error: Error) => {
-      reject(new NotebookLMError(`Request error: ${error.message}`));
+      reject(new NotebookLMError(`${options.requestErrorMessage || 'Request error'}: ${error.message}`));
+    });
+    req.setTimeout(options.timeoutMs || 30000, () => {
+      req.destroy();
+      reject(new NotebookLMError(options.timeoutMessage));
     });
     req.end();
+  });
+}
+
+function downloadAudioFromUrl(url: string, cookies: string): Promise<Uint8Array> {
+  return httpDownload(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+      'Cookie': cookies,
+      'Accept': '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+    failedMessage: 'Failed to download audio',
+    responseErrorMessage: 'Error downloading audio',
+    timeoutMessage: 'Request timeout',
+    onRedirect: (location) => downloadAudioFromUrl(location, cookies),
   });
 }
 
@@ -4308,6 +4618,40 @@ function findFlashcardsArray(obj: any, depth: number = 0): any[] {
   return [];
 }
 
+function resolveAuthUserParam(authUser?: string): string {
+  const trimmed = authUser?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : '0';
+}
+
+function getRpcAuthUser(rpc: RPCClient): string {
+  return resolveAuthUserParam(rpc.getConfig().authUser);
+}
+
+function withAuthUser(url: string, authUser?: string): string {
+  if (!url) {
+    return url;
+  }
+
+  const resolvedAuthUser = resolveAuthUserParam(authUser);
+  const normalized = url
+    .replace(/\\u003d/g, '=')
+    .replace(/\\u0026/g, '&')
+    .replace(/\\u002f/g, '/')
+    .replace(/\\=/g, '=')
+    .replace(/\\&/g, '&');
+
+  try {
+    const parsedUrl = new URL(normalized);
+    parsedUrl.searchParams.set('authuser', resolvedAuthUser);
+    return parsedUrl.toString();
+  } catch {
+    if (normalized.includes('authuser=')) {
+      return normalized.replace(/([?&])authuser=[^&#]*/i, `$1authuser=${resolvedAuthUser}`);
+    }
+    return `${normalized}${normalized.includes('?') ? '&' : '?'}authuser=${resolvedAuthUser}`;
+  }
+}
+
 export async function fetchInfographic(
   rpc: RPCClient,
   infographicId: string,
@@ -4339,15 +4683,7 @@ export async function fetchInfographic(
     }
   }
   if (!imageUrl) throw new NotebookLMError(`No image URL found in infographic response for ID ${infographicId}`);
-  try {
-    const urlObj = new URL(imageUrl);
-    if (!urlObj.searchParams.has('authuser')) {
-      urlObj.searchParams.set('authuser', '0');
-      imageUrl = urlObj.toString();
-    }
-  } catch (urlError) {
-    console.warn(`Warning: Could not parse image URL: ${imageUrl}`);
-  }
+  imageUrl = withAuthUser(imageUrl, getRpcAuthUser(rpc));
   const dimensions = parseDimensionsFromUrl(imageUrl);
   const result: InfographicImageData = { imageUrl, mimeType: 'image/png', ...dimensions };
   if (options.downloadImage) {
@@ -4355,7 +4691,7 @@ export async function fetchInfographic(
     if (!cookies || !cookies.trim()) {
       throw new NotebookLMError('Cookies are required for downloading infographic images. Please provide cookies in the options or ensure the RPC client has cookies configured.');
     }
-    const imageData = await downloadImageFromUrl(imageUrl, cookies);
+    const imageData = await downloadImageFromUrl(imageUrl, cookies, getRpcAuthUser(rpc));
     result.imageData = imageData;
   }
   return result;
@@ -4442,11 +4778,18 @@ function parseDimensionsFromUrl(url: string): { width?: number; height?: number 
   return dimensions;
 }
 
-async function downloadImageFromUrl(url: string, cookies: string): Promise<Uint8Array | ArrayBuffer> {
+async function downloadImageFromUrl(
+  url: string,
+  cookies: string,
+  authUser?: string
+): Promise<Uint8Array | ArrayBuffer> {
+  const resolvedUrl = withAuthUser(url, authUser);
+  const resolvedAuthUser = resolveAuthUserParam(authUser);
+
   // Pre-authenticate if cookies available
   if (cookies && cookies.trim()) {
     try {
-      await preAuthenticateForDownload(cookies);
+      await preAuthenticateForDownload(cookies, resolvedAuthUser);
     } catch {
       // Don't fail if pre-auth fails
     }
@@ -4454,55 +4797,40 @@ async function downloadImageFromUrl(url: string, cookies: string): Promise<Uint8
   
   const isNode = typeof process !== 'undefined' && process.versions?.node;
   if (isNode) {
-    return downloadWithNodeHttp(url, cookies);
+    return downloadWithNodeHttp(resolvedUrl, cookies, resolvedAuthUser);
   } else {
-    return downloadWithFetch(url, cookies);
+    return downloadWithFetch(resolvedUrl, cookies);
   }
 }
 
-async function downloadWithNodeHttp(url: string, cookies?: string): Promise<Uint8Array | ArrayBuffer> {
-  return new Promise((resolve, reject) => {
-    const urlObj = new URL(url);
-    const client = urlObj.protocol === 'https:' ? https : http;
-    const headers: Record<string, string> = {
-      'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-      'Accept-Language': 'en-IN,en-GB;q=0.9,en;q=0.8,en-US;q=0.7',
-      'Referer': 'https://notebooklm.google.com/',
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0',
-      'sec-fetch-dest': 'image',
-      'sec-fetch-mode': 'no-cors',
-      'sec-fetch-site': 'cross-site',
-    };
-    if (cookies && cookies.trim()) {
-      headers['Cookie'] = cookies;
-      headers['sec-fetch-storage-access'] = 'active';
-    }
-    const options = {
-      hostname: urlObj.hostname,
-      port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
-      path: urlObj.pathname + urlObj.search,
-      method: 'GET',
-      headers,
-    };
-    const req = client.request(options, (res: any) => {
-      if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          return downloadImageFromUrl(res.headers.location, cookies || '').then(resolve).catch(reject);
-        }
-        reject(new NotebookLMError(`Failed to download image: HTTP ${res.statusCode}`));
-        return;
-      }
-      const chunks: Buffer[] = [];
-      res.on('data', (chunk: Buffer) => chunks.push(chunk));
-      res.on('end', () => resolve(new Uint8Array(Buffer.concat(chunks))));
-      res.on('error', (error: Error) => reject(new NotebookLMError(`Error downloading image: ${error.message}`)));
-    });
-    req.on('error', (error: Error) => reject(new NotebookLMError(`Request error: ${error.message}`)));
-    req.setTimeout(30000, () => {
-      req.destroy();
-      reject(new NotebookLMError('Request timeout'));
-    });
-    req.end();
+async function downloadWithNodeHttp(
+  url: string,
+  cookies?: string,
+  authUser?: string
+): Promise<Uint8Array | ArrayBuffer> {
+  const headers: Record<string, string> = {
+    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+    'Accept-Language': 'en-IN,en-GB;q=0.9,en;q=0.8,en-US;q=0.7',
+    'Referer': 'https://notebooklm.google.com/',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0',
+    'sec-fetch-dest': 'image',
+    'sec-fetch-mode': 'no-cors',
+    'sec-fetch-site': 'cross-site',
+  };
+  if (cookies && cookies.trim()) {
+    headers['Cookie'] = cookies;
+    headers['sec-fetch-storage-access'] = 'active';
+  }
+
+  return httpDownload(url, {
+    headers,
+    failedMessage: 'Failed to download image',
+    responseErrorMessage: 'Error downloading image',
+    timeoutMessage: 'Request timeout',
+    onRedirect: async (location) => {
+      const data = await downloadImageFromUrl(location, cookies || '', authUser);
+      return data instanceof Uint8Array ? data : new Uint8Array(data);
+    },
   });
 }
 
@@ -4584,7 +4912,7 @@ export async function downloadSlidesFile(
     if (!pdfUrl) {
       throw new NotebookLMError(`No PDF download URL found for slide ID ${slideId}. The slide deck may not be ready yet. Please check that the slide deck is in READY state.`);
     }
-    pdfUrl = normalizePdfUrl(pdfUrl);
+    pdfUrl = normalizePdfUrl(pdfUrl, getRpcAuthUser(rpc));
     const rpcCookies = rpc.getCookies();
     let finalCookies = rpcCookies;
     if (options.googleDomainCookies) {
@@ -4653,7 +4981,11 @@ const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/
 /**
  * Extract slide image URLs from artifact RPC response
  */
-function extractSlideImageUrls(artifactData: any, targetArtifactId?: string): string[] {
+function extractSlideImageUrls(
+  artifactData: any,
+  targetArtifactId?: string,
+  authUser?: string
+): string[] {
   const urls: string[] = [];
   
   function searchForSlides(obj: any, depth = 0): void {
@@ -4668,12 +5000,7 @@ function extractSlideImageUrls(artifactData: any, targetArtifactId?: string): st
           typeof obj[1] === 'number' &&
           typeof obj[2] === 'number') {
         let url = String(obj[0]);
-        url = url.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&').replace(/\\u002f/g, '/');
-        if (!url.includes('?')) {
-          url += '?authuser=0';
-        } else if (!url.includes('authuser=0')) {
-          url += '&authuser=0';
-        }
+        url = withAuthUser(url.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&').replace(/\\u002f/g, '/'), authUser);
         if (!urls.includes(url) && (url.includes('=w') || url.includes('=s'))) {
           urls.push(url);
         }
@@ -4687,13 +5014,12 @@ function extractSlideImageUrls(artifactData: any, targetArtifactId?: string): st
       for (const value of Object.values(obj)) {
         searchForSlides(value, depth + 1);
       }
-    } else if (typeof obj === 'string' && obj.includes('lh3.googleusercontent.com/notebooklm') && (obj.includes('=w') || obj.includes('=s'))) {
-      let url = obj.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&');
-      if (!url.includes('?')) {
-        url += '?authuser=0';
-      } else if (!url.includes('authuser=0')) {
-        url += '&authuser=0';
-      }
+    } else if (
+      typeof obj === 'string' &&
+      obj.includes('lh3.googleusercontent.com/notebooklm') &&
+      (obj.includes('=w') || obj.includes('=s'))
+    ) {
+      const url = withAuthUser(obj.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&'), authUser);
       if (!urls.includes(url)) {
         urls.push(url);
       }
@@ -4970,130 +5296,127 @@ async function saveSlideImages(
   }
 }
 
-function normalizePdfUrl(url: string): string {
+function normalizePdfUrl(url: string, authUser?: string): string {
   if (!url) return url;
-  let normalized = url.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&').replace(/\\=/g, '=').replace(/\\&/g, '&');
-  if (!normalized.includes('authuser=')) {
-    if (normalized.includes('?')) {
-      normalized += '&authuser=0';
-    } else {
-      normalized += '?authuser=0';
-    }
-  }
-  return normalized;
+  return withAuthUser(
+    url.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&').replace(/\\=/g, '=').replace(/\\&/g, '&'),
+    authUser
+  );
 }
 
 function extractPdfUrl(artifact: any): string | null {
+  return extractContributionUrl(artifact, 'pdf');
+}
+
+function extractPptxUrl(artifact: any): string | null {
+  return extractContributionUrl(artifact, 'pptx');
+}
+
+function extractContributionUrl(artifact: any, extension: 'pdf' | 'pptx'): string | null {
   if (!artifact) return null;
+
   const artifactString = JSON.stringify(artifact);
-  const urlPattern = /https?:\/\/contribution\.usercontent\.google\.com\/download[^\s"',\]\}]+/g;
+  const encodedExtPattern = extension === 'pdf' ? '(?:\\.pdf|%2Epdf)' : '(?:\\.pptx|%2Epptx)';
+  const urlPattern = new RegExp(
+    `https?:\\/\\/contribution\\.usercontent\\.google\\.com\\/download[^\\s\"',\\]\\}]*${encodedExtPattern}[^\\s\"',\\]\\}]*`,
+    'ig'
+  );
   const matches = artifactString.match(urlPattern);
   if (matches && matches.length > 0) {
     return matches[0];
   }
-  const searchForPdfUrl = (obj: any, depth = 0): string | null => {
+
+  const searchForUrl = (obj: any, depth = 0): string | null => {
     if (depth > 10) return null;
     if (typeof obj === 'string') {
       if (obj.includes('contribution.usercontent.google.com/download')) {
-        const urlMatch = obj.match(/https?:\/\/[^\s"',\]\}]+contribution\.usercontent\.google\.com\/download[^\s"',\]\}]+/);
-        if (urlMatch) return urlMatch[0];
+        const urlMatch = obj.match(/https?:\/\/[^\s"',\]\}]+contribution\.usercontent\.google\.com\/download[^\s"',\]\}]+/i);
+        if (urlMatch) {
+          const candidate = urlMatch[0];
+          if (matchesContributionExtension(candidate, extension)) {
+            return candidate;
+          }
+        }
         if (obj.startsWith('http://') || obj.startsWith('https://')) return obj;
       }
     } else if (Array.isArray(obj)) {
       for (const item of obj) {
-        const found = searchForPdfUrl(item, depth + 1);
+        const found = searchForUrl(item, depth + 1);
         if (found) return found;
       }
     } else if (obj && typeof obj === 'object') {
-      const priorityKeys = ['url', 'downloadUrl', 'pdfUrl', 'fileUrl', 'download', 'pdf', 'file'];
+      const priorityKeys = ['url', 'downloadUrl', 'pdfUrl', 'pptxUrl', 'fileUrl', 'download', 'pdf', 'pptx', 'file'];
       for (const key of priorityKeys) {
         if (obj[key]) {
-          const found = searchForPdfUrl(obj[key], depth + 1);
+          const found = searchForUrl(obj[key], depth + 1);
           if (found) return found;
         }
       }
       for (const key in obj) {
-        if (key.toLowerCase().includes('url') || key.toLowerCase().includes('download') || key.toLowerCase().includes('pdf') || key.toLowerCase().includes('file')) {
-          const found = searchForPdfUrl(obj[key], depth + 1);
+        if (key.toLowerCase().includes('url') || key.toLowerCase().includes('download') || key.toLowerCase().includes('pdf') || key.toLowerCase().includes('pptx') || key.toLowerCase().includes('file')) {
+          const found = searchForUrl(obj[key], depth + 1);
           if (found) return found;
         }
       }
       for (const value of Object.values(obj)) {
-        const found = searchForPdfUrl(value, depth + 1);
+        const found = searchForUrl(value, depth + 1);
         if (found) return found;
       }
     }
     return null;
   };
-  return searchForPdfUrl(artifact);
+
+  const found = searchForUrl(artifact);
+  if (!found) return null;
+  if (matchesContributionExtension(found, extension)) {
+    return found;
+  }
+  return null;
+}
+
+function matchesContributionExtension(url: string, extension: 'pdf' | 'pptx'): boolean {
+  const lower = url.toLowerCase();
+  const ext = extension.toLowerCase();
+
+  if (lower.includes(`.${ext}`) || lower.includes(`%2e${ext}`)) {
+    return true;
+  }
+
+  // Match filename query param with plain or URL-encoded extension
+  const filenamePattern = new RegExp(`filename=[^&]*(?:\\.${ext}|%2e${ext})(?:[&$])?`, 'i');
+  return filenamePattern.test(lower);
+}
+
+function downloadFileFromUrl(url: string, cookies: string): Promise<Uint8Array> {
+  return httpDownload(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0',
+      'Cookie': cookies,
+      'Accept': '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'identity',
+      'Referer': 'https://notebooklm.google.com/',
+      'Origin': 'https://notebooklm.google.com',
+    },
+    failedMessage: 'Failed to download file',
+    responseErrorMessage: 'Error downloading file',
+    timeoutMessage: 'File download request timed out',
+    onRedirect: (location, currentUrl) => {
+      const redirectUrl = location.startsWith('http') ? location : `${currentUrl.protocol}//${currentUrl.hostname}${location}`;
+      return downloadFileFromUrl(redirectUrl, cookies);
+    },
+  });
 }
 
 function downloadPdfFromUrl(url: string, cookies: string): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    const urlObj = new URL(url);
-    const isHttps = urlObj.protocol === 'https:';
-    const httpModule = isHttps ? https : http;
-    const options: any = {
-      hostname: urlObj.hostname,
-      port: urlObj.port || (isHttps ? 443 : 80),
-      path: urlObj.pathname + urlObj.search,
-      method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0',
-        'Cookie': cookies,
-        'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'identity',
-        'Referer': 'https://notebooklm.google.com/',
-        'Origin': 'https://notebooklm.google.com',
-      },
-    };
-    const req = httpModule.request(options, (res) => {
-      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        const location = res.headers.location;
-        const redirectUrl = location.startsWith('http') ? location : `${urlObj.protocol}//${urlObj.hostname}${location}`;
-        return downloadPdfFromUrl(redirectUrl, cookies).then(resolve).catch(reject);
+  return downloadFileFromUrl(url, cookies).then((pdfData) => {
+    if (pdfData.length > 0 && pdfData[0] !== 0x25) {
+      const text = Buffer.from(pdfData).toString('utf-8', 0, Math.min(500, pdfData.length));
+      if (text.includes('Sign in') || text.includes('accounts.google.com') || text.includes('<html')) {
+        throw new NotebookLMError('Authentication required. The PDF download URL returned an HTML sign-in page.');
       }
-      if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
-        if (res.statusCode === 400 || res.statusCode === 401 || res.statusCode === 403) {
-          const errorChunks: Buffer[] = [];
-          res.on('data', (chunk: Buffer) => errorChunks.push(chunk));
-          res.on('end', () => {
-            const responseBuffer = Buffer.concat(errorChunks);
-            const responseText = responseBuffer.toString('utf-8');
-            const location = res.headers.location || '';
-            if (location) {
-              reject(new NotebookLMError(`Authentication required. The PDF download URL requires valid Google authentication cookies. HTTP ${res.statusCode}. Redirected to: ${location}`));
-            } else {
-              reject(new NotebookLMError(`Failed to download PDF: HTTP ${res.statusCode}. This may indicate an authentication issue.`));
-            }
-          });
-          return;
-        }
-        reject(new NotebookLMError(`Failed to download PDF: HTTP ${res.statusCode}`));
-        return;
-      }
-      const chunks: Buffer[] = [];
-      res.on('data', (chunk: Buffer) => chunks.push(chunk));
-      res.on('end', () => {
-        const pdfData = Buffer.concat(chunks);
-        if (pdfData.length > 0 && pdfData[0] !== 0x25) {
-          const text = pdfData.toString('utf-8', 0, Math.min(500, pdfData.length));
-          if (text.includes('Sign in') || text.includes('accounts.google.com') || text.includes('<html')) {
-            reject(new NotebookLMError(`Authentication required. The PDF download URL requires valid Google authentication cookies. Received HTML sign-in page instead of PDF.`));
-            return;
-          }
-        }
-        resolve(new Uint8Array(pdfData));
-      });
-      res.on('error', (error: Error) => reject(new NotebookLMError(`Error downloading PDF: ${error.message}`)));
-    });
-    req.on('error', (error: Error) => reject(new NotebookLMError(`Request error: ${error.message}`)));
-    req.setTimeout(30000, () => {
-      req.destroy();
-      reject(new NotebookLMError('PDF download request timed out'));
-    });
-    req.end();
+    }
+    return pdfData;
   });
 }
 
@@ -5825,79 +6148,41 @@ function downloadVideoFromUrl(
   cookies: string,
   googleDomainCookies?: string
 ): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    const urlObj = new URL(url);
-    const isHttps = urlObj.protocol === 'https:';
-    const httpModule = isHttps ? https : http;
-    
-    let finalCookies = cookies;
-    if (googleDomainCookies) {
-      const cookieMap = new Map<string, string>();
-      
-      googleDomainCookies.split(';').forEach(c => {
-        const [name, ...valueParts] = c.trim().split('=');
-        if (name && valueParts.length > 0) {
-          cookieMap.set(name, valueParts.join('='));
-        }
-      });
-      
-      cookies.split(';').forEach(c => {
-        const [name, ...valueParts] = c.trim().split('=');
-        if (name && valueParts.length > 0) {
-          cookieMap.set(name, valueParts.join('='));
-        }
-      });
-      
-      finalCookies = Array.from(cookieMap.entries())
-        .map(([name, value]) => `${name}=${value}`)
-        .join('; ');
-    }
-    
-    const options: any = {
-      hostname: urlObj.hostname,
-      port: urlObj.port || (isHttps ? 443 : 80),
-      path: urlObj.pathname + urlObj.search,
-      method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
-        'Cookie': finalCookies,
-        'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Range': 'bytes=0-',
-      },
-    };
-    
-    const req = httpModule.request(options, (res) => {
-      if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          return downloadVideoFromUrl(res.headers.location, cookies, googleDomainCookies)
-            .then(resolve)
-            .catch(reject);
-        }
-        reject(new NotebookLMError(`Failed to download video: HTTP ${res.statusCode}`));
-        return;
+  let finalCookies = cookies;
+  if (googleDomainCookies) {
+    const cookieMap = new Map<string, string>();
+
+    googleDomainCookies.split(';').forEach(c => {
+      const [name, ...valueParts] = c.trim().split('=');
+      if (name && valueParts.length > 0) {
+        cookieMap.set(name, valueParts.join('='));
       }
-      
-      const chunks: Buffer[] = [];
-      res.on('data', (chunk: Buffer) => {
-        chunks.push(chunk);
-      });
-      
-      res.on('end', () => {
-        const videoData = Buffer.concat(chunks);
-        resolve(new Uint8Array(videoData));
-      });
-      
-      res.on('error', (error: Error) => {
-        reject(new NotebookLMError(`Error downloading video: ${error.message}`));
-      });
     });
-    
-    req.on('error', (error: Error) => {
-      reject(new NotebookLMError(`Request error: ${error.message}`));
+
+    cookies.split(';').forEach(c => {
+      const [name, ...valueParts] = c.trim().split('=');
+      if (name && valueParts.length > 0) {
+        cookieMap.set(name, valueParts.join('='));
+      }
     });
-    
-    req.end();
+
+    finalCookies = Array.from(cookieMap.entries())
+      .map(([name, value]) => `${name}=${value}`)
+      .join('; ');
+  }
+
+  return httpDownload(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+      'Cookie': finalCookies,
+      'Accept': '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Range': 'bytes=0-',
+    },
+    failedMessage: 'Failed to download video',
+    responseErrorMessage: 'Error downloading video',
+    timeoutMessage: 'Request timeout',
+    onRedirect: (location) => downloadVideoFromUrl(location, cookies, googleDomainCookies),
   });
 }
 
@@ -5933,7 +6218,10 @@ function generateSAPISIDHASH(sapisid: string, timestamp: number): string {
 /**
  * Pre-authenticate by calling play.google.com/log
  */
-async function preAuthenticateForDownload(cookies: string): Promise<void> {
+async function preAuthenticateForDownload(
+  cookies: string,
+  authUser?: string
+): Promise<void> {
   const sapisid = extractSAPISID(cookies);
   if (!sapisid) {
     return;
@@ -5944,7 +6232,8 @@ async function preAuthenticateForDownload(cookies: string): Promise<void> {
     const authHash = generateSAPISIDHASH(sapisid, timestamp);
     const authString = `SAPISIDHASH+${authHash}+SAPISID1PHASH+${authHash}+SAPISID3PHASH+${authHash}`;
     const encodedAuth = authString.replace(/\+/g, '%2B');
-    const logUrl = `https://play.google.com/log?hasfast=true&auth=${encodedAuth}&authuser=0&format=json`;
+    const resolvedAuthUser = resolveAuthUserParam(authUser);
+    const logUrl = `https://play.google.com/log?hasfast=true&auth=${encodedAuth}&authuser=${resolvedAuthUser}&format=json`;
     
     const isNode = typeof process !== 'undefined' && process.versions?.node;
     

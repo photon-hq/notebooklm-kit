@@ -70,7 +70,6 @@ coverage/
 
 # RPC directory
 rpc/
-test/
 nlm/
 
 # Playwright

@@ -186,6 +186,7 @@ export class GenerationService {
         // Parse sources from response (similar to SourcesService.parseSourcesFromResponse)
         sourceIds = this.extractSourceIdsFromResponse(projectResponse);
       } catch (error) {
+        console.error('\n❌ Failed to fetch sources from notebook:', error);
         // If fetching sources fails, continue with empty array
         sourceIds = [];
       }
@@ -526,42 +527,6 @@ export class GenerationService {
     } catch (error) {
       // Return empty array if parsing fails
       return [];
-    }
-  }
-  
-  // ========================================================================
-  // Response parsers
-  // ========================================================================
-  
-  private parseChatResponse(response: any): string {
-    try {
-      // Response format varies - extract text content
-      if (typeof response === 'string') {
-        return response;
-      }
-      
-      if (Array.isArray(response) && response.length > 0) {
-        // Try to find text content in array
-        const findText = (data: any): string | null => {
-          if (typeof data === 'string' && data.length > 10) {
-            return data;
-          }
-          if (Array.isArray(data)) {
-            for (const item of data) {
-              const text = findText(item);
-              if (text) return text;
-            }
-          }
-          return null;
-        };
-        
-        const text = findText(response);
-        if (text) return text;
-      }
-      
-      return '';
-    } catch (error) {
-      throw new NotebookLMError(`Failed to parse chat response: ${(error as Error).message}`);
     }
   }
 }

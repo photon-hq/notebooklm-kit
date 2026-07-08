@@ -75,6 +75,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
+    "test": "tsx --test test/**/*.test.ts",
     "type-check": "tsc --noEmit",
     "prepublishOnly": "npm run clean && npm run type-check && npm run build",
     "commit": "cz",

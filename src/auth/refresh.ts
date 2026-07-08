@@ -343,6 +343,7 @@ export class AutoRefreshManager {
     if (this.running) {
       throw new Error('Auto-refresh manager already running');
     }
+    this.running = true;
     
     const strategy = this.config.strategy || 'auto';
     const interval = this.config.interval || 10 * 60 * 1000;
@@ -350,13 +351,18 @@ export class AutoRefreshManager {
     const checkInterval = this.config.checkInterval || 60 * 1000;
     
     // Extract gsessionId if not provided (optional, but recommended)
-    if (!this.config.gsessionId) {
-      this.gsessionId = await extractGSessionId(this.refreshClient.getCookies());
-      if (!this.gsessionId && this.config.debug) {
-        console.log('Note: gsessionId not found, refresh will continue without it');
+    try {
+      if (!this.config.gsessionId) {
+        this.gsessionId = await extractGSessionId(this.refreshClient.getCookies());
+        if (!this.gsessionId && this.config.debug) {
+          console.log('Note: gsessionId not found, refresh will continue without it');
+        }
+      } else {
+        this.gsessionId = this.config.gsessionId;
       }
-    } else {
-      this.gsessionId = this.config.gsessionId;
+    } catch (error) {
+      this.running = false;
+      throw error;
     }
     
     // Do initial refresh to verify credentials work
@@ -373,8 +379,6 @@ export class AutoRefreshManager {
       }
       // Don't throw - allow refresh to continue and retry later
     }
-    
-    this.running = true;
     
     // Start expiration-based checking (if enabled in 'auto' or 'expiration' mode)
     if (strategy === 'expiration' || strategy === 'auto') {
@@ -398,6 +402,7 @@ export class AutoRefreshManager {
           console.log(`Auto-refresh started (${modeText}, checking every ${checkInterval}ms)`);
         }
       } else if (strategy === 'expiration') {
+        this.running = false;
         throw new Error('Auth token required for expiration-based strategy');
       } else if (this.config.debug && strategy === 'auto') {
         console.log('Note: Auth token not provided, using time-based refresh only');
@@ -523,4 +528,3 @@ export class AutoRefreshManager {
     return this.lastRefreshTime;
   }
 }
-

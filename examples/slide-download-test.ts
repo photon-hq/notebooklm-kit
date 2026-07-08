@@ -23,10 +23,29 @@ import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import { PDFDocument } from 'pdf-lib';
 import { ArtifactType, ArtifactState } from '../src/types/artifact.js';
 import * as RPC from '../src/rpc/rpc-methods.js';
-import { createSDK, handleError } from './utils.js';
+import { createSDK, handleError, resolveDevAuthUser } from './utils.js';
 
 // User-Agent header matching browser
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0';
+const AUTH_USER = resolveDevAuthUser();
+
+function ensureAuthUser(url: string): string {
+  if (!url) {
+    return url;
+  }
+
+  const normalized = url.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&').replace(/\\u002f/g, '/');
+  try {
+    const parsedUrl = new URL(normalized);
+    parsedUrl.searchParams.set('authuser', AUTH_USER);
+    return parsedUrl.toString();
+  } catch {
+    if (normalized.includes('authuser=')) {
+      return normalized.replace(/([?&])authuser=[^&#]*/i, `$1authuser=${AUTH_USER}`);
+    }
+    return `${normalized}${normalized.includes('?') ? '&' : '?'}authuser=${AUTH_USER}`;
+  }
+}
 
 /**
  * Create readline interface for interactive prompts
@@ -66,13 +85,13 @@ function findSlideUrlsInStructure(data: any, urls: string[] = []): string[] {
       potentialUrl = potentialUrl.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&');
       
       // Check if it's a notebooklm slide URL
-      // Pattern: https://lh3.googleusercontent.com/notebooklm/...=w...?authuser=0
+      // Pattern: https://lh3.googleusercontent.com/notebooklm/...=w...?authuser=...
       if (potentialUrl.includes('lh3.googleusercontent.com/notebooklm/')) {
         // Check for the pattern =w (width) or =s (size) which indicates it's a slide image
-        if ((potentialUrl.includes('=w') || potentialUrl.includes('=s')) && 
-            potentialUrl.includes('?authuser=0')) {
-          if (!urls.includes(potentialUrl)) {
-            urls.push(potentialUrl);
+        if (potentialUrl.includes('=w') || potentialUrl.includes('=s')) {
+          const resolvedUrl = ensureAuthUser(potentialUrl);
+          if (!urls.includes(resolvedUrl)) {
+            urls.push(resolvedUrl);
           }
         }
       }
@@ -91,10 +110,10 @@ function findSlideUrlsInStructure(data: any, urls: string[] = []): string[] {
     // Check if this string itself is a URL
     let decodedUrl = data.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&');
     if (decodedUrl.includes('lh3.googleusercontent.com/notebooklm/')) {
-      if ((decodedUrl.includes('=w') || decodedUrl.includes('=s')) && 
-          decodedUrl.includes('?authuser=0')) {
-        if (!urls.includes(decodedUrl)) {
-          urls.push(decodedUrl);
+      if (decodedUrl.includes('=w') || decodedUrl.includes('=s')) {
+        const resolvedUrl = ensureAuthUser(decodedUrl);
+        if (!urls.includes(resolvedUrl)) {
+          urls.push(resolvedUrl);
         }
       }
     }
@@ -105,10 +124,10 @@ function findSlideUrlsInStructure(data: any, urls: string[] = []): string[] {
 
 /**
  * Extract slide image URLs from artifact RPC response
- * Pattern: https://lh3.googleusercontent.com/notebooklm/[ASSET_ID]=w1376-h768?authuser=0
+ * Pattern: https://lh3.googleusercontent.com/notebooklm/[ASSET_ID]=w1376-h768?authuser=...
  * 
  * Based on extract_urls.py pattern:
- * r'https://lh3\.googleusercontent\.com/notebooklm/[^=\s]+=[^?\s]+\?authuser=0'
+ * r'https://lh3\.googleusercontent\.com/notebooklm/[^=\s]+=[^?\s]+\?authuser=\d+'
  */
 function extractSlideImageUrls(artifactData: any): string[] {
   const urls: string[] = [];
@@ -128,14 +147,15 @@ function extractSlideImageUrls(artifactData: any): string[] {
   const dataString = JSON.stringify(artifactData);
   
   // Pattern for notebooklm asset URLs (matching extract_urls.py)
-  // Format: https://lh3.googleusercontent.com/notebooklm/[ASSET_ID]=w1376-h768?authuser=0
-  const urlPattern = /https:\\?\/\\?\/lh3\.googleusercontent\.com\\?\/notebooklm\\?\/[^"'\s\)\]]+\\?u003dw[^"'\s\)\]]+\\?u003d[^"'\s\)\]]+\\?u003dauthuser\\?u003d0/g;
+  // Format: https://lh3.googleusercontent.com/notebooklm/[ASSET_ID]=w1376-h768?authuser=...
+  const urlPattern = /https:\\?\/\\?\/lh3\.googleusercontent\.com\\?\/notebooklm\\?\/[^"'\s\)\]]+\\?u003dw[^"'\s\)\]]+\\?u003d[^"'\s\)\]]+\\?u003dauthuser\\?u003d\d+/g;
   const matches = dataString.match(urlPattern);
   
   if (matches) {
     for (const match of matches) {
       // Decode escaped characters
       let url = match.replace(/\\/g, '').replace(/u003d/g, '=').replace(/u0026/g, '&');
+      url = ensureAuthUser(url);
       if (!urls.includes(url)) {
         urls.push(url);
       }
@@ -153,14 +173,7 @@ function extractSlideImageUrls(artifactData: any): string[] {
         let url = `https://${match}`;
         // Decode escaped characters
         url = url.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&');
-        // Add ?authuser=0 if not present
-        if (!url.includes('authuser=0')) {
-          if (!url.includes('?')) {
-            url += '?authuser=0';
-          } else {
-            url += '&authuser=0';
-          }
-        }
+        url = ensureAuthUser(url);
         if (!urls.includes(url)) {
           urls.push(url);
         }
@@ -583,14 +596,8 @@ async function saveImages(
             let url = String(obj[0]);
             // Decode any escaped characters (from JSON encoding) - handle Unicode escapes
             url = url.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&').replace(/\\u002f/g, '/');
-            // Ensure the URL is complete - it should end with =w1376-h768 or similar
-            // Add ?authuser=0 if not present (required for download)
-            if (!url.includes('?')) {
-              url += '?authuser=0';
-            } else if (!url.includes('authuser=0')) {
-              // Check if query string exists but doesn't have authuser
-              url += '&authuser=0';
-            }
+            // Ensure authuser matches the configured account index.
+            url = ensureAuthUser(url);
             // Only add if we haven't seen it before and it has the correct format
             if (!urls.includes(url) && (url.includes('=w') || url.includes('=s'))) {
               urls.push(url);
@@ -608,12 +615,7 @@ async function saveImages(
           }
         } else if (typeof obj === 'string' && obj.includes('lh3.googleusercontent.com/notebooklm') && (obj.includes('=w') || obj.includes('=s'))) {
           // Direct URL string (might be in a different format)
-          let url = obj.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&');
-          if (!url.includes('?')) {
-            url += '?authuser=0';
-          } else if (!url.includes('authuser=0')) {
-            url += '&authuser=0';
-          }
+          const url = ensureAuthUser(obj.replace(/\\u003d/g, '=').replace(/\\u0026/g, '&'));
           if (!urls.includes(url)) {
             urls.push(url);
           }
@@ -666,7 +668,7 @@ async function saveImages(
     // Filter to only include URLs with the correct format (=w or =s followed by numbers)
     // This helps exclude wrong URLs from other artifacts
     const validImageUrls = imageUrls.filter(url => {
-      // Must have =w or =s followed by numbers, and should end with ?authuser=0 or have it added
+      // Must have =w or =s followed by numbers
       return url.includes('=w') || url.includes('=s');
     });
     
@@ -684,7 +686,7 @@ async function saveImages(
       console.log(`${firstUrl}\n`);
       console.log(`Format verification:`);
       console.log(`  Has =w1376-h768: ${firstUrl.includes('=w1376-h768') ? '✓' : '✗'}`);
-      console.log(`  Has ?authuser=0: ${firstUrl.includes('?authuser=0') ? '✓' : '✗'}`);
+      console.log(`  Has authuser=${AUTH_USER}: ${firstUrl.includes(`authuser=${AUTH_USER}`) ? '✓' : '✗'}`);
       console.log(`  Ends with: ...${firstUrl.substring(Math.max(0, firstUrl.length - 35))}\n`);
     }
     
@@ -778,4 +780,3 @@ async function saveImages(
 main().catch(console.error);
 
 export { main as testSlideDownload };
-

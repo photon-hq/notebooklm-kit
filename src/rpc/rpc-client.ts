@@ -5,6 +5,8 @@
 
 import { BatchExecuteClient } from '../utils/batch-execute.js';
 import type { BatchExecuteConfig, RPCCall, RPCResponse } from '../types/common.js';
+import type { TransportLocaleSettings } from '../types/common.js';
+import { normalizeHeaderKeys, normalizeLocaleTag, resolveTransportLocaleSettings } from '../utils/locale.js';
 
 /**
  * RPC client configuration
@@ -14,11 +16,47 @@ export interface RPCClientConfig {
   cookies: string;
   debug?: boolean;
   authUser?: string;
+  locale?: string;
   headers?: Record<string, string>;
   urlParams?: Record<string, string>;
   maxRetries?: number;
   retryDelay?: number;
   retryMaxDelay?: number;
+}
+
+function primaryAcceptLanguageLocale(acceptLanguage?: string): string | null {
+  const primary = acceptLanguage?.split(',')[0]?.split(';')[0]?.trim();
+  return normalizeLocaleTag(primary);
+}
+
+function hasOwnValue(record: Record<string, string> | undefined, key: string): boolean {
+  return Boolean(record && Object.prototype.hasOwnProperty.call(record, key));
+}
+
+function resolveActualTransportLocaleSettings(
+  resolvedLocale: TransportLocaleSettings,
+  batchConfig: BatchExecuteConfig,
+  normalizedHeaders: Record<string, string>,
+  configUrlParams?: Record<string, string>
+): TransportLocaleSettings {
+  const hl = batchConfig.urlParams['hl'] || resolvedLocale.hl;
+  const acceptLanguage = batchConfig.headers['accept-language'] || resolvedLocale.acceptLanguage;
+  const hasHlOverride = hasOwnValue(configUrlParams, 'hl');
+  const hasAcceptLanguageOverride = hasOwnValue(normalizedHeaders, 'accept-language');
+
+  let effectiveLocale = resolvedLocale.effectiveLocale;
+  if (hasAcceptLanguageOverride) {
+    effectiveLocale = primaryAcceptLanguageLocale(acceptLanguage) || normalizeLocaleTag(hl) || resolvedLocale.effectiveLocale;
+  } else if (hasHlOverride) {
+    effectiveLocale = normalizeLocaleTag(hl) || resolvedLocale.effectiveLocale;
+  }
+
+  return {
+    effectiveLocale,
+    localeSource: hasHlOverride || hasAcceptLanguageOverride ? 'config' : resolvedLocale.localeSource,
+    hl,
+    acceptLanguage,
+  };
 }
 
 /**
@@ -27,9 +65,15 @@ export interface RPCClientConfig {
 export class RPCClient {
   private batchClient: BatchExecuteClient;
   private config: RPCClientConfig;
+  private transportLocaleSettings: TransportLocaleSettings;
   
   constructor(config: RPCClientConfig) {
     this.config = config;
+
+    const resolvedLocale = resolveTransportLocaleSettings({
+      requestedLocale: config.locale,
+    });
+    const normalizedHeaders = normalizeHeaderKeys(config.headers);
     
     // Build batch execute config
     const batchConfig: BatchExecuteConfig = {
@@ -43,17 +87,18 @@ export class RPCClient {
         'referer': 'https://notebooklm.google.com/',
         'x-same-domain': '1',
         'accept': '*/*',
-        'accept-language': 'en-US,en;q=0.9',
+        'accept-language': resolvedLocale.acceptLanguage,
         'cache-control': 'no-cache',
         'pragma': 'no-cache',
-        ...config.headers,
+        ...normalizedHeaders,
       },
       urlParams: {
-        // Update to January 2025 build version
+        // Stale fallback values — overridden at runtime by page-metadata extraction
+        // in NotebookLMClient.connect(). Kept here as last-resort defaults.
         'bl': 'boq_labs-tailwind-frontend_20250129.00_p0',
         'f.sid': '-7121977511756781186',
-        'hl': 'en',
-        'authuser': config.authUser || '0', // Default: 0, configurable for multi-account support
+        'hl': resolvedLocale.hl,
+        'authuser': config.authUser || '0',
         ...config.urlParams,
       },
       debug: config.debug,
@@ -61,6 +106,13 @@ export class RPCClient {
       retryDelay: config.retryDelay,
       retryMaxDelay: config.retryMaxDelay,
     };
+
+    this.transportLocaleSettings = resolveActualTransportLocaleSettings(
+      resolvedLocale,
+      batchConfig,
+      normalizedHeaders,
+      config.urlParams
+    );
     
     this.batchClient = new BatchExecuteClient(batchConfig);
   }
@@ -119,5 +171,11 @@ export class RPCClient {
   getConfig(): RPCClientConfig {
     return { ...this.config };
   }
-}
 
+  /**
+   * Get resolved transport locale settings used for requests.
+   */
+  getTransportLocaleSettings(): TransportLocaleSettings {
+    return { ...this.transportLocaleSettings };
+  }
+}

@@ -259,10 +259,9 @@ When working with the repository, you can use the following npm scripts:
 
 | Script | Description |
 |--------|-------------|
-| `npm install` | Install dependencies and automatically build (runs postinstall) |
+| `npm install` | Install dependencies and run postinstall (`playwright install chromium`) |
 | `npm run setup` | Full setup: install dependencies, Playwright, and build |
 | `npm run build` | Compile TypeScript to JavaScript |
-| `npm run build:dev` | Build only (no reinstall) |
 | `npm run dev` | Watch mode (auto-rebuild on file changes) |
 | `npm run clean` | Remove compiled dist/ directory |
 
@@ -276,7 +275,7 @@ npm run setup
 
 **Build only (no reinstall):**
 ```bash
-npm run build:dev
+npm run build
 ```
 
 **Watch mode (auto-rebuild):**
@@ -1300,19 +1299,20 @@ const sourceId = await sdk.sources.addYouTube('notebook-id', {
 
 ---
 
-#### `searchWebAndWait(notebookId: string, options: SearchWebOptions)` → `Promise<SearchWebResult>`
+#### `searchWebAndWait(notebookId: string, options: SearchWebAndWaitOptions)` → `Promise<SearchWebResult>`
 Search the web or Google Drive and wait for results.
 
 **Parameters:**
 - `notebookId: string` - The notebook ID
 - `options.query: string` - Search query
 - `options.sourceType: SearchSourceType` - WEB or GOOGLE_DRIVE
-- `options.mode: ResearchMode` - STANDARD or DEEP
+- `options.mode: ResearchMode` - FAST or DEEP
 
 **Returns:**
 - `SearchWebResult` - Object with:
   - `sessionId: string` - Session ID for adding sources
-  - `sources: Array<{sourceId: string, title: string, ...}>` - Found sources
+  - `web: DiscoveredWebSource[]` - Found web sources
+  - `drive: DiscoveredDriveSource[]` - Found Google Drive sources
 
 **Example:**
 ```typescript
@@ -1321,19 +1321,19 @@ import { SearchSourceType, ResearchMode } from 'notebooklm-kit'
 const result = await sdk.sources.searchWebAndWait('notebook-id', {
   query: 'machine learning trends 2024',
   sourceType: SearchSourceType.WEB,
-  mode: ResearchMode.STANDARD,
+  mode: ResearchMode.FAST,
 })
 
 // Add selected sources
 const sourceIds = await sdk.sources.addDiscovered('notebook-id', {
   sessionId: result.sessionId,
-  sourceIds: result.sources.slice(0, 5).map(s => s.sourceId),
+  webSources: result.web.slice(0, 5),
 })
 ```
 
 ---
 
-#### `pollProcessing(notebookId: string)` → `Promise<SourceProcessingStatus>`
+#### `status(notebookId: string)` → `Promise<SourceProcessingStatus>`
 Check source processing status.
 
 **Parameters:**
@@ -1341,16 +1341,14 @@ Check source processing status.
 
 **Returns:**
 - `SourceProcessingStatus` - Object with:
-  - `readyCount: number` - Number of ready sources
-  - `totalCount: number` - Total sources
-  - `processingCount: number` - Sources being processed
-  - `failedCount: number` - Failed sources
   - `allReady: boolean` - Whether all sources are ready
+  - `processing: string[]` - Source IDs still processing
 
 **Example:**
 ```typescript
-const status = await sdk.sources.pollProcessing('notebook-id')
-console.log(`Ready: ${status.readyCount}/${status.totalCount}`)
+const status = await sdk.sources.status('notebook-id')
+console.log(`All ready: ${status.allReady}`)
+console.log(`Still processing: ${status.processing.length}`)
 ```
 
 </details>
@@ -2047,6 +2045,7 @@ Examples: [artifact-create.ts](examples/artifact-create.ts) | [artifact-create-s
 - `options: CreateArtifactOptions`
   - `title?: string` - Artifact title (optional)
   - `instructions?: string` - Instructions for generation (optional)
+  - `slideDesignTemplate?: string` - Slide design template text (SLIDE_DECK only, optional)
   - `sourceIds?: string[]` - Source IDs to use (optional - automatically uses all sources if omitted)
   - `customization?: object` - Type-specific customization options (optional)
 
@@ -2115,17 +2114,32 @@ customization: {
 
 | Option | Values | Description | Default |
 |-------|--------|-------------|---------|
-| `format` | `2`, `3` | **2** = Presenter slides (concise, bullet points), **3** = Detailed deck (comprehensive, full content) | `2` |
-| `length` | `1`, `2` | **1** = Short (5-10 slides), **2** = Default (10-15 slides) | `2` |
+| `format` | `1`, `2`, `'detailed'`, `'presenter'` | **1 / `'detailed'`** = Detailed deck, **2 / `'presenter'`** = Presenter slides | `1` (`detailed`) |
+| `length` | `1`, `3`, `'short'`, `'default'` | **1 / `'short'`** = Short (5-10 slides), **3 / `'default'`** = Default (10-15 slides) | `3` (`default`) |
 | `language` | `string` | Language code (e.g., `'en'`, `'hi'`, `'es'`). Use `NotebookLMLanguage` enum for type safety. Supports 80+ languages. | `'en'` |
+
+Named constants are available:
+- `SlideDeckFormat.DETAILED` (`1`), `SlideDeckFormat.PRESENTER` (`2`)
+- `SlideDeckLength.SHORT` (`1`), `SlideDeckLength.DEFAULT` (`3`)
+
+Additional slide-only option in `CreateArtifactOptions`:
+- `slideDesignTemplate?: string` - Structured design template text. When present, SDK merges instructions in fixed order: language lock -> `instructions` -> `slideDesignTemplate`.
 
 **Example:**
 ```typescript
+import { SlideDeckFormat, SlideDeckLength } from 'notebooklm-kit'
+
 customization: {
-  format: 2, // Presenter slides (concise)
-  length: 2, // Default (10-15 slides)
+  format: SlideDeckFormat.DETAILED,
+  length: SlideDeckLength.DEFAULT,
   language: NotebookLMLanguage.ENGLISH,
 }
+
+slideDesignTemplate: JSON.stringify({
+  design_rules: {
+    color: { background: '#FFFDF8', accent: '#F5A3B6' },
+  },
+})
 ```
 
 </details>
@@ -2327,6 +2341,20 @@ const video = await sdk.artifacts.video.create('notebook-id', {
     format: 1,
     visualStyle: 0,
     language: 'en',
+  },
+})
+
+const slides = await sdk.artifacts.slide.create('notebook-id', {
+  instructions: 'Focus on today highlights and tomorrow priorities',
+  slideDesignTemplate: JSON.stringify({
+    design_rules: {
+      meta: { style_name: 'Shojo manga soft pastel' },
+    },
+  }),
+  customization: {
+    language: 'ja',
+    format: 'detailed',
+    length: 'default',
   },
 })
 
@@ -3728,6 +3756,11 @@ const spanishInfographic = await sdk.artifacts.create('notebook-id', ArtifactTyp
 const sdk = new NotebookLMClient({
   authToken: process.env.NOTEBOOKLM_AUTH_TOKEN!,
   cookies: process.env.NOTEBOOKLM_COOKIES!,
+
+  // Locale strategy:
+  // - 'auto' (default): NOTEBOOKLM_LOCALE -> LC_ALL/LC_MESSAGES/LANG -> en-US
+  // - explicit: 'ja-JP', 'en-US', ...
+  locale: 'auto',
   
   // Enable debug logging
   debug: true,
@@ -3752,6 +3785,16 @@ await sdk.refreshCredentials()
 
 // Get RPC client
 const rpcClient = sdk.getRPCClient()
+
+// Get resolved transport locale evidence
+const locale = await sdk.getTransportLocaleSettings()
+console.log(locale)
+// {
+//   effectiveLocale: 'ja-JP',
+//   localeSource: 'env',
+//   hl: 'ja',
+//   acceptLanguage: 'ja-JP,ja;q=0.9,en-US;q=0.6,en;q=0.5'
+// }
 ```
 
 ## Error Handling
@@ -3960,7 +4003,7 @@ const sourceId = await sdk.sources.add.url(notebookId, {
 
 // Wait for processing to complete
 let status = await sdk.sources.status(notebookId);
-while (status.sources.find(s => s.sourceId === sourceId)?.state !== 'READY') {
+while (status.processing.includes(sourceId)) {
   await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
   status = await sdk.sources.status(notebookId);
 }
@@ -4148,7 +4191,7 @@ async function main() {
 
     // Wait for source to be ready
     let status = await sdk.sources.status(notebook.projectId);
-    while (status.sources.find(s => s.sourceId === sourceId)?.state !== 'READY') {
+    while (status.processing.includes(sourceId)) {
       await new Promise(resolve => setTimeout(resolve, 2000));
       status = await sdk.sources.status(notebook.projectId);
     }

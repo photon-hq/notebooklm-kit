@@ -13,7 +13,8 @@ import { NotebookLanguageService } from '../services/notebook-language.js';
 import { AutoRefreshManager, defaultAutoRefreshConfig } from '../auth/refresh.js';
 import { getCredentials, type Credentials } from '../auth/auth.js';
 import { QuotaManager } from '../utils/quota.js';
-import type { NotebookLMConfig } from '../types/common.js';
+import { extractPageMetadata } from '../utils/page-metadata.js';
+import type { NotebookLMConfig, TransportLocaleSettings } from '../types/common.js';
 
 /**
  * NotebookLM Client
@@ -311,15 +312,35 @@ export class NotebookLMClient {
     );
     
     this.credentials = credentials;
-    
+
+    // Dynamically extract bl/f.sid from the NotebookLM page to avoid 503s
+    // caused by stale hard-coded values. User-supplied urlParams take precedence.
+    let dynamicUrlParams: Record<string, string> = {};
+    if (!this.config.urlParams?.['bl'] || !this.config.urlParams?.['f.sid']) {
+      try {
+        const metadata = await extractPageMetadata(credentials.cookies);
+        if (metadata.bl) dynamicUrlParams['bl'] = metadata.bl;
+        if (metadata.fsid) dynamicUrlParams['f.sid'] = metadata.fsid;
+        if (this.config.debug) {
+          console.log(`Page metadata: bl=${metadata.bl}, f.sid=${metadata.fsid}`);
+        }
+      } catch {
+        // Fallback: stale defaults in rpc-client.ts will be used
+        if (this.config.debug) {
+          console.log('Page metadata extraction failed, using fallback defaults');
+        }
+      }
+    }
+
     // Create RPC client with credentials
     this.rpcClient = new RPCClient({
       authToken: credentials.authToken,
       cookies: credentials.cookies,
       debug: this.config.debug,
       authUser: this.config.authUser,
+      locale: this.config.locale,
       headers: this.config.headers,
-      urlParams: this.config.urlParams,
+      urlParams: { ...dynamicUrlParams, ...this.config.urlParams },
       maxRetries: this.config.maxRetries,
       retryDelay: this.config.retryDelay,
       retryMaxDelay: this.config.retryMaxDelay,
@@ -401,6 +422,17 @@ export class NotebookLMClient {
    */
   async getRPCClient(): Promise<RPCClient> {
     return this.getRPCClientInternal();
+  }
+
+  /**
+   * Get resolved locale transport settings used by the RPC layer.
+   *
+   * This exposes the effective locale evidence (`hl`, `Accept-Language`)
+   * after defaults and user overrides are applied.
+   */
+  async getTransportLocaleSettings(): Promise<TransportLocaleSettings> {
+    const rpc = await this.getRPCClientInternal();
+    return rpc.getTransportLocaleSettings();
   }
   
   /**
@@ -588,4 +620,3 @@ export function createNotebookLMClient(config?: Partial<NotebookLMConfig>): Note
     ...config,
   });
 }
-

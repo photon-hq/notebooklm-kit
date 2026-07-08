@@ -35,6 +35,101 @@ import type {
 import { ResearchMode, SearchSourceType, SourceType, SourceStatus } from '../types/source.js';
 import { NotebookLMError } from '../types/common.js';
 
+const UUID_REGEX = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+
+function isYouTubeURLValue(url: string): boolean {
+  return url.includes('youtube.com') || url.includes('youtu.be');
+}
+
+function collectSourceIds(response: any, trimJsonStrings: boolean): string[] {
+  const sourceIds: string[] = [];
+
+  const extractIds = (data: any, depth: number = 0): void => {
+    if (depth > 10) return;
+
+    if (typeof data === 'string') {
+      const candidate = trimJsonStrings ? data.trim() : data;
+      if (candidate.startsWith('[') || candidate.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(candidate);
+          extractIds(parsed, depth + 1);
+          return;
+        } catch {
+          // Not JSON, continue as regular string
+        }
+      }
+      if (UUID_REGEX.test(data.trim())) {
+        sourceIds.push(data.trim());
+      }
+    } else if (Array.isArray(data)) {
+      for (const item of data) {
+        extractIds(item, depth + 1);
+      }
+    } else if (data && typeof data === 'object') {
+      for (const key in data) {
+        if (UUID_REGEX.test(key)) {
+          sourceIds.push(key);
+        }
+        extractIds(data[key], depth + 1);
+      }
+    }
+  };
+
+  extractIds(response);
+  return Array.from(new Set(sourceIds));
+}
+
+function extractSourceIdValue(response: any): string {
+  let parsedResponse = response;
+  if (typeof response === 'string' && (response.startsWith('[') || response.startsWith('{'))) {
+    try {
+      parsedResponse = JSON.parse(response);
+    } catch {
+      // If parsing fails, continue with original response
+    }
+  }
+
+  const findId = (data: any, depth: number = 0): string | null => {
+    if (depth > 5) return null;
+
+    if (typeof data === 'string' && data.match(UUID_REGEX)) {
+      return data;
+    }
+
+    if (typeof data === 'string' && (data.startsWith('[') || data.startsWith('{'))) {
+      try {
+        const parsed = JSON.parse(data);
+        const id = findId(parsed, depth + 1);
+        if (id) return id;
+      } catch {
+        // Continue searching
+      }
+    }
+
+    if (Array.isArray(data)) {
+      for (const item of data) {
+        const id = findId(item, depth + 1);
+        if (id) return id;
+      }
+    }
+
+    if (data && typeof data === 'object') {
+      for (const key in data) {
+        const id = findId(data[key], depth + 1);
+        if (id) return id;
+      }
+    }
+
+    return null;
+  };
+
+  const sourceId = findId(parsedResponse);
+  if (!sourceId) {
+    throw new Error('Could not extract source ID from response');
+  }
+  return sourceId;
+}
+
 /**
  * Web search sub-service for sources
  * Handles web search operations (search, wait, get results, add discovered)
@@ -595,49 +690,7 @@ export class WebSearchService {
     
     // Extract source IDs from response
     // Use same extraction logic as batch() method for consistency
-    const sourceIds: string[] = [];
-    const uuidRegex = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-    
-    const extractIds = (data: any, depth: number = 0): void => {
-      // Prevent infinite recursion
-      if (depth > 10) {
-        return;
-      }
-      
-      if (typeof data === 'string') {
-        // Try parsing as JSON string first (might be double-encoded)
-        if (data.trim().startsWith('[') || data.trim().startsWith('{')) {
-          try {
-            const parsed = JSON.parse(data);
-            extractIds(parsed, depth + 1);
-            return;
-          } catch {
-            // Not JSON, continue as regular string
-          }
-        }
-        // Check if it's a UUID
-        if (uuidRegex.test(data.trim())) {
-          sourceIds.push(data.trim());
-        }
-      } else if (Array.isArray(data)) {
-        for (const item of data) {
-          extractIds(item, depth + 1);
-        }
-      } else if (data && typeof data === 'object') {
-        // Check object values and keys
-        for (const key in data) {
-          if (uuidRegex.test(key)) {
-            sourceIds.push(key);
-          }
-          extractIds(data[key], depth + 1);
-        }
-      }
-    };
-    
-    extractIds(response);
-    
-    // Remove duplicates
-    const uniqueIds = Array.from(new Set(sourceIds));
+    const uniqueIds = collectSourceIds(response, true);
     
     // Limit to expected number of sources (to avoid returning extra IDs from nested structures)
     const expectedCount = totalSources;
@@ -758,56 +811,7 @@ export class AddSourcesService {
   // Helper method to extract source ID from response
   private extractSourceId(response: any): string {
     try {
-      let parsedResponse = response;
-      if (typeof response === 'string' && (response.startsWith('[') || response.startsWith('{'))) {
-        try {
-          parsedResponse = JSON.parse(response);
-        } catch {
-          // If parsing fails, continue with original response
-        }
-      }
-      
-      const findId = (data: any, depth: number = 0): string | null => {
-        if (depth > 5) return null;
-        
-        if (typeof data === 'string' && data.match(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i)) {
-          return data;
-        }
-        
-        if (typeof data === 'string' && (data.startsWith('[') || data.startsWith('{'))) {
-          try {
-            const parsed = JSON.parse(data);
-            const id = findId(parsed, depth + 1);
-            if (id) return id;
-          } catch {
-            // Continue searching
-          }
-        }
-        
-        if (Array.isArray(data)) {
-          for (const item of data) {
-            const id = findId(item, depth + 1);
-            if (id) return id;
-          }
-        }
-        
-        if (data && typeof data === 'object') {
-          for (const key in data) {
-            const id = findId(data[key], depth + 1);
-            if (id) return id;
-          }
-        }
-        
-        return null;
-      };
-      
-      const sourceId = findId(parsedResponse);
-      
-      if (!sourceId) {
-        throw new Error('Could not extract source ID from response');
-      }
-      
-      return sourceId;
+      return extractSourceIdValue(response);
     } catch (error) {
       throw new NotebookLMError(`Failed to extract source ID: ${(error as Error).message}`);
     }
@@ -1401,46 +1405,7 @@ export class AddSourcesService {
     // - Array of IDs: [id1, id2, ...]
     // - Single ID string
     // - Nested structure
-    const sourceIds: string[] = [];
-    const uuidRegex = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-    
-    const extractIds = (data: any, depth: number = 0): void => {
-      if (depth > 10) return; // Prevent infinite recursion
-      
-      if (typeof data === 'string') {
-        // Try parsing JSON string
-        if ((data.startsWith('[') || data.startsWith('{'))) {
-          try {
-            const parsed = JSON.parse(data);
-            extractIds(parsed, depth + 1);
-            return;
-          } catch {
-            // Not JSON, continue as regular string
-          }
-        }
-        // Check if it's a UUID
-        if (uuidRegex.test(data.trim())) {
-          sourceIds.push(data.trim());
-        }
-      } else if (Array.isArray(data)) {
-        for (const item of data) {
-          extractIds(item, depth + 1);
-        }
-      } else if (data && typeof data === 'object') {
-        // Check object values and keys
-        for (const key in data) {
-          if (uuidRegex.test(key)) {
-            sourceIds.push(key);
-          }
-          extractIds(data[key], depth + 1);
-        }
-      }
-    };
-    
-    extractIds(response);
-    
-    // Remove duplicates
-    const uniqueIds = Array.from(new Set(sourceIds));
+    const uniqueIds = collectSourceIds(response, false);
     
     // Limit to expected number of sources (to avoid returning extra IDs from nested structures)
     // Since sources are added in order, take the first N where N = number of sources added
@@ -1458,7 +1423,7 @@ export class AddSourcesService {
   }
 
   private isYouTubeURL(url: string): boolean {
-    return url.includes('youtube.com') || url.includes('youtu.be');
+    return isYouTubeURLValue(url);
   }
 }
 
@@ -1852,39 +1817,13 @@ export class SourcesService {
    */
   async addFromURL(notebookId: string, options: AddSourceFromURLOptions): Promise<string> {
     const { url } = options;
-    
-    // Check quota before adding source
-    this.quota?.checkQuota('addSource', notebookId);
-    
+
     // Check if it's a YouTube URL
     if (this.isYouTubeURL(url)) {
       return this.addYouTube(notebookId, { urlOrId: url });
     }
-    
-    // Regular URL
-    const response = await this.rpc.call(
-      RPC.RPC_ADD_SOURCES,
-      [
-        [
-          [
-            null,
-            null,
-            [url],
-          ],
-        ],
-        notebookId,
-      ],
-      notebookId
-    );
-    
-    const sourceId = this.extractSourceId(response);
-    
-    // Record usage after successful addition
-    if (sourceId) {
-      this.quota?.recordUsage('addSource', notebookId);
-    }
-    
-    return sourceId;
+
+    return this.add.url(notebookId, options);
   }
   
   /**
@@ -2300,60 +2239,7 @@ export class SourcesService {
    * ```
    */
   async searchWebAndWait(notebookId: string, options: SearchWebAndWaitOptions): Promise<WebSearchResult> {
-    const {
-      timeout = 30000,
-      pollInterval = 2000,
-      onProgress,
-      ...searchOptions
-    } = options;
-    
-    // Step 1: Initiate search
-    const sessionId = await this.searchWeb(notebookId, searchOptions);
-    
-    if (!sessionId) {
-      throw new NotebookLMError('Failed to initiate search - no sessionId returned');
-    }
-    
-    // Step 2: Poll for results
-    const startTime = Date.now();
-    let results: { web: DiscoveredWebSource[]; drive: DiscoveredDriveSource[] } = { web: [], drive: [] };
-    let lastResultCount = 0;
-    let stableCount = 0; // Count consecutive polls with same result count
-    
-    while (Date.now() - startTime < timeout) {
-      results = await this.getSearchResults(notebookId, sessionId);
-      
-      const hasResults = results.web.length > 0 || results.drive.length > 0;
-      const resultCount = results.web.length + results.drive.length;
-      
-      if (onProgress) {
-        onProgress({ hasResults, resultCount });
-      }
-      
-      // If we have results, check if they're stable (same count for 2 consecutive polls)
-      // This indicates search is complete
-      if (hasResults) {
-        if (resultCount === lastResultCount && resultCount > 0) {
-          stableCount++;
-          // If results are stable for 2 polls, consider search complete
-          if (stableCount >= 2) {
-            return { sessionId, ...results };
-          }
-        } else {
-          stableCount = 0; // Reset if count changed
-        }
-        lastResultCount = resultCount;
-      } else {
-        stableCount = 0;
-        lastResultCount = 0;
-      }
-      
-      // Wait before next poll
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
-    }
-    
-    // Timeout reached - return whatever we have (even if empty)
-    return { sessionId, ...results };
+    return this.add.web.searchAndWait(notebookId, options);
   }
   
   /**
@@ -2642,52 +2528,7 @@ export class SourcesService {
     );
     
     const addedIds: string[] = [];
-    
-    // Handle JSON string response
-    let data = response;
-    if (typeof response === 'string') {
-      try {
-        data = JSON.parse(response);
-      } catch (e) {
-        // If parsing fails, use response as-is
-      }
-    }
-    
-    // Response structure: [[[[sourceId], title, [...metadata...], [null, 2]]]]
-    // Example: [[[[\"435170a5-...\"], \"Title\", [...], [null, 2]]]]
-    // We need to extract sourceId from the nested structure
-    
-    // Helper function to recursively find source IDs
-    const extractSourceIds = (arr: any): string[] => {
-      const ids: string[] = [];
-      
-      if (Array.isArray(arr)) {
-        for (const item of arr) {
-          if (Array.isArray(item)) {
-            // Check if first element is a UUID-like string (source ID)
-            if (item.length > 0 && typeof item[0] === 'string' && 
-                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item[0])) {
-              ids.push(item[0]);
-            } else {
-              // Recursively search nested arrays
-              ids.push(...extractSourceIds(item));
-            }
-          } else if (typeof item === 'string' && 
-                     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item)) {
-            // Direct UUID string
-            ids.push(item);
-          }
-        }
-      }
-      
-      return ids;
-    };
-    
-    // Extract source IDs from the response
-    const extractedIds = extractSourceIds(data);
-    
-    // Remove duplicates and add to result
-    const uniqueIds = [...new Set(extractedIds)];
+    const uniqueIds = collectSourceIds(response, true);
     for (const sourceId of uniqueIds) {
       if (sourceId) {
         addedIds.push(sourceId);
@@ -3262,7 +3103,7 @@ export class SourcesService {
   // ========================================================================
   
   private isYouTubeURL(url: string): boolean {
-    return url.includes('youtube.com') || url.includes('youtu.be');
+    return isYouTubeURLValue(url);
   }
   
   private extractYouTubeVideoId(url: string): string {
@@ -3288,60 +3129,7 @@ export class SourcesService {
   
   private extractSourceId(response: any): string {
     try {
-      // Handle JSON string responses (common in batch operations)
-      let parsedResponse = response;
-      if (typeof response === 'string' && (response.startsWith('[') || response.startsWith('{'))) {
-        try {
-          parsedResponse = JSON.parse(response);
-        } catch {
-          // If parsing fails, continue with original response
-        }
-      }
-      
-      // Try different response formats
-      const findId = (data: any, depth: number = 0): string | null => {
-        if (depth > 5) return null; // Prevent infinite recursion
-        
-        // Check if this is a UUID string
-        if (typeof data === 'string' && data.match(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i)) {
-          return data;
-        }
-        
-        // Check if this is a JSON string containing arrays/objects
-        if (typeof data === 'string' && (data.startsWith('[') || data.startsWith('{'))) {
-          try {
-            const parsed = JSON.parse(data);
-            const id = findId(parsed, depth + 1);
-            if (id) return id;
-          } catch {
-            // Continue searching
-          }
-        }
-        
-        if (Array.isArray(data)) {
-          for (const item of data) {
-            const id = findId(item, depth + 1);
-            if (id) return id;
-          }
-        }
-        
-        if (data && typeof data === 'object') {
-          for (const key in data) {
-            const id = findId(data[key], depth + 1);
-            if (id) return id;
-          }
-        }
-        
-        return null;
-      };
-      
-      const sourceId = findId(parsedResponse);
-      
-      if (!sourceId) {
-        throw new Error('Could not extract source ID from response');
-      }
-      
-      return sourceId;
+      return extractSourceIdValue(response);
     } catch (error) {
       throw new NotebookLMError(`Failed to extract source ID: ${(error as Error).message}`);
     }
